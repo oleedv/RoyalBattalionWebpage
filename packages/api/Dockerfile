@@ -6,7 +6,7 @@ COPY package.json bun.lock ./
 COPY packages/api/package.json ./packages/api/
 COPY packages/shared/package.json ./packages/shared/
 COPY prisma/ ./prisma/
-RUN bun install --frozen-lockfile
+RUN bun install
 
 FROM base AS build
 COPY --from=install /app/node_modules ./node_modules

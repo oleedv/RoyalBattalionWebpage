@@ -6,7 +6,7 @@ import { config } from "dotenv";
 config({ path: resolve(__dirname, "../../.env") });
 
 const nextConfig: NextConfig = {
-  output: process.env.RAILWAY_ENVIRONMENT ? "standalone" : undefined,
+  output: "standalone",
 };
 
 export default nextConfig;

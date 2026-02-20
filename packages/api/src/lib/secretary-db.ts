@@ -1,11 +1,18 @@
 import { PrismaClient } from "@prisma/client";
 
-const secretaryDb = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.SECRETARY_DATABASE_URL,
-    },
-  },
-});
+let _client: PrismaClient | null = null;
 
-export default secretaryDb;
+export default function getSecretaryDb(): PrismaClient {
+  if (!_client) {
+    const url = process.env.SECRETARY_DATABASE_URL;
+    if (!url) {
+      throw new Error("SECRETARY_DATABASE_URL is not configured");
+    }
+    _client = new PrismaClient({
+      datasources: {
+        db: { url },
+      },
+    });
+  }
+  return _client;
+}

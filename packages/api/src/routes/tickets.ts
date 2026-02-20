@@ -4,7 +4,7 @@ import type {
   Ticket,
   Prospect,
 } from "shared";
-import secretaryDb from "../lib/secretary-db";
+import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 
@@ -22,7 +22,7 @@ tickets.use("*", async (c, next) => {
 tickets.get("/by-uuid/:uuid", async (c) => {
   const uuid = c.req.param("uuid");
 
-  const ticketRows: any[] = await secretaryDb.$queryRawUnsafe(
+  const ticketRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by
      FROM tickets WHERE uuid = ?`,
     uuid
@@ -35,13 +35,13 @@ tickets.get("/by-uuid/:uuid", async (c) => {
   const r = ticketRows[0];
   const id = r.id;
 
-  const eventRows: any[] = await secretaryDb.$queryRawUnsafe(
+  const eventRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, ticket_id, event_type, actor_id, detail, created_at
      FROM ticket_events WHERE ticket_id = ? ORDER BY created_at ASC`,
     id
   );
 
-  const messageRows: any[] = await secretaryDb.$queryRawUnsafe(
+  const messageRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, ticket_id, author_id, author_tag, content, attachments, is_staff, created_at
      FROM ticket_messages WHERE ticket_id = ? ORDER BY created_at ASC`,
     id
@@ -82,7 +82,7 @@ tickets.get("/by-uuid/:uuid", async (c) => {
 
 // GET /tickets - list all tickets
 tickets.get("/", requirePermission("admin"), async (c) => {
-  const rows: any[] = await secretaryDb.$queryRawUnsafe(
+  const rows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by
      FROM tickets
      ORDER BY created_at DESC`
@@ -107,7 +107,7 @@ tickets.get("/", requirePermission("admin"), async (c) => {
 tickets.get("/:id", requirePermission("admin"), async (c) => {
   const id = Number(c.req.param("id"));
 
-  const ticketRows: any[] = await secretaryDb.$queryRawUnsafe(
+  const ticketRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by
      FROM tickets WHERE id = ?`,
     id
@@ -119,13 +119,13 @@ tickets.get("/:id", requirePermission("admin"), async (c) => {
 
   const r = ticketRows[0];
 
-  const eventRows: any[] = await secretaryDb.$queryRawUnsafe(
+  const eventRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, ticket_id, event_type, actor_id, detail, created_at
      FROM ticket_events WHERE ticket_id = ? ORDER BY created_at ASC`,
     id
   );
 
-  const messageRows: any[] = await secretaryDb.$queryRawUnsafe(
+  const messageRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, ticket_id, author_id, author_tag, content, attachments, is_staff, created_at
      FROM ticket_messages WHERE ticket_id = ? ORDER BY created_at ASC`,
     id
@@ -166,7 +166,7 @@ tickets.get("/:id", requirePermission("admin"), async (c) => {
 
 // GET /tickets/prospects/list - list all prospects
 tickets.get("/prospects/list", requirePermission("admin"), async (c) => {
-  const rows: any[] = await secretaryDb.$queryRawUnsafe(
+  const rows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
             squad_hours, preferred_roles, prev_clan, why_rb, active_hours, competitive,
             steam_id, mentor_id, created_at, closed_at, closed_by
@@ -203,7 +203,7 @@ tickets.get("/prospects/list", requirePermission("admin"), async (c) => {
 tickets.get("/prospects/:id", requirePermission("admin"), async (c) => {
   const id = Number(c.req.param("id"));
 
-  const prospectRows: any[] = await secretaryDb.$queryRawUnsafe(
+  const prospectRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
             squad_hours, preferred_roles, prev_clan, why_rb, active_hours, competitive,
             steam_id, mentor_id, created_at, closed_at, closed_by
@@ -217,19 +217,19 @@ tickets.get("/prospects/:id", requirePermission("admin"), async (c) => {
 
   const r = prospectRows[0];
 
-  const eventRows: any[] = await secretaryDb.$queryRawUnsafe(
+  const eventRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, prospect_id, event_type, actor_id, detail, created_at
      FROM prospect_events WHERE prospect_id = ? ORDER BY created_at ASC`,
     id
   );
 
-  const messageRows: any[] = await secretaryDb.$queryRawUnsafe(
+  const messageRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, prospect_id, author_id, author_tag, content, attachments, is_staff, created_at
      FROM prospect_messages WHERE prospect_id = ? ORDER BY created_at ASC`,
     id
   );
 
-  const voteRows: any[] = await secretaryDb.$queryRawUnsafe(
+  const voteRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, prospect_id, voter_id, voter_tag, vote, reason, created_at
      FROM prospect_votes WHERE prospect_id = ? ORDER BY created_at ASC`,
     id

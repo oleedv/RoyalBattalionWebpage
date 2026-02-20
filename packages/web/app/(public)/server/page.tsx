@@ -12,35 +12,35 @@ export default function ServerPage() {
     <div className="min-h-screen">
       {/* Navigation */}
       <nav className="border-b border-border/50 bg-bg-primary/60 backdrop-blur-xl">
-        <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-6">
-          <Link href="/" className="flex items-center gap-3">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:h-18 sm:px-6">
+          <Link href="/" className="flex items-center gap-2 sm:gap-3">
             <Image
               src="/img/rb_newlion2024_4_RS.png"
               alt="Royal Battalion"
-              width={36}
-              height={36}
-              className="rounded-sm"
+              width={32}
+              height={32}
+              className="rounded-sm sm:h-9 sm:w-9"
             />
-            <span className="font-display text-lg font-semibold tracking-[0.15em] text-accent">
+            <span className="font-display text-sm font-semibold tracking-[0.15em] text-accent sm:text-lg">
               ROYAL BATTALION
             </span>
           </Link>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 sm:gap-6">
             <Link
               href="/"
-              className="text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent"
+              className="hidden text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent sm:block"
             >
               Home
             </Link>
             <Link
               href="/matches"
-              className="text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent"
+              className="hidden text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent sm:block"
             >
               Matches
             </Link>
             <Link
               href="/login"
-              className="glow-button rounded-sm border border-accent/40 bg-accent/10 px-5 py-2 text-sm font-semibold tracking-wide text-accent transition-all hover:bg-accent/20 hover:border-accent/60"
+              className="glow-button rounded-sm border border-accent/40 bg-accent/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-accent transition-all hover:bg-accent/20 hover:border-accent/60 sm:px-5 sm:py-2 sm:text-sm"
             >
               Login
             </Link>

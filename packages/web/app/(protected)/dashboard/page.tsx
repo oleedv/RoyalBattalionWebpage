@@ -69,7 +69,7 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="font-display mb-8 text-3xl font-bold tracking-wide">Dashboard</h1>
+      <h1 className="font-display mb-6 text-2xl font-bold tracking-wide sm:mb-8 sm:text-3xl">Dashboard</h1>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* User Info Card */}
@@ -182,7 +182,7 @@ export default function DashboardPage() {
             for server whitelist access.
           </p>
 
-          <form onSubmit={handleLinkSteam} className="flex gap-3">
+          <form onSubmit={handleLinkSteam} className="flex flex-col gap-3 sm:flex-row">
             <input
               type="text"
               value={steamId}

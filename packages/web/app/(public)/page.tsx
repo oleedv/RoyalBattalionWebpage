@@ -49,35 +49,35 @@ export default function HomePage() {
     <div className="min-h-screen overflow-hidden">
       {/* Navigation */}
       <nav className="fixed top-0 z-50 w-full border-b border-border/50 bg-bg-primary/60 backdrop-blur-xl">
-        <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-6">
-          <Link href="/" className="flex items-center gap-3">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:h-18 sm:px-6">
+          <Link href="/" className="flex items-center gap-2 sm:gap-3">
             <Image
               src="/img/rb_newlion2024_4_RS.png"
               alt="Royal Battalion"
-              width={36}
-              height={36}
-              className="rounded-sm"
+              width={32}
+              height={32}
+              className="rounded-sm sm:h-9 sm:w-9"
             />
-            <span className="font-display text-lg font-semibold tracking-[0.15em] text-accent">
+            <span className="font-display text-sm font-semibold tracking-[0.15em] text-accent sm:text-lg">
               ROYAL BATTALION
             </span>
           </Link>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 sm:gap-6">
             <Link
               href="/server"
-              className="text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent"
+              className="hidden text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent sm:block"
             >
               Server
             </Link>
             <Link
               href="/matches"
-              className="text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent"
+              className="hidden text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent sm:block"
             >
               Matches
             </Link>
             <Link
               href="/login"
-              className="glow-button relative rounded-sm border border-accent/40 bg-accent/10 px-5 py-2 text-sm font-semibold tracking-wide text-accent transition-all hover:bg-accent/20 hover:border-accent/60"
+              className="glow-button relative rounded-sm border border-accent/40 bg-accent/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-accent transition-all hover:bg-accent/20 hover:border-accent/60 sm:px-5 sm:py-2 sm:text-sm"
             >
               Login
             </Link>
@@ -86,7 +86,7 @@ export default function HomePage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="noise-overlay relative flex min-h-screen flex-col items-center justify-center px-6 pt-18">
+      <section className="noise-overlay relative flex min-h-screen flex-col items-center justify-center px-4 pt-14 sm:px-6 sm:pt-18">
         {/* Background geometric grid */}
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.03]"

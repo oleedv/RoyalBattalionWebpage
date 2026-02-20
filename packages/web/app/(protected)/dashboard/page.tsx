@@ -20,7 +20,6 @@ export default function DashboardPage() {
       if (!session?.accessToken) return;
 
       try {
-        // Sync with backend to get API token
         const syncRes = await syncAuth(session.accessToken);
         if (syncRes.success && syncRes.data) {
           setApiToken(syncRes.data.token);
@@ -28,7 +27,6 @@ export default function DashboardPage() {
           setPermissions(syncRes.data.permissions);
         }
       } catch {
-        // If sync fails, try to get existing user data
         console.error("Failed to sync auth");
       } finally {
         setLoading(false);
@@ -71,37 +69,66 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="mb-8 text-3xl font-bold">Dashboard</h1>
+      <h1 className="font-display mb-8 text-3xl font-bold tracking-wide">Dashboard</h1>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* User Info Card */}
-        <div className="rounded border border-border bg-bg-secondary p-6">
-          <h2 className="mb-4 text-lg font-semibold">Your Profile</h2>
+        <div className="facet-border rounded-sm bg-bg-card p-6">
+          <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Your Profile</h2>
           <div className="flex items-start gap-4">
             {session?.user?.image && (
               <img
                 src={session.user.image}
                 alt="Avatar"
-                className="h-16 w-16 rounded-full border-2 border-border"
+                className="h-16 w-16 rounded-full border-2 border-accent/20"
               />
             )}
-            <div className="min-w-0 flex-1">
-              <div className="text-lg font-medium text-text-primary">
-                {session?.user?.name || "Unknown"}
+            <div className="min-w-0 flex-1 space-y-3">
+              <div>
+                <div className="text-lg font-medium text-text-primary">
+                  {session?.user?.name || "Unknown"}
+                </div>
+                <div className="mt-0.5 text-sm text-text-secondary">
+                  {session?.user?.email || "No email"}
+                </div>
               </div>
-              <div className="mt-1 text-sm text-text-secondary">
-                {session?.user?.email || "No email"}
-              </div>
-              <div className="mt-3">
-                <span className="text-xs font-medium tracking-widest text-text-muted uppercase">
-                  Steam ID
-                </span>
-                <div className="mt-0.5 text-sm">
-                  {user?.steamId ? (
-                    <code className="text-accent">{user.steamId}</code>
-                  ) : (
-                    <span className="text-text-muted">Not linked</span>
-                  )}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <span className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+                    Discord ID
+                  </span>
+                  <div className="mt-0.5 text-sm">
+                    {user?.discordId ? (
+                      <code className="text-accent">{user.discordId}</code>
+                    ) : (
+                      <span className="text-text-muted">--</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+                    Steam ID
+                  </span>
+                  <div className="mt-0.5 text-sm">
+                    {user?.steamId ? (
+                      <code className="text-accent">{user.steamId}</code>
+                    ) : (
+                      <span className="text-text-muted">Not linked</span>
+                    )}
+                  </div>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+                    EOS ID
+                  </span>
+                  <div className="mt-0.5 text-sm">
+                    {user?.eosId ? (
+                      <code className="text-accent">{user.eosId}</code>
+                    ) : (
+                      <span className="text-text-muted">Not set</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -109,14 +136,14 @@ export default function DashboardPage() {
         </div>
 
         {/* Roles Card */}
-        <div className="rounded border border-border bg-bg-secondary p-6">
-          <h2 className="mb-4 text-lg font-semibold">Your Roles</h2>
+        <div className="facet-border rounded-sm bg-bg-card p-6">
+          <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Your Roles</h2>
           {user?.roles && user.roles.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {user.roles.map((role) => (
                 <span
                   key={role.id}
-                  className="rounded border border-accent/30 bg-accent/10 px-3 py-1 text-sm text-accent"
+                  className="rounded-sm border border-accent/30 bg-accent/10 px-3 py-1 text-sm text-accent"
                 >
                   {role.name}
                 </span>
@@ -130,14 +157,14 @@ export default function DashboardPage() {
 
           {permissions.length > 0 && (
             <div className="mt-6">
-              <h3 className="mb-2 text-sm font-medium text-text-muted">
+              <h3 className="mb-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
                 Permissions
               </h3>
               <div className="flex flex-wrap gap-2">
                 {permissions.map((perm) => (
                   <span
                     key={perm}
-                    className="rounded bg-bg-tertiary px-2 py-0.5 text-xs text-text-secondary"
+                    className="rounded-sm bg-bg-tertiary px-2 py-0.5 text-xs text-text-secondary"
                   >
                     {perm}
                   </span>
@@ -148,8 +175,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Link Steam Card */}
-        <div className="rounded border border-border bg-bg-secondary p-6 lg:col-span-2">
-          <h2 className="mb-4 text-lg font-semibold">Link Steam Account</h2>
+        <div className="facet-border rounded-sm bg-bg-card p-6 lg:col-span-2">
+          <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Link Steam Account</h2>
           <p className="mb-4 text-sm text-text-secondary">
             Enter your Steam64 ID to link your Steam account. This is required
             for server whitelist access.
@@ -161,11 +188,11 @@ export default function DashboardPage() {
               value={steamId}
               onChange={(e) => setSteamId(e.target.value)}
               placeholder="Enter Steam64 ID (e.g. 76561198012345678)"
-              className="flex-1 rounded border border-border bg-bg-tertiary px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+              className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
             />
             <button
               type="submit"
-              className="rounded bg-accent px-6 py-2.5 text-sm font-semibold text-bg-primary transition-colors hover:bg-accent-muted"
+              className="rounded-sm bg-accent px-6 py-2.5 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted"
             >
               Link Steam
             </button>

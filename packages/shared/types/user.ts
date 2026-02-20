@@ -3,6 +3,7 @@ export interface User {
   discordId: string;
   discordName: string;
   steamId: string | null;
+  eosId: string | null;
   avatarUrl: string | null;
   createdAt: string;
   updatedAt: string;

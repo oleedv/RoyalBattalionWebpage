@@ -12,6 +12,7 @@ model User {
   discordId   String     @unique
   discordName String
   steamId     String?    @unique
+  eosId       String?    @unique
   avatarUrl   String?
   roles       UserRole[]
   createdAt   DateTime   @default(now())

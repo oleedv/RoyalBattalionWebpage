@@ -4,6 +4,10 @@ import type {
   AuthMeResponse,
   WhitelistEntry,
   UserWithRoles,
+  Ticket,
+  Prospect,
+  DiscordRole,
+  Permission,
 } from "shared";
 
 const BASE_URL =
@@ -39,6 +43,7 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
 }
 
+// Auth
 export function syncAuth(
   accessToken: string
 ): Promise<ApiResponse<AuthSyncResponse>> {
@@ -54,6 +59,7 @@ export function getMe(token: string): Promise<ApiResponse<AuthMeResponse>> {
   });
 }
 
+// Whitelist
 export function getWhitelist(
   token: string
 ): Promise<ApiResponse<WhitelistEntry[]>> {
@@ -62,10 +68,78 @@ export function getWhitelist(
   });
 }
 
+export function addWhitelistEntry(
+  token: string,
+  steamId: string,
+  reason?: string
+): Promise<ApiResponse<WhitelistEntry>> {
+  return request<WhitelistEntry>("/whitelist", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ steamId, reason }),
+  });
+}
+
+export function updateWhitelistEntry(
+  token: string,
+  id: string,
+  data: { steamId?: string; reason?: string }
+): Promise<ApiResponse<WhitelistEntry>> {
+  return request<WhitelistEntry>(`/whitelist/${id}`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteWhitelistEntry(
+  token: string,
+  id: string
+): Promise<ApiResponse<{ deleted: true }>> {
+  return request<{ deleted: true }>(`/whitelist/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export function bulkAddWhitelist(
+  token: string,
+  entries: { steamId: string; reason?: string }[]
+): Promise<ApiResponse<{ created: number; skipped: number }>> {
+  return request<{ created: number; skipped: number }>("/whitelist/bulk", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ entries }),
+  });
+}
+
+// Users
 export function getUsers(
   token: string
 ): Promise<ApiResponse<UserWithRoles[]>> {
   return request<UserWithRoles[]>("/users", {
+    headers: authHeaders(token),
+  });
+}
+
+export function updateUser(
+  token: string,
+  id: string,
+  data: { steamId?: string; eosId?: string }
+): Promise<ApiResponse<UserWithRoles>> {
+  return request<UserWithRoles>(`/users/${id}`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteUser(
+  token: string,
+  id: string
+): Promise<ApiResponse<{ deleted: true }>> {
+  return request<{ deleted: true }>(`/users/${id}`, {
+    method: "DELETE",
     headers: authHeaders(token),
   });
 }
@@ -78,5 +152,88 @@ export function linkSteam(
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ steamId }),
+  });
+}
+
+// Roles
+export function getRoles(
+  token: string
+): Promise<ApiResponse<DiscordRole[]>> {
+  return request<DiscordRole[]>("/roles", {
+    headers: authHeaders(token),
+  });
+}
+
+export function createRole(
+  token: string,
+  data: { discordRoleId: string; name: string; permissions?: Permission[] }
+): Promise<ApiResponse<DiscordRole>> {
+  return request<DiscordRole>("/roles", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateRolePermissions(
+  token: string,
+  id: string,
+  permissions: Permission[]
+): Promise<ApiResponse<DiscordRole>> {
+  return request<DiscordRole>(`/roles/${id}/permissions`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify({ permissions }),
+  });
+}
+
+export function deleteRole(
+  token: string,
+  id: string
+): Promise<ApiResponse<{ deleted: true }>> {
+  return request<{ deleted: true }>(`/roles/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+// Tickets
+export function getTickets(
+  token: string
+): Promise<ApiResponse<Ticket[]>> {
+  return request<Ticket[]>("/tickets", {
+    headers: authHeaders(token),
+  });
+}
+
+export function getTicket(
+  token: string,
+  id: number
+): Promise<ApiResponse<Ticket>> {
+  return request<Ticket>(`/tickets/${id}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function getTicketByUuid(
+  uuid: string
+): Promise<ApiResponse<Ticket>> {
+  return request<Ticket>(`/tickets/by-uuid/${uuid}`);
+}
+
+export function getProspects(
+  token: string
+): Promise<ApiResponse<Prospect[]>> {
+  return request<Prospect[]>("/tickets/prospects/list", {
+    headers: authHeaders(token),
+  });
+}
+
+export function getProspect(
+  token: string,
+  id: number
+): Promise<ApiResponse<Prospect>> {
+  return request<Prospect>(`/tickets/prospects/${id}`, {
+    headers: authHeaders(token),
   });
 }

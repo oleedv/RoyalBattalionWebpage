@@ -33,6 +33,12 @@ export default function ServerPage() {
               Home
             </Link>
             <Link
+              href="/matches"
+              className="text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent"
+            >
+              Matches
+            </Link>
+            <Link
               href="/login"
               className="glow-button rounded-sm border border-accent/40 bg-accent/10 px-5 py-2 text-sm font-semibold tracking-wide text-accent transition-all hover:bg-accent/20 hover:border-accent/60"
             >

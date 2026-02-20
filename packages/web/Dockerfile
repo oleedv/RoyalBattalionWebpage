@@ -26,6 +26,7 @@ RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/packages/web/.next/standalone ./
 COPY --from=builder /app/packages/web/.next/static ./packages/web/.next/static
+COPY --from=builder /app/packages/web/public ./packages/web/public
 
 USER nextjs
 EXPOSE 3000

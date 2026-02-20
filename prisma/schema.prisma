@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String     @id @default(cuid())
+  discordId   String     @unique
+  discordName String
+  steamId     String?    @unique
+  avatarUrl   String?
+  roles       UserRole[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model DiscordRole {
+  id            String           @id @default(cuid())
+  discordRoleId String           @unique
+  name          String
+  permissions   RolePermission[]
+  users         UserRole[]
+}
+
+model UserRole {
+  id     String      @id @default(cuid())
+  userId String
+  roleId String
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   DiscordRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+}
+
+model RolePermission {
+  id         String      @id @default(cuid())
+  roleId     String
+  permission String
+  role       DiscordRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permission])
+}
+
+model WhitelistEntry {
+  id        String   @id @default(cuid())
+  steamId   String   @unique
+  addedBy   String
+  reason    String?
+  createdAt DateTime @default(now())
+}

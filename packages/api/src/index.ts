@@ -6,6 +6,8 @@ import roles from "./routes/roles";
 import whitelist from "./routes/whitelist";
 import tickets from "./routes/tickets";
 import matches from "./routes/matches";
+import servers from "./routes/servers";
+import stats from "./routes/stats";
 
 const app = new Hono();
 
@@ -28,6 +30,8 @@ app.route("/roles", roles);
 app.route("/whitelist", whitelist);
 app.route("/tickets", tickets);
 app.route("/matches", matches);
+app.route("/servers", servers);
+app.route("/stats", stats);
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 

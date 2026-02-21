@@ -257,13 +257,49 @@ export function getMatches(
 export function updateMatch(
   token: string,
   id: string,
-  data: { date?: string; map?: string; layer?: string; result?: string; vodUrl?: string | null; hidden?: boolean }
+  data: { date?: string; map?: string; layer?: string; result?: string; vodUrl?: string | null; hidden?: boolean; server?: string }
 ): Promise<ApiResponse<Match>> {
   return request<Match>(`/matches/${id}`, {
     method: "PUT",
     headers: authHeaders(token),
     body: JSON.stringify(data),
   });
+}
+
+// Dashboard Stats
+export interface DashboardStats {
+  servers?: ServerStatus[];
+  tickets?: { open: number; closed: number };
+  prospects?: { open: number; accepted: number; denied: number };
+  members?: { total: number; withSteam: number };
+  whitelist?: { total: number };
+  matches?: { total: number; wins: number; losses: number; draws: number };
+  recentMatches?: Match[];
+}
+
+export function getDashboardStats(
+  token: string
+): Promise<ApiResponse<DashboardStats>> {
+  return request<DashboardStats>("/stats/summary", {
+    headers: authHeaders(token),
+  });
+}
+
+// Servers
+export interface ServerStatus {
+  id: string;
+  name: string;
+  ip: string;
+  port: number;
+  players: number;
+  maxPlayers: number;
+  map: string;
+  status: "online" | "offline";
+  playerList: { name: string; duration: number }[];
+}
+
+export function getServerStatus(): Promise<ApiResponse<ServerStatus[]>> {
+  return request<ServerStatus[]>("/servers/status");
 }
 
 export function deleteMatch(

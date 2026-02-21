@@ -15,12 +15,27 @@ const syncSchema = z.object({
 
 const getSecret = () => new TextEncoder().encode(process.env.JWT_SECRET!);
 
+const SYNC_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const syncCache = new Map<string, { data: ApiResponse<AuthSyncResponse>; expiry: number }>();
+
 auth.post("/sync", zValidator("json", syncSchema), async (c) => {
   const { accessToken } = c.req.valid("json");
   const guildId = process.env.DISCORD_GUILD_ID;
 
   if (!guildId) {
     return c.json<ApiResponse<never>>({ success: false, error: "DISCORD_GUILD_ID is not configured" }, 500);
+  }
+
+  // Return cached response if available and not expired
+  const cached = syncCache.get(accessToken);
+  const now = Date.now();
+  if (cached && cached.expiry > now) {
+    return c.json(cached.data);
+  }
+
+  // Prune expired entries periodically (every request is fine for small maps)
+  for (const [key, entry] of syncCache) {
+    if (entry.expiry <= now) syncCache.delete(key);
   }
 
   try {
@@ -97,10 +112,14 @@ auth.post("/sync", zValidator("json", syncSchema), async (c) => {
       })),
     };
 
-    return c.json<ApiResponse<AuthSyncResponse>>({
+    const response: ApiResponse<AuthSyncResponse> = {
       success: true,
       data: { token, user: userWithRoles, permissions },
-    });
+    };
+
+    syncCache.set(accessToken, { data: response, expiry: Date.now() + SYNC_CACHE_TTL_MS });
+
+    return c.json(response);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Auth sync failed";
     console.error("[auth/sync] Error:", err);

@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { jwtVerify } from "jose";
 import auth from "./routes/auth";
 import users from "./routes/users";
 import roles from "./routes/roles";
@@ -9,8 +10,12 @@ import matches from "./routes/matches";
 import servers from "./routes/servers";
 import stats from "./routes/stats";
 import adminGroups from "./routes/admin-groups";
+import squadjsConfig from "./routes/squadjs-config";
 import { syncMatches } from "./lib/match-sync";
 import { generateAdminsCfg } from "./lib/cfg-generator";
+import { squadjsSocket } from "./lib/squadjs-socket";
+import type { Permission } from "shared";
+import type { ServerWebSocket } from "bun";
 
 const app = new Hono();
 
@@ -30,17 +35,19 @@ app.use(
 app.route("/auth", auth);
 app.route("/users", users);
 app.route("/roles", roles);
-// Public cfg endpoint (no auth) -- must be before authenticated whitelist routes
-app.get("/whitelist/admins.cfg", async (c) => {
-  const cfg = await generateAdminsCfg();
-  return c.text(cfg, 200, { "Content-Type": "text/plain" });
-});
 app.route("/whitelist", whitelist);
 app.route("/admin-groups", adminGroups);
 app.route("/tickets", tickets);
 app.route("/matches", matches);
 app.route("/servers", servers);
 app.route("/stats", stats);
+app.route("/squadjs-config", squadjsConfig);
+
+// Public cfg endpoint (no auth) -- separate from /whitelist to avoid auth middleware
+app.get("/admins.cfg", async (c) => {
+  const cfg = await generateAdminsCfg();
+  return c.text(cfg, 200, { "Content-Type": "text/plain" });
+});
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 
@@ -50,7 +57,203 @@ if (process.env.SQUADJS_DATABASE_URL) {
   setInterval(() => syncMatches().catch(console.error), 15 * 60 * 1000);
 }
 
+// --- WebSocket for live server ---
+
+interface WSData {
+  userId: string;
+  permissions: Permission[];
+  isAdmin: boolean;
+  serverKey: string;
+}
+
+const wsClients = new Set<ServerWebSocket<WSData>>();
+
+// Relay SquadJS events to subscribed WebSocket clients
+squadjsSocket.onEvent((serverKey, event, data) => {
+  const message = JSON.stringify({ type: "event", event, data, server: serverKey });
+  for (const ws of wsClients) {
+    try {
+      if (ws.data.serverKey === serverKey) {
+        ws.send(message);
+      }
+    } catch {
+      wsClients.delete(ws);
+    }
+  }
+});
+
+async function verifyToken(token: string): Promise<WSData | null> {
+  try {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) return null;
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(secret)
+    );
+    const userId = payload.userId as string;
+    const permissions = payload.permissions as Permission[];
+    if (!userId || !permissions) return null;
+    return {
+      userId,
+      permissions,
+      isAdmin: permissions.includes("admin"),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default {
   port: Number(process.env.PORT) || 3001,
-  fetch: app.fetch,
+  fetch(req: Request, server: { upgrade: (req: Request, opts: { data: WSData }) => boolean }) {
+    const url = new URL(req.url);
+
+    // Handle WebSocket upgrade for live server
+    if (url.pathname === "/live-server/ws") {
+      const token = url.searchParams.get("token");
+      const serverKey = url.searchParams.get("server") || squadjsSocket.getServerKeys()[0] || "";
+      if (!token) {
+        return new Response("Missing token", { status: 401 });
+      }
+
+      return verifyToken(token).then((data) => {
+        if (!data) {
+          return new Response("Invalid token", { status: 401 });
+        }
+        if (!data.isAdmin) {
+          return new Response("Admin access required", { status: 403 });
+        }
+        data.serverKey = serverKey;
+        const upgraded = server.upgrade(req, { data });
+        if (!upgraded) {
+          return new Response("WebSocket upgrade failed", { status: 500 });
+        }
+        return undefined as unknown as Response;
+      });
+    }
+
+    // REST endpoint to list available SquadJS servers
+    if (url.pathname === "/live-server/servers") {
+      return app.fetch(req);
+    }
+
+    // All other requests go through Hono
+    return app.fetch(req);
+  },
+  websocket: {
+    open(ws: ServerWebSocket<WSData>) {
+      wsClients.add(ws);
+      console.log(`[live-server] WebSocket connected (${wsClients.size} clients)`);
+
+      // Send available servers + initial snapshot
+      ws.send(
+        JSON.stringify({
+          type: "servers",
+          data: squadjsSocket.getServerKeys(),
+        })
+      );
+
+      const snapshot = squadjsSocket.getSnapshot(ws.data.serverKey);
+      ws.send(
+        JSON.stringify({
+          type: "snapshot",
+          data: snapshot || { connected: false, players: [], serverInfo: null, chatLog: [], tickRate: null },
+          server: ws.data.serverKey,
+        })
+      );
+    },
+    message(ws: ServerWebSocket<WSData>, message: string | Buffer) {
+      try {
+        const text = typeof message === "string" ? message : message.toString();
+        const msg = JSON.parse(text) as {
+          action: string;
+          server?: string;
+          steamId?: string;
+          message?: string;
+          reason?: string;
+        };
+
+        // Handle server switching
+        if (msg.action === "switch_server" && msg.server) {
+          ws.data.serverKey = msg.server;
+          const snapshot = squadjsSocket.getSnapshot(msg.server);
+          ws.send(JSON.stringify({
+            type: "snapshot",
+            data: snapshot || { connected: false, players: [], serverInfo: null, chatLog: [], tickRate: null },
+            server: msg.server,
+          }));
+          return;
+        }
+
+        if (!ws.data.isAdmin) {
+          ws.send(
+            JSON.stringify({
+              type: "action_result",
+              success: false,
+              error: "Admin access required",
+            })
+          );
+          return;
+        }
+
+        handleAdminAction(ws, msg);
+      } catch {
+        ws.send(
+          JSON.stringify({
+            type: "action_result",
+            success: false,
+            error: "Invalid message format",
+          })
+        );
+      }
+    },
+    close(ws: ServerWebSocket<WSData>) {
+      wsClients.delete(ws);
+      console.log(`[live-server] WebSocket disconnected (${wsClients.size} clients)`);
+    },
+  },
 };
+
+async function handleAdminAction(
+  ws: ServerWebSocket<WSData>,
+  msg: { action: string; server?: string; steamId?: string; message?: string; reason?: string }
+) {
+  const serverKey = ws.data.serverKey;
+
+  try {
+    switch (msg.action) {
+      case "warn":
+        if (!msg.steamId || !msg.message) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing steamId or message" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "warn", msg.steamId, msg.message);
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "warn" }));
+        break;
+
+      case "kick":
+        if (!msg.steamId) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing steamId" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "kick", msg.steamId, msg.reason || "Kicked by admin");
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "kick" }));
+        break;
+
+      case "broadcast":
+        if (!msg.message) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing message" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "broadcast", msg.message);
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "broadcast" }));
+        break;
+
+      default:
+        ws.send(JSON.stringify({ type: "action_result", success: false, error: `Unknown action: ${msg.action}` }));
+    }
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "Action failed";
+    ws.send(JSON.stringify({ type: "action_result", success: false, error }));
+  }
+}

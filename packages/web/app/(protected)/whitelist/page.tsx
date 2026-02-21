@@ -115,7 +115,7 @@ export default function WhitelistPage() {
           >
             <span className="capitalize">{t}</span>
             {t === "requests" && pendingCandidates.length > 0 && (
-              <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-bg-primary">
+              <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">
                 {pendingCandidates.length}
               </span>
             )}
@@ -275,7 +275,7 @@ function EntriesTab({
   }
 
   function handleExport() {
-    window.open(`${BASE_URL}/whitelist/admins.cfg`, "_blank");
+    window.open(`${BASE_URL}/admins.cfg`, "_blank");
   }
 
   // Import
@@ -799,7 +799,10 @@ function GroupsTab({
         <form onSubmit={handleAdd} className="facet-border mb-6 rounded-sm bg-bg-card p-4">
           <div className="mb-3 flex flex-wrap gap-3">
             <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Group name (e.g. Whitelist)" className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none" required />
-            <input type="number" value={newOrder} onChange={(e) => setNewOrder(Number(e.target.value))} placeholder="Sort order" className="w-24 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" title="Sort order" />
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs text-text-muted whitespace-nowrap">Priority</label>
+              <input type="number" value={newOrder} onChange={(e) => setNewOrder(Number(e.target.value))} className="w-16 rounded-sm border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-primary text-center focus:border-accent focus:outline-none" title="Lower number = higher priority in admins.cfg" />
+            </div>
             <button type="submit" disabled={adding} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">
               {adding ? "Creating..." : "Create Group"}
             </button>
@@ -825,7 +828,10 @@ function GroupsTab({
                   <div>
                     <div className="mb-3 flex flex-wrap gap-3">
                       <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" />
-                      <input type="number" value={editOrder} onChange={(e) => setEditOrder(Number(e.target.value))} className="w-24 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" />
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-xs text-text-muted whitespace-nowrap">Priority</label>
+                        <input type="number" value={editOrder} onChange={(e) => setEditOrder(Number(e.target.value))} className="w-16 rounded-sm border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-primary text-center focus:border-accent focus:outline-none" title="Lower number = higher priority in admins.cfg" />
+                      </div>
                       <button onClick={() => saveEdit(g.id)} className="rounded-sm bg-accent px-4 py-2 text-xs font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted">Save</button>
                       <button onClick={() => setEditingId(null)} className="text-xs text-text-muted transition-colors hover:text-text-primary">Cancel</button>
                     </div>
@@ -837,7 +843,7 @@ function GroupsTab({
                     <div className="mb-2 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <h3 className="font-display text-base font-semibold tracking-wide text-text-primary">{g.name}</h3>
-                        <span className="text-xs text-text-muted">#{g.sortOrder}</span>
+                        <span className="text-xs text-text-muted" title="Priority order in admins.cfg (lower = first)">Priority {g.sortOrder}</span>
                       </div>
                       {canManage && (
                         <div className="flex items-center gap-2">

@@ -43,6 +43,16 @@ const NAV_ITEMS: NavItem[] = [
     href: "/roles",
     requiredPermissions: ["manage:roles"],
   },
+  {
+    label: "SquadJS Config",
+    href: "/squadjs-config",
+    requiredPermissions: ["admin"],
+  },
+  {
+    label: "Live Server",
+    href: "/live-server",
+    requiredPermissions: ["admin"],
+  },
 ];
 
 function canSeeNavItem(item: NavItem, permissions: Permission[]): boolean {

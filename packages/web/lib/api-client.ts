@@ -11,6 +11,7 @@ import type {
   DiscordRole,
   Permission,
   Match,
+  SquadJSPlugin,
 } from "shared";
 
 const BASE_URL =
@@ -377,5 +378,36 @@ export function deleteMatch(
   return request<{ deleted: true }>(`/matches/${id}`, {
     method: "DELETE",
     headers: authHeaders(token),
+  });
+}
+
+// SquadJS Config
+export function getSquadJSEnvironments(
+  token: string
+): Promise<ApiResponse<{ environments: string[] }>> {
+  return request<{ environments: string[] }>("/squadjs-config", {
+    headers: authHeaders(token),
+  });
+}
+
+export function getSquadJSPlugins(
+  token: string,
+  env: string
+): Promise<ApiResponse<{ plugins: SquadJSPlugin[]; environment: string }>> {
+  return request<{ plugins: SquadJSPlugin[]; environment: string }>(
+    `/squadjs-config/${env}`,
+    { headers: authHeaders(token) }
+  );
+}
+
+export function updateSquadJSPlugins(
+  token: string,
+  env: string,
+  plugins: SquadJSPlugin[]
+): Promise<ApiResponse<{ saved: true }>> {
+  return request<{ saved: true }>(`/squadjs-config/${env}`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify({ plugins }),
   });
 }

@@ -54,3 +54,18 @@ export interface WhitelistCandidate {
 export interface LinkSteamRequest {
   steamId: string;
 }
+
+// SquadJS plugin config
+export type SquadJSPluginOptionValue =
+  | string
+  | number
+  | boolean
+  | null
+  | SquadJSPluginOptionValue[]
+  | { [key: string]: SquadJSPluginOptionValue };
+
+export interface SquadJSPlugin {
+  plugin: string;
+  enabled: boolean;
+  [key: string]: SquadJSPluginOptionValue;
+}

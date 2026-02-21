@@ -35,7 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     label: "Matches",
-    href: "/matches",
+    href: "/match-manager",
     requiredPermissions: ["manage:matches"],
   },
   {

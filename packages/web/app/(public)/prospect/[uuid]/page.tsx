@@ -7,6 +7,53 @@ import { NavAuthButton } from "@/components/nav-auth-button";
 import { getProspectByUuid } from "@/lib/api-client";
 import type { Prospect } from "shared";
 
+function parseAttachments(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.filter((u: unknown) => typeof u === "string");
+  } catch {
+    // Not JSON
+  }
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+function isImageUrl(url: string): boolean {
+  return /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url) || url.includes("cdn.discordapp.com");
+}
+
+function MessageAttachments({ attachments }: { attachments: string | null }) {
+  const urls = parseAttachments(attachments);
+  if (urls.length === 0) return null;
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {urls.map((url, i) =>
+        isImageUrl(url) ? (
+          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
+            <img
+              src={url}
+              alt={`Attachment ${i + 1}`}
+              className="max-h-32 max-w-48 rounded-sm border border-border/50 object-cover transition-opacity hover:opacity-80"
+              loading="lazy"
+            />
+          </a>
+        ) : (
+          <a
+            key={i}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs text-accent transition-colors hover:bg-bg-card-hover"
+          >
+            Attachment {i + 1}
+          </a>
+        )
+      )}
+    </div>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     open: "bg-accent/15 text-accent border-accent/30",
@@ -252,6 +299,7 @@ export default function ProspectPage({ params }: { params: Promise<{ uuid: strin
                           {msg.content}
                         </p>
                       )}
+                      <MessageAttachments attachments={msg.attachments} />
                     </div>
                   ))}
                 </div>

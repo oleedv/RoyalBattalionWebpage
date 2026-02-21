@@ -85,22 +85,70 @@ function exportProspectText(prospect: Prospect) {
   return lines.join("\n");
 }
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-
+function DownloadButton({ text, filename }: { text: string; filename: string }) {
   return (
     <button
       onClick={(e) => {
         e.stopPropagation();
-        navigator.clipboard.writeText(text).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        });
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
       }}
       className="rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary"
     >
-      {copied ? "Copied!" : "Export"}
+      Download
     </button>
+  );
+}
+
+function parseAttachments(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.filter((u: unknown) => typeof u === "string");
+  } catch {
+    // Not JSON, try comma-separated
+  }
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+function isImageUrl(url: string): boolean {
+  return /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url) || url.includes("cdn.discordapp.com");
+}
+
+function MessageAttachments({ attachments }: { attachments: string | null }) {
+  const urls = parseAttachments(attachments);
+  if (urls.length === 0) return null;
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {urls.map((url, i) =>
+        isImageUrl(url) ? (
+          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
+            <img
+              src={url}
+              alt={`Attachment ${i + 1}`}
+              className="max-h-32 max-w-48 rounded-sm border border-border/50 object-cover transition-opacity hover:opacity-80"
+              loading="lazy"
+            />
+          </a>
+        ) : (
+          <a
+            key={i}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs text-accent transition-colors hover:bg-bg-card-hover"
+          >
+            Attachment {i + 1}
+          </a>
+        )
+      )}
+    </div>
   );
 }
 
@@ -140,7 +188,7 @@ function TicketDetail({ ticket }: { ticket: Ticket }) {
   return (
     <div className="border-t border-border/50 px-5 pb-5 pt-4">
       <div className="mb-4 flex justify-end">
-        <CopyButton text={exportTicketText(ticket)} />
+        <DownloadButton text={exportTicketText(ticket)} filename={`ticket-${ticket.id}.txt`} />
       </div>
       {/* Events timeline */}
       {ticket.events && ticket.events.length > 0 && (
@@ -208,6 +256,7 @@ function TicketDetail({ ticket }: { ticket: Ticket }) {
                     {msg.content}
                   </p>
                 )}
+                <MessageAttachments attachments={msg.attachments} />
               </div>
             ))}
           </div>
@@ -227,7 +276,7 @@ function ProspectDetail({ prospect }: { prospect: Prospect }) {
   return (
     <div className="border-t border-border/50 px-5 pb-5 pt-4">
       <div className="mb-4 flex justify-end">
-        <CopyButton text={exportProspectText(prospect)} />
+        <DownloadButton text={exportProspectText(prospect)} filename={`prospect-${prospect.alias}.txt`} />
       </div>
       {/* Application info */}
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -369,6 +418,7 @@ function ProspectDetail({ prospect }: { prospect: Prospect }) {
                     {msg.content}
                   </p>
                 )}
+                <MessageAttachments attachments={msg.attachments} />
               </div>
             ))}
           </div>

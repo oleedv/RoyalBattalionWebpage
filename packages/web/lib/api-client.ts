@@ -254,17 +254,6 @@ export function getMatches(
   });
 }
 
-export function createMatch(
-  token: string,
-  data: { date: string; map: string; layer: string; result: string; vodUrl?: string; hidden?: boolean }
-): Promise<ApiResponse<Match>> {
-  return request<Match>("/matches", {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify(data),
-  });
-}
-
 export function updateMatch(
   token: string,
   id: string,

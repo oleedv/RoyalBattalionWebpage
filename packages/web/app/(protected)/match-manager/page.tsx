@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import {
   getMatches,
-  createMatch,
   updateMatch,
   deleteMatch,
 } from "@/lib/api-client";
@@ -15,16 +14,6 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Add form
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newDate, setNewDate] = useState("");
-  const [newMap, setNewMap] = useState("");
-  const [newLayer, setNewLayer] = useState("");
-  const [newResult, setNewResult] = useState("WIN");
-  const [newVodUrl, setNewVodUrl] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -53,34 +42,6 @@ export default function MatchesPage() {
     }
     init();
   }, [apiToken]);
-
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    if (!apiToken || !newDate || !newMap.trim() || !newLayer.trim()) return;
-    setAddError(null);
-    setAdding(true);
-
-    const res = await createMatch(apiToken, {
-      date: new Date(newDate).toISOString(),
-      map: newMap.trim(),
-      layer: newLayer.trim(),
-      result: newResult,
-      vodUrl: newVodUrl.trim() || undefined,
-    });
-
-    if (res.success && res.data) {
-      setMatches((prev) => [res.data!, ...prev]);
-      setNewDate("");
-      setNewMap("");
-      setNewLayer("");
-      setNewResult("WIN");
-      setNewVodUrl("");
-      setShowAddForm(false);
-    } else {
-      setAddError(res.error || "Failed to create match");
-    }
-    setAdding(false);
-  }
 
   function startEdit(match: Match) {
     setEditingId(match.id);
@@ -164,78 +125,10 @@ export default function MatchesPage() {
         <h1 className="font-display text-3xl font-bold tracking-wide">
           Matches
         </h1>
-        <div className="flex items-center gap-3">
-          <span className="rounded-sm border border-accent/20 bg-accent/10 px-3 py-1 text-sm text-accent">
-            {matches.length} matches
-          </span>
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted"
-          >
-            {showAddForm ? "Cancel" : "Add Match"}
-          </button>
-        </div>
+        <span className="rounded-sm border border-accent/20 bg-accent/10 px-3 py-1 text-sm text-accent">
+          {matches.length} matches
+        </span>
       </div>
-
-      {/* Add match form */}
-      {showAddForm && (
-        <form
-          onSubmit={handleAdd}
-          className="facet-border mb-6 rounded-sm bg-bg-card p-4"
-        >
-          <div className="flex flex-wrap gap-3">
-            <input
-              type="date"
-              value={newDate}
-              onChange={(e) => setNewDate(e.target.value)}
-              className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
-              required
-            />
-            <input
-              type="text"
-              value={newMap}
-              onChange={(e) => setNewMap(e.target.value)}
-              placeholder="Map"
-              className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-40"
-              required
-            />
-            <input
-              type="text"
-              value={newLayer}
-              onChange={(e) => setNewLayer(e.target.value)}
-              placeholder="Layer"
-              className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-40"
-              required
-            />
-            <select
-              value={newResult}
-              onChange={(e) => setNewResult(e.target.value)}
-              className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
-            >
-              <option value="WIN">WIN</option>
-              <option value="LOSS">LOSS</option>
-              <option value="DRAW">DRAW</option>
-            </select>
-            <input
-              type="url"
-              value={newVodUrl}
-              onChange={(e) => setNewVodUrl(e.target.value)}
-              placeholder="VOD URL (optional)"
-              className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:flex-1"
-            />
-            <button
-              type="submit"
-              disabled={adding}
-              className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50"
-            >
-              {adding ? "Adding..." : "Add Match"}
-            </button>
-          </div>
-          {addError && (
-            <div className="mt-3 text-sm text-danger">{addError}</div>
-          )}
-        </form>
-      )}
 
       {/* Matches table */}
       <div className="facet-border overflow-hidden rounded-sm bg-bg-card">

@@ -31,9 +31,7 @@ matches.get("/public", async (c) => {
   return c.json<ApiResponse<Match[]>>({ success: true, data: result });
 });
 
-// All remaining routes require auth
-matches.use("*", authMiddleware);
-
+// Ingest endpoint - API key auth for external services
 const createMatchSchema = z.object({
   date: z.string().min(1),
   map: z.string().min(1),
@@ -42,6 +40,41 @@ const createMatchSchema = z.object({
   vodUrl: z.string().optional(),
   hidden: z.boolean().optional(),
 });
+
+matches.post("/ingest", zValidator("json", createMatchSchema), async (c) => {
+  const apiKey = c.req.header("x-api-key");
+  const expectedKey = process.env.MATCH_INGEST_API_KEY;
+
+  if (!expectedKey || apiKey !== expectedKey) {
+    return c.json<ApiResponse<never>>({ success: false, error: "Invalid API key" }, 401);
+  }
+
+  const { date, map, layer, result, vodUrl, hidden } = c.req.valid("json");
+
+  try {
+    const entry = await prisma.match.create({
+      data: {
+        date: new Date(date),
+        map,
+        layer,
+        result,
+        vodUrl: vodUrl ?? null,
+        hidden: hidden ?? false,
+        createdBy: "ingest-service",
+      },
+    });
+
+    return c.json<ApiResponse<Match>>({ success: true, data: toMatch(entry) }, 201);
+  } catch {
+    return c.json<ApiResponse<never>>({
+      success: false,
+      error: "Failed to create match",
+    }, 400);
+  }
+});
+
+// All remaining routes require user auth
+matches.use("*", authMiddleware);
 
 const updateMatchSchema = z.object({
   date: z.string().optional(),
@@ -84,32 +117,6 @@ matches.get("/", requirePermission("manage:matches"), async (c) => {
   });
 
   return c.json<ApiResponse<Match[]>>({ success: true, data: entries.map(toMatch) });
-});
-
-matches.post("/", requirePermission("manage:matches"), zValidator("json", createMatchSchema), async (c) => {
-  const userId = c.get("userId");
-  const { date, map, layer, result, vodUrl, hidden } = c.req.valid("json");
-
-  try {
-    const entry = await prisma.match.create({
-      data: {
-        date: new Date(date),
-        map,
-        layer,
-        result,
-        vodUrl: vodUrl ?? null,
-        hidden: hidden ?? false,
-        createdBy: userId,
-      },
-    });
-
-    return c.json<ApiResponse<Match>>({ success: true, data: toMatch(entry) }, 201);
-  } catch {
-    return c.json<ApiResponse<never>>({
-      success: false,
-      error: "Failed to create match",
-    }, 400);
-  }
 });
 
 matches.put("/:id", requirePermission("manage:matches"), zValidator("json", updateMatchSchema), async (c) => {

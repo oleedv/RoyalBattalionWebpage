@@ -411,3 +411,12 @@ export function updateSquadJSPlugins(
     body: JSON.stringify({ plugins }),
   });
 }
+
+export function getSquadJSDescriptions(
+  token: string
+): Promise<ApiResponse<{ descriptions: Record<string, string> }>> {
+  return request<{ descriptions: Record<string, string> }>(
+    "/squadjs-config/descriptions",
+    { headers: authHeaders(token) }
+  );
+}

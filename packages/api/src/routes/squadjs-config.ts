@@ -4,11 +4,13 @@ import { zValidator } from "@hono/zod-validator";
 import type { ApiResponse, SquadJSPlugin } from "shared";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
+import prisma from "../lib/db";
 import {
   readSquadJSConfig,
   writeSquadJSConfig,
   getAvailableEnvironments,
   isConfigured,
+  fetchPluginDescriptions,
   type Environment,
 } from "../lib/github-config";
 
@@ -29,6 +31,23 @@ squadjsConfig.get("/", async (c) => {
     success: true,
     data: { environments: getAvailableEnvironments() },
   });
+});
+
+// GET /descriptions -- fetch plugin descriptions from source code (must be before /:env)
+squadjsConfig.get("/descriptions", async (c) => {
+  try {
+    const descriptions = await fetchPluginDescriptions();
+    return c.json<ApiResponse<{ descriptions: Record<string, string> }>>({
+      success: true,
+      data: { descriptions },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to fetch descriptions";
+    return c.json<ApiResponse<never>>(
+      { success: false, error: message },
+      500
+    );
+  }
 });
 
 // GET /:env -- read plugins for a specific environment
@@ -87,7 +106,13 @@ squadjsConfig.put(
         );
       }
 
-      await writeSquadJSConfig(env, result.raw, plugins as SquadJSPlugin[]);
+      // Look up who's making the change
+      const userId = c.get("userId");
+      const user = userId
+        ? await prisma.user.findUnique({ where: { id: userId }, select: { discordName: true } })
+        : null;
+
+      await writeSquadJSConfig(env, result.raw, plugins as SquadJSPlugin[], user?.discordName ?? undefined);
 
       return c.json<ApiResponse<{ saved: true }>>({
         success: true,

@@ -248,14 +248,22 @@ export default function RolesPage() {
                       <button
                         onClick={() => toggleWhitelistGrant(role)}
                         disabled={togglingWl === role.id}
-                        className={`mt-1.5 inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-[10px] font-semibold tracking-wide uppercase transition-all ${
-                          role.grantsWhitelist
-                            ? "border-success/30 bg-success/10 text-success hover:bg-success/20"
-                            : "border-border bg-bg-tertiary text-text-muted hover:border-accent/40 hover:text-text-secondary"
-                        }`}
+                        className="mt-1.5 inline-flex items-center gap-2 text-[10px] font-semibold tracking-wide uppercase transition-all"
                       >
-                        <div className={`h-2 w-2 rounded-full ${role.grantsWhitelist ? "bg-success" : "bg-text-muted/40"}`} />
-                        {role.grantsWhitelist ? "Grants Whitelist" : "No Whitelist"}
+                        <span
+                          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                            role.grantsWhitelist ? "bg-success" : "bg-text-muted/30"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                              role.grantsWhitelist ? "translate-x-[18px]" : "translate-x-[3px]"
+                            }`}
+                          />
+                        </span>
+                        <span className={role.grantsWhitelist ? "text-success" : "text-text-muted"}>
+                          {role.grantsWhitelist ? "Grants Whitelist" : "No Whitelist"}
+                        </span>
                       </button>
                     )}
                   </div>

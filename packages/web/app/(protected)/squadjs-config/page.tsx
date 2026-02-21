@@ -5,6 +5,7 @@ import {
   getSquadJSEnvironments,
   getSquadJSPlugins,
   updateSquadJSPlugins,
+  getSquadJSDescriptions,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import type { SquadJSPlugin, SquadJSPluginOptionValue } from "shared";
@@ -24,6 +25,23 @@ export default function SquadJSConfigPage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const [search, setSearch] = useState("");
+  const [descriptions, setDescriptions] = useState<Record<string, string>>({});
+
+  // Load environments + descriptions
+  useEffect(() => {
+    async function loadDescriptions() {
+      if (!apiToken) return;
+      try {
+        const res = await getSquadJSDescriptions(apiToken);
+        if (res.success && res.data) {
+          setDescriptions(res.data.descriptions);
+        }
+      } catch {
+        // Non-critical, descriptions are optional
+      }
+    }
+    loadDescriptions();
+  }, [apiToken]);
 
   // Load environments
   useEffect(() => {
@@ -235,6 +253,7 @@ export default function SquadJSConfigPage() {
               <PluginCard
                 key={`${activeEnv}-${plugin.plugin}`}
                 plugin={plugin}
+                description={descriptions[plugin.plugin] || null}
                 onChange={(updated) => handlePluginChange(index, updated)}
               />
             ))}
@@ -263,9 +282,11 @@ export default function SquadJSConfigPage() {
 
 function PluginCard({
   plugin,
+  description,
   onChange,
 }: {
   plugin: SquadJSPlugin;
+  description: string | null;
   onChange: (updated: SquadJSPlugin) => void;
 }) {
   const [collapsed, setCollapsed] = useState(true);
@@ -311,32 +332,39 @@ function PluginCard({
               />
             </svg>
           </button>
-          <h3 className="font-display font-semibold tracking-wide text-text-primary">
-            {plugin.plugin}
-          </h3>
-          {!plugin.enabled && (
-            <span className="rounded-sm border border-danger/20 bg-danger/5 px-2 py-0.5 text-[10px] font-medium text-danger">
-              DISABLED
-            </span>
-          )}
-          {optionKeys.length > 0 && (
-            <span className="text-[10px] text-text-muted">
-              {optionKeys.length} option{optionKeys.length !== 1 ? "s" : ""}
-            </span>
-          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="font-display font-semibold tracking-wide text-text-primary">
+                {plugin.plugin}
+              </h3>
+              {!plugin.enabled && (
+                <span className="rounded-sm border border-danger/20 bg-danger/5 px-2 py-0.5 text-[10px] font-medium text-danger">
+                  DISABLED
+                </span>
+              )}
+              {optionKeys.length > 0 && (
+                <span className="text-[10px] text-text-muted">
+                  {optionKeys.length} option{optionKeys.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+            {description && (
+              <p className="mt-0.5 text-xs text-text-muted line-clamp-1">
+                {description}
+              </p>
+            )}
+          </div>
         </div>
         {/* Enabled toggle */}
         <button
           onClick={toggleEnabled}
-          className={`relative h-5 w-9 rounded-full transition-colors ${
-            plugin.enabled
-              ? "bg-accent"
-              : "border border-border bg-bg-tertiary"
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+            plugin.enabled ? "bg-accent" : "bg-text-muted/30"
           }`}
         >
           <span
-            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-              plugin.enabled ? "translate-x-4" : "translate-x-0.5"
+            className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+              plugin.enabled ? "translate-x-6" : "translate-x-1"
             }`}
           />
         </button>

@@ -5,6 +5,7 @@ import users from "./routes/users";
 import roles from "./routes/roles";
 import whitelist from "./routes/whitelist";
 import tickets from "./routes/tickets";
+import matches from "./routes/matches";
 
 const app = new Hono();
 
@@ -26,6 +27,7 @@ app.route("/users", users);
 app.route("/roles", roles);
 app.route("/whitelist", whitelist);
 app.route("/tickets", tickets);
+app.route("/matches", matches);
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 

@@ -6,6 +6,7 @@ export const PERMISSIONS = [
   "view:tickets",
   "manage:tickets",
   "manage:roles",
+  "manage:matches",
   "admin",
 ] as const;
 

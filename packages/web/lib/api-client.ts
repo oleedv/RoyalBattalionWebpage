@@ -8,6 +8,7 @@ import type {
   Prospect,
   DiscordRole,
   Permission,
+  Match,
 } from "shared";
 
 const BASE_URL =
@@ -240,6 +241,48 @@ export function getProspect(
   id: number
 ): Promise<ApiResponse<Prospect>> {
   return request<Prospect>(`/tickets/prospects/${id}`, {
+    headers: authHeaders(token),
+  });
+}
+
+// Matches
+export function getMatches(
+  token: string
+): Promise<ApiResponse<Match[]>> {
+  return request<Match[]>("/matches", {
+    headers: authHeaders(token),
+  });
+}
+
+export function createMatch(
+  token: string,
+  data: { date: string; map: string; layer: string; result: string; vodUrl?: string; hidden?: boolean }
+): Promise<ApiResponse<Match>> {
+  return request<Match>("/matches", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateMatch(
+  token: string,
+  id: string,
+  data: { date?: string; map?: string; layer?: string; result?: string; vodUrl?: string | null; hidden?: boolean }
+): Promise<ApiResponse<Match>> {
+  return request<Match>(`/matches/${id}`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteMatch(
+  token: string,
+  id: string
+): Promise<ApiResponse<{ deleted: true }>> {
+  return request<{ deleted: true }>(`/matches/${id}`, {
+    method: "DELETE",
     headers: authHeaders(token),
   });
 }

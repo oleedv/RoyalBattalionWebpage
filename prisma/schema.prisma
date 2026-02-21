@@ -56,3 +56,16 @@ model WhitelistEntry {
   reason    String?
   createdAt DateTime @default(now())
 }
+
+model Match {
+  id        String   @id @default(cuid())
+  date      DateTime
+  map       String
+  layer     String
+  result    String
+  vodUrl    String?
+  hidden    Boolean  @default(false)
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

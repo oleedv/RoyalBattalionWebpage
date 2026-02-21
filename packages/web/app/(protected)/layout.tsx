@@ -34,6 +34,11 @@ const NAV_ITEMS: NavItem[] = [
     requiredPermissions: ["view:tickets", "manage:tickets"],
   },
   {
+    label: "Matches",
+    href: "/matches",
+    requiredPermissions: ["manage:matches"],
+  },
+  {
     label: "Roles",
     href: "/roles",
     requiredPermissions: ["manage:roles"],

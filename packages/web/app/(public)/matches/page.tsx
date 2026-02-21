@@ -197,6 +197,23 @@ function MatchRow({ match }: { match: Match }) {
                 )}
                 <span className="h-1 w-1 rounded-full bg-text-secondary" />
                 <span>{match.server}</span>
+                {match.vodUrl && (
+                  <>
+                    <span className="h-1 w-1 rounded-full bg-text-secondary" />
+                    <a
+                      href={match.vodUrl.startsWith("http") ? match.vodUrl : `https://${match.vodUrl}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 rounded-sm border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-accent uppercase transition-all hover:bg-accent/20 hover:border-accent/50"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                        <path d="M3 3.732a1.5 1.5 0 0 1 2.305-1.265l6.706 4.267a1.5 1.5 0 0 1 0 2.531l-6.706 4.268A1.5 1.5 0 0 1 3 12.267V3.732z" />
+                      </svg>
+                      VOD
+                    </a>
+                  </>
+                )}
               </div>
             </div>
           </div>

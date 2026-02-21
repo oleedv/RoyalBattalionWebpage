@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { NavAuthButton } from "@/components/nav-auth-button";
 
 const FEATURES = [
   {
@@ -75,12 +76,7 @@ export default function HomePage() {
             >
               Matches
             </Link>
-            <Link
-              href="/login"
-              className="glow-button relative rounded-sm border border-accent/40 bg-accent/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-accent transition-all hover:bg-accent/20 hover:border-accent/60 sm:px-5 sm:py-2 sm:text-sm"
-            >
-              Login
-            </Link>
+            <NavAuthButton className="glow-button relative rounded-sm border border-accent/40 bg-accent/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-accent transition-all hover:bg-accent/20 hover:border-accent/60 sm:px-5 sm:py-2 sm:text-sm" />
           </div>
         </div>
       </nav>

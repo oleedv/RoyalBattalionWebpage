@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -50,6 +50,8 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const [apiToken, setApiToken] = useState<string | null>(null);
   const [user, setUser] = useState<UserWithRoles | null>(null);
   const [synced, setSynced] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -67,15 +69,17 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           setApiToken(res.data.token);
           setPermissions(res.data.permissions);
           setUser(res.data.user);
+        } else if (!res.success) {
+          setSyncError(res.error === "NOT_IN_GUILD" ? "NOT_IN_GUILD" : res.error || "Failed to sync");
         }
       } catch {
-        // sync failed silently
+        setSyncError("Failed to sync");
       } finally {
         setSynced(true);
       }
     }
     init();
-  }, [session]);
+  }, [session, retryCount]);
 
   // Close mobile menu on navigation
   useEffect(() => {
@@ -92,6 +96,68 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
 
   if (!session) {
     return null;
+  }
+
+  if (syncError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg-primary px-4">
+        <div className="w-full max-w-md rounded-sm border border-border bg-bg-card p-8 text-center">
+          {syncError === "NOT_IN_GUILD" ? (
+            <>
+              <h1 className="font-display mb-3 text-xl font-bold tracking-wide text-text-primary">
+                Not a Member
+              </h1>
+              <p className="mb-6 text-sm text-text-secondary">
+                You need to join the Royal Battalion Discord server to access this page.
+              </p>
+              <div className="flex flex-col gap-3">
+                <a
+                  href="https://discord.gg/royalbattalion"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-sm bg-accent px-6 py-2.5 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted"
+                >
+                  Join Discord Server
+                </a>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="rounded-sm border border-border px-6 py-2.5 text-sm text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+                >
+                  Sign Out
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h1 className="font-display mb-3 text-xl font-bold tracking-wide text-text-primary">
+                Sync Failed
+              </h1>
+              <p className="mb-6 text-sm text-text-secondary">
+                {syncError}
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => {
+                    setSyncError(null);
+                    setSynced(false);
+                    setRetryCount((c) => c + 1);
+                  }}
+                  className="rounded-sm bg-accent px-6 py-2.5 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted"
+                >
+                  Retry
+                </button>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="rounded-sm border border-border px-6 py-2.5 text-sm text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+                >
+                  Sign Out
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
   }
 
   const navContent = (

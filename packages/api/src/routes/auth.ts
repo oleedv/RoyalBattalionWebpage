@@ -104,6 +104,12 @@ auth.post("/sync", zValidator("json", syncSchema), async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Auth sync failed";
     console.error("[auth/sync] Error:", err);
+    if (message.includes("guild member fetch failed: 404")) {
+      return c.json<ApiResponse<never>>({
+        success: false,
+        error: "NOT_IN_GUILD",
+      }, 403);
+    }
     return c.json<ApiResponse<never>>({ success: false, error: message }, 500);
   }
 });

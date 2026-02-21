@@ -4,13 +4,15 @@ import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { NavAuthButton } from "@/components/nav-auth-button";
-import { getTicketByUuid } from "@/lib/api-client";
-import type { Ticket } from "shared";
+import { getProspectByUuid } from "@/lib/api-client";
+import type { Prospect } from "shared";
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     open: "bg-accent/15 text-accent border-accent/30",
     closed: "bg-text-muted/15 text-text-secondary border-text-muted/30",
+    accepted: "bg-success/15 text-success border-success/30",
+    denied: "bg-danger/15 text-danger border-danger/30",
   };
   return (
     <span className={`rounded-sm border px-2.5 py-1 text-xs font-medium ${colors[status] || colors.closed}`}>
@@ -19,31 +21,18 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function TierBadge({ tier }: { tier: string }) {
-  const labels: Record<string, string> = {
-    normal: "Normal",
-    community_officer: "Community Officer",
-    admin_officer: "Admin Officer",
-  };
-  return (
-    <span className="rounded-sm border border-border bg-bg-tertiary px-2.5 py-1 text-xs text-text-secondary">
-      {labels[tier] || tier}
-    </span>
-  );
-}
-
-export default function TicketPage({ params }: { params: Promise<{ uuid: string }> }) {
+export default function ProspectPage({ params }: { params: Promise<{ uuid: string }> }) {
   const { uuid } = use(params);
-  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [prospect, setProspect] = useState<Prospect | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getTicketByUuid(uuid).then((res) => {
+    getProspectByUuid(uuid).then((res) => {
       if (res.success && res.data) {
-        setTicket(res.data);
+        setProspect(res.data);
       } else {
-        setError(res.error || "Ticket not found");
+        setError(res.error || "Prospect not found");
       }
       setLoading(false);
     });
@@ -86,12 +75,12 @@ export default function TicketPage({ params }: { params: Promise<{ uuid: string 
 
       <main className="mx-auto max-w-4xl px-6 py-16">
         {loading && (
-          <div className="text-center text-text-secondary">Loading ticket...</div>
+          <div className="text-center text-text-secondary">Loading prospect...</div>
         )}
 
         {error && (
           <div className="text-center">
-            <h1 className="font-display mb-4 text-3xl font-bold tracking-wide">Ticket Not Found</h1>
+            <h1 className="font-display mb-4 text-3xl font-bold tracking-wide">Prospect Not Found</h1>
             <p className="text-text-secondary">{error}</p>
             <Link href="/" className="mt-6 inline-block text-sm text-accent hover:text-accent-bright">
               Back to Home
@@ -99,7 +88,7 @@ export default function TicketPage({ params }: { params: Promise<{ uuid: string 
           </div>
         )}
 
-        {ticket && (
+        {prospect && (
           <>
             {/* Header */}
             <div className="mb-8">
@@ -109,52 +98,112 @@ export default function TicketPage({ params }: { params: Promise<{ uuid: string 
                 <div className="h-px w-12 bg-gradient-to-l from-transparent to-accent/40" />
               </div>
               <h1 className="font-display mb-4 text-center text-3xl font-bold tracking-wide sm:text-4xl">
-                Ticket #{ticket.id}
+                {prospect.alias}
               </h1>
               <div className="flex items-center justify-center gap-3">
-                <StatusBadge status={ticket.status} />
-                <TierBadge tier={ticket.tier} />
+                <StatusBadge status={prospect.status} />
               </div>
             </div>
 
-            {/* Info grid */}
+            {/* Application info */}
             <div className="facet-border mb-6 rounded-sm bg-bg-card p-5">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
                   <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">User ID</span>
-                  <div className="mt-0.5 text-sm text-text-primary">{ticket.userId}</div>
+                  <div className="mt-0.5 text-sm text-text-primary">{prospect.userId}</div>
                 </div>
                 <div>
-                  <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Created</span>
-                  <div className="mt-0.5 text-sm text-text-primary">{new Date(ticket.createdAt).toLocaleString()}</div>
+                  <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Nationality</span>
+                  <div className="mt-0.5 text-sm text-text-primary">{prospect.nationality}</div>
                 </div>
-                {ticket.closedAt && (
+                <div>
+                  <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Date of Birth</span>
+                  <div className="mt-0.5 text-sm text-text-primary">{prospect.dateOfBirth}</div>
+                </div>
+                <div>
+                  <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Squad Hours</span>
+                  <div className="mt-0.5 text-sm text-text-primary">{prospect.squadHours}h</div>
+                </div>
+                <div>
+                  <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Preferred Roles</span>
+                  <div className="mt-0.5 text-sm text-text-primary">{prospect.preferredRoles}</div>
+                </div>
+                <div>
+                  <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Previous Clan</span>
+                  <div className="mt-0.5 text-sm text-text-primary">{prospect.prevClan || "--"}</div>
+                </div>
+                <div>
+                  <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Active Hours</span>
+                  <div className="mt-0.5 text-sm text-text-primary">{prospect.activeHours}</div>
+                </div>
+                <div>
+                  <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Competitive</span>
+                  <div className="mt-0.5 text-sm text-text-primary">{prospect.competitive}</div>
+                </div>
+                <div>
+                  <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Steam ID</span>
+                  <div className="mt-0.5 text-sm"><code className="text-accent">{prospect.steamId}</code></div>
+                </div>
+                {prospect.mentorId && (
                   <div>
-                    <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Closed</span>
-                    <div className="mt-0.5 text-sm text-text-primary">{new Date(ticket.closedAt).toLocaleString()}</div>
+                    <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Mentor</span>
+                    <div className="mt-0.5 text-sm text-text-primary">{prospect.mentorId}</div>
                   </div>
                 )}
-                {ticket.closedBy && (
+                <div>
+                  <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Created</span>
+                  <div className="mt-0.5 text-sm text-text-primary">{new Date(prospect.createdAt).toLocaleString()}</div>
+                </div>
+                {prospect.closedAt && (
                   <div>
-                    <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Closed By</span>
-                    <div className="mt-0.5 text-sm text-text-primary">{ticket.closedBy}</div>
+                    <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Closed</span>
+                    <div className="mt-0.5 text-sm text-text-primary">{new Date(prospect.closedAt).toLocaleString()}</div>
                   </div>
                 )}
               </div>
             </div>
 
+            {/* Why RB */}
+            <div className="facet-border mb-6 rounded-sm bg-bg-card p-5">
+              <h2 className="font-display mb-3 text-lg font-semibold tracking-wide">Why Royal Battalion?</h2>
+              <p className="whitespace-pre-wrap text-sm text-text-secondary">{prospect.whyRb}</p>
+            </div>
+
+            {/* Votes */}
+            {prospect.votes && prospect.votes.length > 0 && (
+              <div className="facet-border mb-6 rounded-sm bg-bg-card p-5">
+                <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">
+                  Votes ({prospect.votes.length})
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  {prospect.votes.map((v) => {
+                    const color = v.vote === "yes" ? "text-success border-success/30 bg-success/10"
+                      : v.vote === "no" ? "text-danger border-danger/30 bg-danger/10"
+                      : "text-accent border-accent/30 bg-accent/10";
+                    return (
+                      <div key={v.id} className={`rounded-sm border px-3 py-1.5 ${color}`}>
+                        <div className="text-xs font-medium">{v.voterTag || v.voterId}</div>
+                        <div className="text-[10px] uppercase font-semibold">{v.vote}</div>
+                        {v.reason && <div className="mt-0.5 text-[10px] opacity-80">{v.reason}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Events timeline */}
-            {ticket.events && ticket.events.length > 0 && (
+            {prospect.events && prospect.events.length > 0 && (
               <div className="facet-border mb-6 rounded-sm bg-bg-card p-5">
                 <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Timeline</h2>
                 <div className="space-y-3">
-                  {ticket.events.map((event) => (
+                  {prospect.events.map((event) => (
                     <div key={event.id} className="flex items-start gap-3">
                       <div className="mt-1.5 h-2 w-2 rounded-full bg-accent/50" />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-text-primary capitalize">
-                            {event.eventType}
+                            {event.eventType.replace(/_/g, " ")}
                           </span>
                           <span className="text-xs text-text-muted">by {event.actorId}</span>
                         </div>
@@ -172,11 +221,11 @@ export default function TicketPage({ params }: { params: Promise<{ uuid: string 
             )}
 
             {/* Messages */}
-            {ticket.messages && ticket.messages.length > 0 && (
+            {prospect.messages && prospect.messages.length > 0 && (
               <div className="facet-border rounded-sm bg-bg-card p-5">
                 <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Messages</h2>
                 <div className="space-y-3">
-                  {ticket.messages.map((msg) => (
+                  {prospect.messages.map((msg) => (
                     <div
                       key={msg.id}
                       className={`rounded-sm border p-4 ${
@@ -209,9 +258,9 @@ export default function TicketPage({ params }: { params: Promise<{ uuid: string 
               </div>
             )}
 
-            {!ticket.events?.length && !ticket.messages?.length && (
+            {!prospect.events?.length && !prospect.messages?.length && !prospect.votes?.length && (
               <div className="facet-border rounded-sm bg-bg-card px-5 py-8 text-center text-text-muted">
-                No events or messages recorded for this ticket.
+                No events, messages, or votes recorded for this prospect.
               </div>
             )}
           </>

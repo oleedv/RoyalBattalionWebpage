@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { Metadata } from "next";
+import { NavAuthButton } from "@/components/nav-auth-button";
 
 export const metadata: Metadata = {
   title: "Server Status - Royal Battalion",
@@ -38,12 +39,7 @@ export default function ServerPage() {
             >
               Matches
             </Link>
-            <Link
-              href="/login"
-              className="glow-button rounded-sm border border-accent/40 bg-accent/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-accent transition-all hover:bg-accent/20 hover:border-accent/60 sm:px-5 sm:py-2 sm:text-sm"
-            >
-              Login
-            </Link>
+            <NavAuthButton className="glow-button rounded-sm border border-accent/40 bg-accent/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-accent transition-all hover:bg-accent/20 hover:border-accent/60 sm:px-5 sm:py-2 sm:text-sm" />
           </div>
         </div>
       </nav>

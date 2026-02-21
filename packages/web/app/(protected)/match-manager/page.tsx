@@ -22,6 +22,7 @@ export default function MatchesPage() {
   const [editLayer, setEditLayer] = useState("");
   const [editResult, setEditResult] = useState("");
   const [editVodUrl, setEditVodUrl] = useState("");
+  const [editServer, setEditServer] = useState("Main Server");
   const [editError, setEditError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -50,6 +51,7 @@ export default function MatchesPage() {
     setEditLayer(match.layer);
     setEditResult(match.result);
     setEditVodUrl(match.vodUrl || "");
+    setEditServer(match.server);
     setEditError(null);
   }
 
@@ -67,6 +69,7 @@ export default function MatchesPage() {
       map: editMap.trim(),
       layer: editLayer.trim(),
       result: editResult,
+      server: editServer,
       vodUrl: editVodUrl.trim() || null,
     });
 
@@ -149,6 +152,9 @@ export default function MatchesPage() {
                   Result
                 </th>
                 <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+                  Server
+                </th>
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
                   VOD
                 </th>
                 <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
@@ -163,7 +169,7 @@ export default function MatchesPage() {
               {matches.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-8 text-center text-text-muted"
                   >
                     No matches yet
@@ -226,6 +232,20 @@ export default function MatchesPage() {
                         </select>
                       ) : (
                         resultBadge(match.result)
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {editingId === match.id ? (
+                        <select
+                          value={editServer}
+                          onChange={(e) => setEditServer(e.target.value)}
+                          className="rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
+                        >
+                          <option value="Main Server">Main Server</option>
+                          <option value="Battle Server">Battle Server</option>
+                        </select>
+                      ) : (
+                        <span className="text-text-secondary">{match.server}</span>
                       )}
                     </td>
                     <td className="px-4 py-3">

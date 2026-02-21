@@ -63,6 +63,7 @@ model Match {
   map       String
   layer     String
   result    String
+  server    String   @default("Main Server")
   vodUrl    String?
   hidden    Boolean  @default(false)
   createdBy String

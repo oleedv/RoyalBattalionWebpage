@@ -4,6 +4,7 @@ export interface Match {
   map: string;
   layer: string;
   result: string;
+  server: string;
   vodUrl: string | null;
   hidden: boolean;
   createdBy: string;

@@ -21,6 +21,7 @@ matches.get("/public", async (c) => {
     map: e.map,
     layer: e.layer,
     result: e.result,
+    server: e.server,
     vodUrl: e.vodUrl,
     hidden: e.hidden,
     createdBy: e.createdBy,
@@ -37,6 +38,7 @@ const createMatchSchema = z.object({
   map: z.string().min(1),
   layer: z.string().min(1),
   result: z.string().min(1),
+  server: z.string().optional(),
   vodUrl: z.string().optional(),
   hidden: z.boolean().optional(),
 });
@@ -49,7 +51,7 @@ matches.post("/ingest", zValidator("json", createMatchSchema), async (c) => {
     return c.json<ApiResponse<never>>({ success: false, error: "Invalid API key" }, 401);
   }
 
-  const { date, map, layer, result, vodUrl, hidden } = c.req.valid("json");
+  const { date, map, layer, result, server, vodUrl, hidden } = c.req.valid("json");
 
   try {
     const entry = await prisma.match.create({
@@ -58,6 +60,7 @@ matches.post("/ingest", zValidator("json", createMatchSchema), async (c) => {
         map,
         layer,
         result,
+        server: server ?? "Main Server",
         vodUrl: vodUrl ?? null,
         hidden: hidden ?? false,
         createdBy: "ingest-service",
@@ -81,6 +84,7 @@ const updateMatchSchema = z.object({
   map: z.string().optional(),
   layer: z.string().optional(),
   result: z.string().optional(),
+  server: z.string().optional(),
   vodUrl: z.string().nullable().optional(),
   hidden: z.boolean().optional(),
 });
@@ -91,6 +95,7 @@ function toMatch(e: {
   map: string;
   layer: string;
   result: string;
+  server: string;
   vodUrl: string | null;
   hidden: boolean;
   createdBy: string;
@@ -103,6 +108,7 @@ function toMatch(e: {
     map: e.map,
     layer: e.layer,
     result: e.result,
+    server: e.server,
     vodUrl: e.vodUrl,
     hidden: e.hidden,
     createdBy: e.createdBy,
@@ -136,6 +142,7 @@ matches.put("/:id", requirePermission("manage:matches"), zValidator("json", upda
         ...(body.map !== undefined && { map: body.map }),
         ...(body.layer !== undefined && { layer: body.layer }),
         ...(body.result !== undefined && { result: body.result }),
+        ...(body.server !== undefined && { server: body.server }),
         ...(body.vodUrl !== undefined && { vodUrl: body.vodUrl }),
         ...(body.hidden !== undefined && { hidden: body.hidden }),
       },

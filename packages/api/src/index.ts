@@ -62,7 +62,8 @@ if (process.env.SQUADJS_DATABASE_URL) {
 interface WSData {
   userId: string;
   permissions: Permission[];
-  isAdmin: boolean;
+  canManage: boolean;
+  canView: boolean;
   serverKey: string;
 }
 
@@ -93,10 +94,13 @@ async function verifyToken(token: string): Promise<WSData | null> {
     const userId = payload.userId as string;
     const permissions = payload.permissions as Permission[];
     if (!userId || !permissions) return null;
+    const isAdmin = permissions.includes("admin");
     return {
       userId,
       permissions,
-      isAdmin: permissions.includes("admin"),
+      canManage: isAdmin || permissions.includes("manage:live-server"),
+      canView: isAdmin || permissions.includes("view:live-server") || permissions.includes("manage:live-server"),
+      serverKey: "",
     };
   } catch {
     return null;
@@ -120,8 +124,8 @@ export default {
         if (!data) {
           return new Response("Invalid token", { status: 401 });
         }
-        if (!data.isAdmin) {
-          return new Response("Admin access required", { status: 403 });
+        if (!data.canView) {
+          return new Response("Live server access required", { status: 403 });
         }
         data.serverKey = serverKey;
         const upgraded = server.upgrade(req, { data });
@@ -185,12 +189,12 @@ export default {
           return;
         }
 
-        if (!ws.data.isAdmin) {
+        if (!ws.data.canManage) {
           ws.send(
             JSON.stringify({
               type: "action_result",
               success: false,
-              error: "Admin access required",
+              error: "Manage live-server permission required",
             })
           );
           return;

@@ -7,6 +7,10 @@ export const PERMISSIONS = [
   "manage:tickets",
   "manage:roles",
   "manage:matches",
+  "view:squadjs",
+  "manage:squadjs",
+  "view:live-server",
+  "manage:live-server",
   "admin",
 ] as const;
 

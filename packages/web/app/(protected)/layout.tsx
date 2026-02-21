@@ -46,12 +46,12 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: "SquadJS Config",
     href: "/squadjs-config",
-    requiredPermissions: ["admin"],
+    requiredPermissions: ["view:squadjs", "manage:squadjs"],
   },
   {
     label: "Live Server",
     href: "/live-server",
-    requiredPermissions: ["admin"],
+    requiredPermissions: ["view:live-server", "manage:live-server"],
   },
 ];
 

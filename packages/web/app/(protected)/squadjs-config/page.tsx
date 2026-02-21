@@ -117,7 +117,10 @@ export default function SquadJSConfigPage() {
   const isDirty =
     JSON.stringify(plugins) !== JSON.stringify(originalPlugins);
 
-  if (!hasPermission("admin")) {
+  const canView = hasPermission("view:squadjs") || hasPermission("manage:squadjs");
+  const canManage = hasPermission("manage:squadjs");
+
+  if (!canView) {
     return <div className="text-danger">Insufficient permissions.</div>;
   }
 
@@ -168,18 +171,20 @@ export default function SquadJSConfigPage() {
             Edit plugin configuration. Saving commits to GitHub and triggers CI/CD.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {isDirty && (
-            <span className="text-xs text-warning">Unsaved changes</span>
-          )}
-          <button
-            onClick={() => setShowDiff(true)}
-            disabled={!isDirty || saving}
-            className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-40"
-          >
-            Review & Save
-          </button>
-        </div>
+        {canManage && (
+          <div className="flex items-center gap-3">
+            {isDirty && (
+              <span className="text-xs text-warning">Unsaved changes</span>
+            )}
+            <button
+              onClick={() => setShowDiff(true)}
+              disabled={!isDirty || saving}
+              className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-40"
+            >
+              Review & Save
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Environment tabs */}
@@ -254,6 +259,7 @@ export default function SquadJSConfigPage() {
                 key={`${activeEnv}-${plugin.plugin}`}
                 plugin={plugin}
                 description={descriptions[plugin.plugin] || null}
+                readOnly={!canManage}
                 onChange={(updated) => handlePluginChange(index, updated)}
               />
             ))}
@@ -283,10 +289,12 @@ export default function SquadJSConfigPage() {
 function PluginCard({
   plugin,
   description,
+  readOnly,
   onChange,
 }: {
   plugin: SquadJSPlugin;
   description: string | null;
+  readOnly?: boolean;
   onChange: (updated: SquadJSPlugin) => void;
 }) {
   const [collapsed, setCollapsed] = useState(true);
@@ -357,10 +365,11 @@ function PluginCard({
         </div>
         {/* Enabled toggle */}
         <button
-          onClick={toggleEnabled}
+          onClick={readOnly ? undefined : toggleEnabled}
+          disabled={readOnly}
           className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
             plugin.enabled ? "bg-accent" : "bg-text-muted/30"
-          }`}
+          } ${readOnly ? "cursor-default opacity-60" : ""}`}
         >
           <span
             className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
@@ -379,6 +388,7 @@ function PluginCard({
                 key={key}
                 fieldKey={key}
                 value={plugin[key] as SquadJSPluginOptionValue}
+                readOnly={readOnly}
                 onChange={(v) => handleFieldChange(key, v)}
               />
             ))}
@@ -396,10 +406,12 @@ function PluginCard({
 function PluginField({
   fieldKey,
   value,
+  readOnly,
   onChange,
 }: {
   fieldKey: string;
   value: SquadJSPluginOptionValue;
+  readOnly?: boolean;
   onChange: (value: SquadJSPluginOptionValue) => void;
 }) {
   const isComplex = typeof value === "object" && value !== null;
@@ -426,12 +438,13 @@ function PluginField({
       </label>
       {typeof value === "boolean" ? (
         <button
-          onClick={() => onChange(!value)}
+          onClick={readOnly ? undefined : () => onChange(!value)}
+          disabled={readOnly}
           className={`rounded-sm border px-3 py-1 text-xs font-medium transition-colors ${
             value
               ? "border-accent/30 bg-accent/10 text-accent"
               : "border-border bg-bg-tertiary text-text-muted"
-          }`}
+          } ${readOnly ? "cursor-default opacity-60" : ""}`}
         >
           {value ? "true" : "false"}
         </button>
@@ -439,20 +452,22 @@ function PluginField({
         <input
           type="number"
           value={value}
+          readOnly={readOnly}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full max-w-xs rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none"
+          className={`w-full max-w-xs rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-sm text-text-primary focus:border-accent focus:outline-none ${readOnly ? "opacity-60" : ""}`}
         />
       ) : isComplex ? (
         <div>
           <textarea
             value={jsonText}
+            readOnly={readOnly}
             onChange={(e) => handleJsonChange(e.target.value)}
             rows={Math.min(10, Math.max(3, jsonText.split("\n").length + 1))}
             className={`w-full rounded-sm border bg-bg-tertiary px-3 py-2 font-mono text-xs text-text-primary focus:outline-none ${
               jsonError
                 ? "border-danger focus:border-danger"
                 : "border-border focus:border-accent"
-            }`}
+            } ${readOnly ? "opacity-60" : ""}`}
           />
           {jsonError && (
             <p className="mt-1 text-xs text-danger">{jsonError}</p>
@@ -462,11 +477,12 @@ function PluginField({
         <input
           type="text"
           value={value === null ? "" : String(value)}
+          readOnly={readOnly}
           onChange={(e) =>
             onChange(e.target.value === "" ? null : e.target.value)
           }
           placeholder={value === null ? "null" : ""}
-          className="w-full rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+          className={`w-full rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none ${readOnly ? "opacity-60" : ""}`}
         />
       )}
     </div>

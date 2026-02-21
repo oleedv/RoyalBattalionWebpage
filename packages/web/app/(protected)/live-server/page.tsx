@@ -60,7 +60,8 @@ type ChatFilter = "All" | "ChatAll" | "ChatTeam" | "ChatSquad" | "ChatAdmin";
 
 export default function LiveServerPage() {
   const { apiToken, hasPermission } = usePermissions();
-  const isAdmin = hasPermission("admin");
+  const canView = hasPermission("view:live-server") || hasPermission("manage:live-server");
+  const canManage = hasPermission("manage:live-server");
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -183,14 +184,14 @@ export default function LiveServerPage() {
   }, [apiToken, handleMessage]);
 
   useEffect(() => {
-    if (!apiToken || !isAdmin) return;
+    if (!apiToken || !canView) return;
     connectWs();
 
     return () => {
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
       wsRef.current?.close();
     };
-  }, [apiToken, isAdmin, connectWs]);
+  }, [apiToken, canView, connectWs]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -244,8 +245,8 @@ export default function LiveServerPage() {
     setKickReason("");
   }
 
-  if (!isAdmin) {
-    return <div className="text-danger">Admin access required.</div>;
+  if (!canView) {
+    return <div className="text-danger">Insufficient permissions.</div>;
   }
 
   const team1 = players.filter((p) => p.teamID === "1");
@@ -360,6 +361,7 @@ export default function LiveServerPage() {
                 <TeamColumn
                   label="Team 1"
                   players={team1}
+                  showActions={canManage}
                   onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
                 />
@@ -367,6 +369,7 @@ export default function LiveServerPage() {
                   label="Team 2"
                   players={team2}
                   className="border-t border-border md:border-l md:border-t-0"
+                  showActions={canManage}
                   onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
                 />
@@ -378,6 +381,7 @@ export default function LiveServerPage() {
                 <TeamColumn
                   label="Unassigned"
                   players={unassigned}
+                  showActions={canManage}
                   onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
                 />
@@ -389,25 +393,27 @@ export default function LiveServerPage() {
         {/* Chat + Broadcast */}
         <div className="flex flex-col gap-4">
           {/* Broadcast */}
-          <form
-            onSubmit={handleBroadcast}
-            className="facet-border flex gap-2 rounded-sm bg-bg-card p-3"
-          >
-            <input
-              type="text"
-              value={broadcastMsg}
-              onChange={(e) => setBroadcastMsg(e.target.value)}
-              placeholder="Server broadcast..."
-              className="flex-1 rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-            />
-            <button
-              type="submit"
-              disabled={!broadcastMsg.trim() || !connected}
-              className="rounded-sm bg-accent px-4 py-1.5 text-xs font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-40"
+          {canManage && (
+            <form
+              onSubmit={handleBroadcast}
+              className="facet-border flex gap-2 rounded-sm bg-bg-card p-3"
             >
-              Send
-            </button>
-          </form>
+              <input
+                type="text"
+                value={broadcastMsg}
+                onChange={(e) => setBroadcastMsg(e.target.value)}
+                placeholder="Server broadcast..."
+                className="flex-1 rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={!broadcastMsg.trim() || !connected}
+                className="rounded-sm bg-accent px-4 py-1.5 text-xs font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-40"
+              >
+                Send
+              </button>
+            </form>
+          )}
 
           {/* Chat feed */}
           <div className="facet-border flex flex-col rounded-sm bg-bg-card" style={{ height: "500px" }}>
@@ -534,12 +540,14 @@ function TeamColumn({
   label,
   players,
   className = "",
+  showActions = false,
   onWarn,
   onKick,
 }: {
   label: string;
   players: Player[];
   className?: string;
+  showActions?: boolean;
   onWarn: (p: Player) => void;
   onKick: (p: Player) => void;
 }) {
@@ -571,7 +579,7 @@ function TeamColumn({
               {members[0].squad?.squadName || `Squad ${members[0].squadID}`} ({members.length})
             </div>
             {members.map((p) => (
-              <PlayerRow key={p.steamID} player={p} onWarn={onWarn} onKick={onKick} />
+              <PlayerRow key={p.steamID} player={p} showActions={showActions} onWarn={onWarn} onKick={onKick} />
             ))}
           </div>
         ))}
@@ -583,7 +591,7 @@ function TeamColumn({
               </div>
             )}
             {noSquad.map((p) => (
-              <PlayerRow key={p.steamID} player={p} onWarn={onWarn} onKick={onKick} />
+              <PlayerRow key={p.steamID} player={p} showActions={showActions} onWarn={onWarn} onKick={onKick} />
             ))}
           </div>
         )}
@@ -594,20 +602,22 @@ function TeamColumn({
 
 function PlayerRow({
   player,
+  showActions = false,
   onWarn,
   onKick,
 }: {
   player: Player;
+  showActions?: boolean;
   onWarn: (p: Player) => void;
   onKick: (p: Player) => void;
 }) {
-  const [showActions, setShowActions] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
   return (
     <div
       className="group flex items-center justify-between border-b border-border/30 px-4 py-1.5 transition-colors hover:bg-bg-tertiary/30"
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       <div className="flex items-center gap-2 overflow-hidden">
         {player.isLeader && (
@@ -617,7 +627,7 @@ function PlayerRow({
         )}
         <span className="truncate text-xs text-text-primary">{player.name}</span>
       </div>
-      {showActions && (
+      {showActions && hovered && (
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => onWarn(player)}

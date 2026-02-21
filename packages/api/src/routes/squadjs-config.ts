@@ -16,10 +16,10 @@ import {
 
 const squadjsConfig = new Hono();
 
-squadjsConfig.use("*", authMiddleware, requirePermission("admin"));
+squadjsConfig.use("*", authMiddleware);
 
 // GET / -- list available environments
-squadjsConfig.get("/", async (c) => {
+squadjsConfig.get("/", requirePermission("view:squadjs", "manage:squadjs"), async (c) => {
   if (!isConfigured()) {
     return c.json<ApiResponse<never>>(
       { success: false, error: "GITHUB_CONFIG_TOKEN is not configured" },
@@ -34,7 +34,7 @@ squadjsConfig.get("/", async (c) => {
 });
 
 // GET /descriptions -- fetch plugin descriptions from source code (must be before /:env)
-squadjsConfig.get("/descriptions", async (c) => {
+squadjsConfig.get("/descriptions", requirePermission("view:squadjs", "manage:squadjs"), async (c) => {
   try {
     const descriptions = await fetchPluginDescriptions();
     return c.json<ApiResponse<{ descriptions: Record<string, string> }>>({
@@ -51,7 +51,7 @@ squadjsConfig.get("/descriptions", async (c) => {
 });
 
 // GET /:env -- read plugins for a specific environment
-squadjsConfig.get("/:env", async (c) => {
+squadjsConfig.get("/:env", requirePermission("view:squadjs", "manage:squadjs"), async (c) => {
   const env = c.req.param("env") as Environment;
 
   try {
@@ -91,6 +91,7 @@ const updateSchema = z.object({
 // PUT /:env -- write plugins for a specific environment
 squadjsConfig.put(
   "/:env",
+  requirePermission("manage:squadjs"),
   zValidator("json", updateSchema),
   async (c) => {
     const env = c.req.param("env") as Environment;

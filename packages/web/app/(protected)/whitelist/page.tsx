@@ -7,10 +7,26 @@ import {
   updateWhitelistEntry,
   deleteWhitelistEntry,
   bulkAddWhitelist,
+  getWhitelistCandidates,
+  getAdminGroups,
+  createAdminGroup,
+  updateAdminGroup,
+  deleteAdminGroup,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
-import type { WhitelistEntry } from "shared";
+import type { WhitelistEntry, WhitelistCandidate, AdminGroup } from "shared";
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+const SQUAD_PERMISSIONS = [
+  "reserve", "pause", "kick", "ban", "changemap", "chat",
+  "config", "immune", "cameraman", "forceteamchange", "teamchange", "debug",
+  "clientdemos", "cheat", "featuretest",
+];
+
+type Tab = "entries" | "requests" | "groups";
+
+// --- Import modal types ---
 interface ParsedImportRow {
   steamId: string;
   name: string;
@@ -19,18 +35,156 @@ interface ParsedImportRow {
   error: boolean;
 }
 
+// --- Expiry helpers ---
+function formatExpiry(expiresAt: string | null): { label: string; expired: boolean } | null {
+  if (!expiresAt) return null;
+  const exp = new Date(expiresAt);
+  const now = new Date();
+  if (exp <= now) return { label: "Expired", expired: true };
+  const diff = exp.getTime() - now.getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days > 0) return { label: `${days}d left`, expired: false };
+  const hours = Math.floor(diff / 3600000);
+  return { label: `${hours}h left`, expired: false };
+}
+
 export default function WhitelistPage() {
   const { apiToken, hasPermission } = usePermissions();
+  const canManage = hasPermission("manage:whitelist");
+
+  const [tab, setTab] = useState<Tab>("entries");
   const [entries, setEntries] = useState<WhitelistEntry[]>([]);
+  const [candidates, setCandidates] = useState<WhitelistCandidate[]>([]);
+  const [groups, setGroups] = useState<AdminGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Dismissed candidates (client-side only)
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    async function init() {
+      if (!apiToken) return;
+      try {
+        const [wlRes, grpRes] = await Promise.all([
+          getWhitelist(apiToken),
+          getAdminGroups(apiToken),
+        ]);
+        if (wlRes.success && wlRes.data) setEntries(wlRes.data);
+        else setError(wlRes.error || "Failed to load whitelist");
+        if (grpRes.success && grpRes.data) setGroups(grpRes.data);
+
+        if (canManage) {
+          const candRes = await getWhitelistCandidates(apiToken);
+          if (candRes.success && candRes.data) setCandidates(candRes.data);
+        }
+      } catch {
+        setError("Failed to initialize");
+      } finally {
+        setLoading(false);
+      }
+    }
+    init();
+  }, [apiToken, canManage]);
+
+  if (loading) return <div className="text-text-secondary">Loading whitelist...</div>;
+  if (error) return <div className="text-danger">{error}</div>;
+
+  const pendingCandidates = candidates.filter((c) => !dismissed.has(c.userId));
+
+  return (
+    <div>
+      <div className="mb-8 flex items-center justify-between">
+        <h1 className="font-display text-3xl font-bold tracking-wide">Whitelist</h1>
+        <span className="rounded-sm border border-accent/20 bg-accent/10 px-3 py-1 text-sm text-accent">
+          {entries.length} entries
+        </span>
+      </div>
+
+      {/* Tabs */}
+      <div className="mb-6 flex gap-1 border-b border-border">
+        {(["entries", "requests", "groups"] as Tab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`relative px-5 py-2.5 text-sm font-medium tracking-wide transition-colors ${
+              tab === t
+                ? "text-accent"
+                : "text-text-muted hover:text-text-secondary"
+            }`}
+          >
+            <span className="capitalize">{t}</span>
+            {t === "requests" && pendingCandidates.length > 0 && (
+              <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-bg-primary">
+                {pendingCandidates.length}
+              </span>
+            )}
+            {tab === t && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {tab === "entries" && (
+        <EntriesTab
+          entries={entries}
+          setEntries={setEntries}
+          groups={groups}
+          apiToken={apiToken}
+          canManage={canManage}
+        />
+      )}
+      {tab === "requests" && (
+        <RequestsTab
+          candidates={pendingCandidates}
+          groups={groups}
+          entries={entries}
+          setEntries={setEntries}
+          dismissed={dismissed}
+          setDismissed={setDismissed}
+          apiToken={apiToken}
+          canManage={canManage}
+        />
+      )}
+      {tab === "groups" && (
+        <GroupsTab
+          groups={groups}
+          setGroups={setGroups}
+          apiToken={apiToken}
+          canManage={canManage}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// ENTRIES TAB
+// ============================================================
+
+function EntriesTab({
+  entries,
+  setEntries,
+  groups,
+  apiToken,
+  canManage,
+}: {
+  entries: WhitelistEntry[];
+  setEntries: React.Dispatch<React.SetStateAction<WhitelistEntry[]>>;
+  groups: AdminGroup[];
+  apiToken: string | null;
+  canManage: boolean;
+}) {
+  const [search, setSearch] = useState("");
 
   // Add form
   const [newSteamId, setNewSteamId] = useState("");
   const [newName, setNewName] = useState("");
   const [newClan, setNewClan] = useState("");
-  const [newRole, setNewRole] = useState("");
+  const [newGroupId, setNewGroupId] = useState("");
   const [newReason, setNewReason] = useState("");
+  const [newExpiresAt, setNewExpiresAt] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -39,8 +193,9 @@ export default function WhitelistPage() {
   const [editSteamId, setEditSteamId] = useState("");
   const [editName, setEditName] = useState("");
   const [editClan, setEditClan] = useState("");
-  const [editRole, setEditRole] = useState("");
+  const [editGroupId, setEditGroupId] = useState("");
   const [editReason, setEditReason] = useState("");
+  const [editExpiresAt, setEditExpiresAt] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
   // Import modal
@@ -51,30 +206,6 @@ export default function WhitelistPage() {
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
-  // Search
-  const [search, setSearch] = useState("");
-
-  const canManage = hasPermission("manage:whitelist");
-
-  useEffect(() => {
-    async function init() {
-      if (!apiToken) return;
-      try {
-        const wlRes = await getWhitelist(apiToken);
-        if (wlRes.success && wlRes.data) {
-          setEntries(wlRes.data);
-        } else {
-          setError(wlRes.error || "Failed to load whitelist");
-        }
-      } catch {
-        setError("Failed to initialize");
-      } finally {
-        setLoading(false);
-      }
-    }
-    init();
-  }, [apiToken]);
-
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!apiToken || !newSteamId.trim()) return;
@@ -84,8 +215,9 @@ export default function WhitelistPage() {
     const res = await addWhitelistEntry(apiToken, newSteamId.trim(), {
       name: newName.trim() || undefined,
       clan: newClan.trim() || undefined,
-      role: newRole.trim() || undefined,
+      groupId: newGroupId || undefined,
       reason: newReason.trim() || undefined,
+      expiresAt: newExpiresAt || undefined,
     });
 
     if (res.success && res.data) {
@@ -93,8 +225,9 @@ export default function WhitelistPage() {
       setNewSteamId("");
       setNewName("");
       setNewClan("");
-      setNewRole("");
+      setNewGroupId("");
       setNewReason("");
+      setNewExpiresAt("");
     } else {
       setAddError(res.error || "Failed to add entry");
     }
@@ -106,13 +239,9 @@ export default function WhitelistPage() {
     setEditSteamId(entry.steamId);
     setEditName(entry.name || "");
     setEditClan(entry.clan || "");
-    setEditRole(entry.role || "");
+    setEditGroupId(entry.groupId || "");
     setEditReason(entry.reason || "");
-    setEditError(null);
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
+    setEditExpiresAt(entry.expiresAt ? entry.expiresAt.slice(0, 16) : "");
     setEditError(null);
   }
 
@@ -124,14 +253,13 @@ export default function WhitelistPage() {
       steamId: editSteamId.trim(),
       name: editName.trim() || undefined,
       clan: editClan.trim() || undefined,
-      role: editRole.trim() || undefined,
+      groupId: editGroupId || null,
       reason: editReason.trim() || undefined,
+      expiresAt: editExpiresAt ? new Date(editExpiresAt).toISOString() : null,
     });
 
     if (res.success && res.data) {
-      setEntries((prev) =>
-        prev.map((e) => (e.id === id ? res.data! : e))
-      );
+      setEntries((prev) => prev.map((e) => (e.id === id ? res.data! : e)));
       setEditingId(null);
     } else {
       setEditError(res.error || "Failed to update entry");
@@ -140,7 +268,6 @@ export default function WhitelistPage() {
 
   async function handleDelete(id: string) {
     if (!apiToken) return;
-
     const res = await deleteWhitelistEntry(apiToken, id);
     if (res.success) {
       setEntries((prev) => prev.filter((e) => e.id !== id));
@@ -148,32 +275,12 @@ export default function WhitelistPage() {
   }
 
   function handleExport() {
-    const header = "Steam ID,Name,Clan,Role,Added By,Reason,Date Added";
-    const rows = entries.map(
-      (e) =>
-        `${e.steamId},"${(e.name || "").replace(/"/g, '""')}","${(e.clan || "").replace(/"/g, '""')}","${(e.role || "").replace(/"/g, '""')}",${e.addedBy},"${(e.reason || "").replace(/"/g, '""')}",${e.createdAt}`
-    );
-    const csv = [header, ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `whitelist-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    window.open(`${BASE_URL}/whitelist/admins.cfg`, "_blank");
   }
 
-  // Import modal functions
+  // Import
   function openImportModal() {
     setShowImportModal(true);
-    setImportText("");
-    setImportRows([]);
-    setImportStep("paste");
-    setImportStatus(null);
-  }
-
-  function closeImportModal() {
-    setShowImportModal(false);
     setImportText("");
     setImportRows([]);
     setImportStep("paste");
@@ -185,30 +292,12 @@ export default function WhitelistPage() {
     const parsed: ParsedImportRow[] = lines.map((line) => {
       const match = line.match(/^(.+?)=(\d+):(.+?)\s*\/\/\s*(.+)$/);
       if (match) {
-        return {
-          clan: match[1].trim(),
-          steamId: match[2].trim(),
-          role: match[3].trim(),
-          name: match[4].trim(),
-          error: false,
-        };
+        return { clan: match[1].trim(), steamId: match[2].trim(), role: match[3].trim(), name: match[4].trim(), error: false };
       }
       return { steamId: "", name: "", clan: "", role: "", error: true };
     });
     setImportRows(parsed);
     setImportStep("review");
-  }
-
-  function updateImportRow(index: number, field: keyof ParsedImportRow, value: string) {
-    setImportRows((prev) =>
-      prev.map((row, i) =>
-        i === index ? { ...row, [field]: value, error: false } : row
-      )
-    );
-  }
-
-  function removeImportRow(index: number) {
-    setImportRows((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function confirmImport() {
@@ -228,14 +317,10 @@ export default function WhitelistPage() {
     );
 
     if (res.success && res.data) {
-      setImportStatus(
-        `Imported ${res.data.created} entries, ${res.data.skipped} skipped (duplicates)`
-      );
+      setImportStatus(`Imported ${res.data.created} entries, ${res.data.skipped} skipped`);
       const wlRes = await getWhitelist(apiToken);
-      if (wlRes.success && wlRes.data) {
-        setEntries(wlRes.data);
-      }
-      closeImportModal();
+      if (wlRes.success && wlRes.data) setEntries(wlRes.data);
+      setShowImportModal(false);
     } else {
       setImportStatus(res.error || "Import failed");
     }
@@ -249,46 +334,27 @@ export default function WhitelistPage() {
           e.addedBy.toLowerCase().includes(search.toLowerCase()) ||
           e.name?.toLowerCase().includes(search.toLowerCase()) ||
           e.clan?.toLowerCase().includes(search.toLowerCase()) ||
-          e.role?.toLowerCase().includes(search.toLowerCase()) ||
+          e.groupName?.toLowerCase().includes(search.toLowerCase()) ||
           e.reason?.toLowerCase().includes(search.toLowerCase())
       )
     : entries;
 
-  if (loading) {
-    return <div className="text-text-secondary">Loading whitelist...</div>;
-  }
-
-  if (error) {
-    return <div className="text-danger">{error}</div>;
-  }
-
   return (
-    <div>
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="font-display text-3xl font-bold tracking-wide">
-          Whitelist
-        </h1>
-        <div className="flex items-center gap-3">
-          <span className="rounded-sm border border-accent/20 bg-accent/10 px-3 py-1 text-sm text-accent">
-            {entries.length} entries
-          </span>
-        </div>
-      </div>
-
+    <>
       {/* Actions bar */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by Steam ID, name, clan, role..."
+          placeholder="Search by Steam ID, name, clan, group..."
           className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
         />
         <button
           onClick={handleExport}
           className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
         >
-          Export CSV
+          Export admins.cfg
         </button>
         {canManage && (
           <button
@@ -303,218 +369,126 @@ export default function WhitelistPage() {
       {importStatus && (
         <div className="mb-4 rounded-sm border border-accent/20 bg-accent/5 px-4 py-2.5 text-sm text-accent">
           {importStatus}
-          <button
-            onClick={() => setImportStatus(null)}
-            className="ml-3 text-text-muted hover:text-text-primary"
-          >
-            x
-          </button>
+          <button onClick={() => setImportStatus(null)} className="ml-3 text-text-muted hover:text-text-primary">x</button>
         </div>
       )}
 
       {/* Add entry form */}
       {canManage && (
-        <form
-          onSubmit={handleAdd}
-          className="facet-border mb-6 flex flex-wrap gap-3 rounded-sm bg-bg-card p-4"
-        >
-          <input
-            type="text"
-            value={newSteamId}
-            onChange={(e) => setNewSteamId(e.target.value)}
-            placeholder="Steam64 ID"
-            className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-            required
-          />
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Name (optional)"
-            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-40"
-          />
-          <input
-            type="text"
-            value={newClan}
-            onChange={(e) => setNewClan(e.target.value)}
-            placeholder="Clan (optional)"
-            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-32"
-          />
-          <input
-            type="text"
-            value={newRole}
-            onChange={(e) => setNewRole(e.target.value)}
-            placeholder="Role (optional)"
-            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-32"
-          />
-          <input
-            type="text"
-            value={newReason}
-            onChange={(e) => setNewReason(e.target.value)}
-            placeholder="Reason (optional)"
-            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-48"
-          />
-          <button
-            type="submit"
-            disabled={adding}
-            className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50"
-          >
+        <form onSubmit={handleAdd} className="facet-border mb-6 flex flex-wrap gap-3 rounded-sm bg-bg-card p-4">
+          <input type="text" value={newSteamId} onChange={(e) => setNewSteamId(e.target.value)} placeholder="Steam64 ID" className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none" required />
+          <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Name" className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-36" />
+          <input type="text" value={newClan} onChange={(e) => setNewClan(e.target.value)} placeholder="Clan" className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-28" />
+          <select value={newGroupId} onChange={(e) => setNewGroupId(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none sm:w-36">
+            <option value="">No group</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+          <input type="text" value={newReason} onChange={(e) => setNewReason(e.target.value)} placeholder="Reason" className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-40" />
+          <input type="datetime-local" value={newExpiresAt} onChange={(e) => setNewExpiresAt(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none sm:w-48" title="Expiry (optional)" />
+          <button type="submit" disabled={adding} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">
             {adding ? "Adding..." : "Add Entry"}
           </button>
-          {addError && (
-            <div className="w-full text-sm text-danger">{addError}</div>
-          )}
+          {addError && <div className="w-full text-sm text-danger">{addError}</div>}
         </form>
       )}
 
-      {/* Whitelist table */}
+      {/* Table */}
       <div className="facet-border overflow-hidden rounded-sm bg-bg-card">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left">
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  Steam ID
-                </th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  Name
-                </th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  Clan
-                </th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  Role
-                </th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  Added By
-                </th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  Date Added
-                </th>
-                {canManage && (
-                  <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                    Actions
-                  </th>
-                )}
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Steam ID</th>
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Name</th>
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Clan</th>
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Group</th>
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Expires</th>
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Added</th>
+                {canManage && <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={canManage ? 7 : 6}
-                    className="px-4 py-8 text-center text-text-muted"
-                  >
-                    {search
-                      ? "No entries match your search"
-                      : "No whitelist entries yet"}
+                  <td colSpan={canManage ? 7 : 6} className="px-4 py-8 text-center text-text-muted">
+                    {search ? "No entries match your search" : "No whitelist entries yet"}
                   </td>
                 </tr>
               ) : (
-                filtered.map((entry) => (
-                  <tr
-                    key={entry.id}
-                    className="border-b border-border/50 transition-colors hover:bg-bg-tertiary/50"
-                  >
-                    <td className="px-4 py-3">
-                      {editingId === entry.id ? (
-                        <input
-                          type="text"
-                          value={editSteamId}
-                          onChange={(e) => setEditSteamId(e.target.value)}
-                          className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none"
-                        />
-                      ) : (
-                        <code className="text-accent">{entry.steamId}</code>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      {editingId === entry.id ? (
-                        <input
-                          type="text"
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
-                          placeholder="Name"
-                        />
-                      ) : (
-                        entry.name || <span className="text-text-muted">--</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      {editingId === entry.id ? (
-                        <input
-                          type="text"
-                          value={editClan}
-                          onChange={(e) => setEditClan(e.target.value)}
-                          className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
-                          placeholder="Clan"
-                        />
-                      ) : (
-                        entry.clan || <span className="text-text-muted">--</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      {editingId === entry.id ? (
-                        <input
-                          type="text"
-                          value={editRole}
-                          onChange={(e) => setEditRole(e.target.value)}
-                          className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
-                          placeholder="Role"
-                        />
-                      ) : (
-                        entry.role || <span className="text-text-muted">--</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      {entry.addedBy}
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      {new Date(entry.createdAt).toLocaleDateString()}
-                    </td>
-                    {canManage && (
+                filtered.map((entry) => {
+                  const expiry = formatExpiry(entry.expiresAt);
+                  const isEditing = editingId === entry.id;
+
+                  return (
+                    <tr key={entry.id} className={`border-b border-border/50 transition-colors hover:bg-bg-tertiary/50 ${expiry?.expired ? "opacity-50" : ""}`}>
                       <td className="px-4 py-3">
-                        {editingId === entry.id ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => saveEdit(entry.id)}
-                              className="text-xs text-success transition-colors hover:text-success/80"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={cancelEdit}
-                              className="text-xs text-text-muted transition-colors hover:text-text-primary"
-                            >
-                              Cancel
-                            </button>
-                            {editError && (
-                              <span className="text-xs text-danger">
-                                {editError}
-                              </span>
-                            )}
-                          </div>
+                        {isEditing ? (
+                          <input type="text" value={editSteamId} onChange={(e) => setEditSteamId(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none" />
                         ) : (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => startEdit(entry)}
-                              className="text-xs text-text-muted transition-colors hover:text-accent"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDelete(entry.id)}
-                              className="text-xs text-text-muted transition-colors hover:text-danger"
-                            >
-                              Delete
-                            </button>
-                          </div>
+                          <code className="text-accent">{entry.steamId}</code>
                         )}
                       </td>
-                    )}
-                  </tr>
-                ))
+                      <td className="px-4 py-3 text-text-secondary">
+                        {isEditing ? (
+                          <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" placeholder="Name" />
+                        ) : (
+                          entry.name || <span className="text-text-muted">--</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-text-secondary">
+                        {isEditing ? (
+                          <input type="text" value={editClan} onChange={(e) => setEditClan(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" placeholder="Clan" />
+                        ) : (
+                          entry.clan || <span className="text-text-muted">--</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-text-secondary">
+                        {isEditing ? (
+                          <select value={editGroupId} onChange={(e) => setEditGroupId(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none">
+                            <option value="">None</option>
+                            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                          </select>
+                        ) : (
+                          entry.groupName ? (
+                            <span className="rounded-sm border border-accent/20 bg-accent/5 px-2 py-0.5 text-xs text-accent">{entry.groupName}</span>
+                          ) : (
+                            entry.role ? <span className="text-text-secondary">{entry.role}</span> : <span className="text-text-muted">--</span>
+                          )
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {isEditing ? (
+                          <input type="datetime-local" value={editExpiresAt} onChange={(e) => setEditExpiresAt(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" />
+                        ) : expiry ? (
+                          <span className={`rounded-sm px-2 py-0.5 text-xs font-medium ${expiry.expired ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning"}`}>
+                            {expiry.label}
+                          </span>
+                        ) : (
+                          <span className="text-text-muted text-xs">Permanent</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-text-secondary text-xs">
+                        {new Date(entry.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                      </td>
+                      {canManage && (
+                        <td className="px-4 py-3">
+                          {isEditing ? (
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => saveEdit(entry.id)} className="text-xs text-success transition-colors hover:text-success/80">Save</button>
+                              <button onClick={() => setEditingId(null)} className="text-xs text-text-muted transition-colors hover:text-text-primary">Cancel</button>
+                              {editError && <span className="text-xs text-danger">{editError}</span>}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => startEdit(entry)} className="text-xs text-text-muted transition-colors hover:text-accent">Edit</button>
+                              <button onClick={() => handleDelete(entry.id)} className="text-xs text-text-muted transition-colors hover:text-danger">Delete</button>
+                            </div>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -524,26 +498,17 @@ export default function WhitelistPage() {
       {/* Import Modal */}
       {showImportModal && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/50" onClick={closeImportModal} />
+          <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setShowImportModal(false)} />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="w-full max-w-3xl rounded-sm border border-border bg-bg-secondary p-6">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-display text-lg font-semibold tracking-wide">
-                  Import Whitelist
-                </h2>
-                <button
-                  onClick={closeImportModal}
-                  className="text-text-muted transition-colors hover:text-text-primary"
-                >
-                  x
-                </button>
+                <h2 className="font-display text-lg font-semibold tracking-wide">Import Whitelist</h2>
+                <button onClick={() => setShowImportModal(false)} className="text-text-muted transition-colors hover:text-text-primary">x</button>
               </div>
 
               {importStep === "paste" && (
                 <div>
-                  <p className="mb-3 text-sm text-text-secondary">
-                    Paste whitelist entries in the format:
-                  </p>
+                  <p className="mb-3 text-sm text-text-secondary">Paste entries in the format:</p>
                   <code className="mb-3 block rounded-sm bg-bg-tertiary px-3 py-2 text-xs text-text-secondary">
                     Admin=76561198310486875:SuperAdmin // Spud
                   </code>
@@ -555,118 +520,44 @@ export default function WhitelistPage() {
                     className="mb-4 w-full rounded-sm border border-border bg-bg-tertiary px-4 py-3 font-mono text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
                   />
                   <div className="flex justify-end gap-3">
-                    <button
-                      onClick={closeImportModal}
-                      className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={parseImportText}
-                      disabled={!importText.trim()}
-                      className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50"
-                    >
-                      Parse
-                    </button>
+                    <button onClick={() => setShowImportModal(false)} className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary">Cancel</button>
+                    <button onClick={parseImportText} disabled={!importText.trim()} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">Parse</button>
                   </div>
                 </div>
               )}
 
               {importStep === "review" && (
                 <div>
-                  <p className="mb-3 text-sm text-text-secondary">
-                    Review parsed entries. Edit fields or remove rows before importing.
-                  </p>
+                  <p className="mb-3 text-sm text-text-secondary">Review parsed entries before importing.</p>
                   <div className="mb-4 max-h-96 overflow-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border text-left">
-                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                            Steam ID
-                          </th>
-                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                            Name
-                          </th>
-                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                            Clan
-                          </th>
-                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                            Role
-                          </th>
+                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Steam ID</th>
+                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Name</th>
+                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Clan</th>
+                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Role</th>
                           <th className="w-10 px-3 py-2"></th>
                         </tr>
                       </thead>
                       <tbody>
                         {importRows.map((row, i) => (
-                          <tr
-                            key={i}
-                            className={`border-b border-border/50 ${row.error ? "bg-danger/10" : ""}`}
-                          >
-                            <td className="px-3 py-2">
-                              <input
-                                type="text"
-                                value={row.steamId}
-                                onChange={(e) => updateImportRow(i, "steamId", e.target.value)}
-                                className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none"
-                                placeholder="Steam64 ID"
-                              />
-                            </td>
-                            <td className="px-3 py-2">
-                              <input
-                                type="text"
-                                value={row.name}
-                                onChange={(e) => updateImportRow(i, "name", e.target.value)}
-                                className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
-                                placeholder="Name"
-                              />
-                            </td>
-                            <td className="px-3 py-2">
-                              <input
-                                type="text"
-                                value={row.clan}
-                                onChange={(e) => updateImportRow(i, "clan", e.target.value)}
-                                className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
-                                placeholder="Clan"
-                              />
-                            </td>
-                            <td className="px-3 py-2">
-                              <input
-                                type="text"
-                                value={row.role}
-                                onChange={(e) => updateImportRow(i, "role", e.target.value)}
-                                className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
-                                placeholder="Role"
-                              />
-                            </td>
-                            <td className="px-3 py-2">
-                              <button
-                                onClick={() => removeImportRow(i)}
-                                className="text-xs text-text-muted transition-colors hover:text-danger"
-                              >
-                                x
-                              </button>
-                            </td>
+                          <tr key={i} className={`border-b border-border/50 ${row.error ? "bg-danger/10" : ""}`}>
+                            <td className="px-3 py-2"><input type="text" value={row.steamId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, steamId: e.target.value, error: false } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none" /></td>
+                            <td className="px-3 py-2"><input type="text" value={row.name} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, name: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" /></td>
+                            <td className="px-3 py-2"><input type="text" value={row.clan} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, clan: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" /></td>
+                            <td className="px-3 py-2"><input type="text" value={row.role} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, role: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" /></td>
+                            <td className="px-3 py-2"><button onClick={() => setImportRows((prev) => prev.filter((_, j) => j !== i))} className="text-xs text-text-muted transition-colors hover:text-danger">x</button></td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-text-muted">
-                      {importRows.filter((r) => r.steamId.trim()).length} valid entries
-                    </span>
+                    <span className="text-sm text-text-muted">{importRows.filter((r) => r.steamId.trim()).length} valid entries</span>
                     <div className="flex gap-3">
-                      <button
-                        onClick={() => setImportStep("paste")}
-                        className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
-                      >
-                        Back
-                      </button>
-                      <button
-                        onClick={confirmImport}
-                        disabled={importing || importRows.filter((r) => r.steamId.trim()).length === 0}
-                        className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50"
-                      >
+                      <button onClick={() => setImportStep("paste")} className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary">Back</button>
+                      <button onClick={confirmImport} disabled={importing || importRows.filter((r) => r.steamId.trim()).length === 0} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">
                         {importing ? "Importing..." : "Import"}
                       </button>
                     </div>
@@ -677,6 +568,304 @@ export default function WhitelistPage() {
           </div>
         </>
       )}
+    </>
+  );
+}
+
+// ============================================================
+// REQUESTS TAB
+// ============================================================
+
+function RequestsTab({
+  candidates,
+  groups,
+  entries,
+  setEntries,
+  dismissed,
+  setDismissed,
+  apiToken,
+  canManage,
+}: {
+  candidates: WhitelistCandidate[];
+  groups: AdminGroup[];
+  entries: WhitelistEntry[];
+  setEntries: React.Dispatch<React.SetStateAction<WhitelistEntry[]>>;
+  dismissed: Set<string>;
+  setDismissed: React.Dispatch<React.SetStateAction<Set<string>>>;
+  apiToken: string | null;
+  canManage: boolean;
+}) {
+  const [approving, setApproving] = useState<string | null>(null);
+  const [approveGroupId, setApproveGroupId] = useState<Record<string, string>>({});
+
+  async function handleApprove(candidate: WhitelistCandidate) {
+    if (!apiToken) return;
+    setApproving(candidate.userId);
+
+    const groupId = approveGroupId[candidate.userId] || undefined;
+    const res = await addWhitelistEntry(apiToken, candidate.steamId, {
+      name: candidate.discordName,
+      groupId,
+    });
+
+    if (res.success && res.data) {
+      setEntries((prev) => [res.data!, ...prev]);
+      setDismissed((prev) => new Set(prev).add(candidate.userId));
+    }
+    setApproving(null);
+  }
+
+  function handleDismiss(userId: string) {
+    setDismissed((prev) => new Set(prev).add(userId));
+  }
+
+  if (!canManage) {
+    return <div className="text-text-muted py-8 text-center">You need manage:whitelist permission to view requests.</div>;
+  }
+
+  if (candidates.length === 0) {
+    return (
+      <div className="facet-border rounded-sm bg-bg-card px-6 py-12 text-center text-text-muted">
+        No pending whitelist requests. Users with a qualifying Discord role and linked Steam ID will appear here.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {candidates.map((c) => (
+        <div key={c.userId} className="facet-border flex items-center justify-between rounded-sm bg-bg-card p-4">
+          <div>
+            <div className="mb-1 font-medium text-text-primary">{c.discordName}</div>
+            <div className="flex items-center gap-3 text-xs text-text-secondary">
+              <code className="text-accent">{c.steamId}</code>
+              <span className="h-1 w-1 rounded-full bg-text-muted" />
+              <span>Role: {c.roleName}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={approveGroupId[c.userId] || ""}
+              onChange={(e) => setApproveGroupId((prev) => ({ ...prev, [c.userId]: e.target.value }))}
+              className="rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
+            >
+              <option value="">Whitelist (default)</option>
+              {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+            <button
+              onClick={() => handleApprove(c)}
+              disabled={approving === c.userId}
+              className="rounded-sm bg-success/15 px-4 py-1.5 text-xs font-semibold text-success transition-colors hover:bg-success/25 disabled:opacity-50"
+            >
+              {approving === c.userId ? "Approving..." : "Approve"}
+            </button>
+            <button
+              onClick={() => handleDismiss(c.userId)}
+              className="text-xs text-text-muted transition-colors hover:text-text-secondary"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
+  );
+}
+
+// ============================================================
+// GROUPS TAB
+// ============================================================
+
+function GroupsTab({
+  groups,
+  setGroups,
+  apiToken,
+  canManage,
+}: {
+  groups: AdminGroup[];
+  setGroups: React.Dispatch<React.SetStateAction<AdminGroup[]>>;
+  apiToken: string | null;
+  canManage: boolean;
+}) {
+  // Add form
+  const [newName, setNewName] = useState("");
+  const [newPerms, setNewPerms] = useState<Set<string>>(new Set());
+  const [newOrder, setNewOrder] = useState(0);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  // Edit
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPerms, setEditPerms] = useState<Set<string>>(new Set());
+  const [editOrder, setEditOrder] = useState(0);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Delete
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!apiToken || !newName.trim()) return;
+    setAddError(null);
+    setAdding(true);
+
+    const res = await createAdminGroup(apiToken, {
+      name: newName.trim(),
+      permissions: Array.from(newPerms).join(","),
+      sortOrder: newOrder,
+    });
+
+    if (res.success && res.data) {
+      setGroups((prev) => [...prev, res.data!].sort((a, b) => a.sortOrder - b.sortOrder));
+      setNewName("");
+      setNewPerms(new Set());
+      setNewOrder(0);
+    } else {
+      setAddError(res.error || "Failed to create group");
+    }
+    setAdding(false);
+  }
+
+  function startEdit(g: AdminGroup) {
+    setEditingId(g.id);
+    setEditName(g.name);
+    setEditPerms(new Set(g.permissions.split(",").filter(Boolean)));
+    setEditOrder(g.sortOrder);
+    setEditError(null);
+  }
+
+  async function saveEdit(id: string) {
+    if (!apiToken) return;
+    setEditError(null);
+
+    const res = await updateAdminGroup(apiToken, id, {
+      name: editName.trim(),
+      permissions: Array.from(editPerms).join(","),
+      sortOrder: editOrder,
+    });
+
+    if (res.success && res.data) {
+      setGroups((prev) => prev.map((g) => (g.id === id ? res.data! : g)).sort((a, b) => a.sortOrder - b.sortOrder));
+      setEditingId(null);
+    } else {
+      setEditError(res.error || "Failed to update group");
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!apiToken) return;
+    const res = await deleteAdminGroup(apiToken, id);
+    if (res.success) {
+      setGroups((prev) => prev.filter((g) => g.id !== id));
+      setDeletingId(null);
+    }
+  }
+
+  function PermCheckboxes({ perms, setPerms, disabled }: { perms: Set<string>; setPerms: (fn: (prev: Set<string>) => Set<string>) => void; disabled?: boolean }) {
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {SQUAD_PERMISSIONS.map((p) => {
+          const active = perms.has(p);
+          return (
+            <button
+              key={p}
+              type="button"
+              disabled={disabled}
+              onClick={() => setPerms((prev) => {
+                const next = new Set(prev);
+                if (next.has(p)) next.delete(p);
+                else next.add(p);
+                return next;
+              })}
+              className={`rounded-sm border px-2 py-0.5 text-[10px] font-medium tracking-wide transition-colors ${
+                active
+                  ? "border-accent/30 bg-accent/10 text-accent"
+                  : "border-border bg-bg-tertiary text-text-muted hover:border-accent/20"
+              } ${disabled ? "cursor-default opacity-60" : ""}`}
+            >
+              {p}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Add group form */}
+      {canManage && (
+        <form onSubmit={handleAdd} className="facet-border mb-6 rounded-sm bg-bg-card p-4">
+          <div className="mb-3 flex flex-wrap gap-3">
+            <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Group name (e.g. Whitelist)" className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none" required />
+            <input type="number" value={newOrder} onChange={(e) => setNewOrder(Number(e.target.value))} placeholder="Sort order" className="w-24 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" title="Sort order" />
+            <button type="submit" disabled={adding} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">
+              {adding ? "Creating..." : "Create Group"}
+            </button>
+          </div>
+          <PermCheckboxes perms={newPerms} setPerms={setNewPerms} />
+          {addError && <div className="mt-2 text-sm text-danger">{addError}</div>}
+        </form>
+      )}
+
+      {/* Groups list */}
+      {groups.length === 0 ? (
+        <div className="facet-border rounded-sm bg-bg-card px-6 py-12 text-center text-text-muted">
+          No admin groups defined yet. Create groups like Whitelist, Admin, SuperAdmin to use in the admins.cfg.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {groups.map((g) => {
+            const isEditing = editingId === g.id;
+
+            return (
+              <div key={g.id} className="facet-border rounded-sm bg-bg-card p-4">
+                {isEditing ? (
+                  <div>
+                    <div className="mb-3 flex flex-wrap gap-3">
+                      <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" />
+                      <input type="number" value={editOrder} onChange={(e) => setEditOrder(Number(e.target.value))} className="w-24 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" />
+                      <button onClick={() => saveEdit(g.id)} className="rounded-sm bg-accent px-4 py-2 text-xs font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted">Save</button>
+                      <button onClick={() => setEditingId(null)} className="text-xs text-text-muted transition-colors hover:text-text-primary">Cancel</button>
+                    </div>
+                    <PermCheckboxes perms={editPerms} setPerms={setEditPerms} />
+                    {editError && <div className="mt-2 text-sm text-danger">{editError}</div>}
+                  </div>
+                ) : (
+                  <div>
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <h3 className="font-display text-base font-semibold tracking-wide text-text-primary">{g.name}</h3>
+                        <span className="text-xs text-text-muted">#{g.sortOrder}</span>
+                      </div>
+                      {canManage && (
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => startEdit(g)} className="text-xs text-text-muted transition-colors hover:text-accent">Edit</button>
+                          {deletingId === g.id ? (
+                            <>
+                              <button onClick={() => handleDelete(g.id)} className="text-xs text-danger transition-colors hover:text-danger/80">Confirm</button>
+                              <button onClick={() => setDeletingId(null)} className="text-xs text-text-muted transition-colors hover:text-text-primary">Cancel</button>
+                            </>
+                          ) : (
+                            <button onClick={() => setDeletingId(g.id)} className="text-xs text-text-muted transition-colors hover:text-danger">Delete</button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {g.permissions.split(",").filter(Boolean).map((p) => (
+                        <span key={p} className="rounded-sm border border-accent/20 bg-accent/5 px-2 py-0.5 text-[10px] font-medium tracking-wide text-accent">{p}</span>
+                      ))}
+                      {!g.permissions && <span className="text-xs text-text-muted">No permissions</span>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 }

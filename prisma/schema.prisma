@@ -20,11 +20,12 @@ model User {
 }
 
 model DiscordRole {
-  id            String           @id @default(cuid())
-  discordRoleId String           @unique
-  name          String
-  permissions   RolePermission[]
-  users         UserRole[]
+  id              String           @id @default(cuid())
+  discordRoleId   String           @unique
+  name            String
+  grantsWhitelist Boolean          @default(false)
+  permissions     RolePermission[]
+  users           UserRole[]
 }
 
 model UserRole {
@@ -46,15 +47,27 @@ model RolePermission {
   @@unique([roleId, permission])
 }
 
+model AdminGroup {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  permissions String
+  sortOrder   Int              @default(0)
+  createdAt   DateTime         @default(now())
+  entries     WhitelistEntry[]
+}
+
 model WhitelistEntry {
-  id        String   @id @default(cuid())
-  steamId   String   @unique
+  id        String      @id @default(cuid())
+  steamId   String      @unique
   name      String?
   clan      String?
   role      String?
+  groupId   String?
+  group     AdminGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   addedBy   String
   reason    String?
-  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  createdAt DateTime    @default(now())
 }
 
 model Match {

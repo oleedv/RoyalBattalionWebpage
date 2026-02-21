@@ -1,22 +1,59 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import type { ApiResponse, WhitelistEntry } from "shared";
+import type { ApiResponse, WhitelistEntry, WhitelistCandidate } from "shared";
 import prisma from "../lib/db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
+import { triggerSftpDeploy } from "../lib/sftp-deploy";
 
 const whitelist = new Hono();
 
 // All routes require auth
 whitelist.use("*", authMiddleware);
 
+function toEntry(e: {
+  id: string;
+  steamId: string;
+  name: string | null;
+  clan: string | null;
+  role: string | null;
+  groupId: string | null;
+  group?: { name: string } | null;
+  addedBy: string;
+  reason: string | null;
+  expiresAt: Date | null;
+  createdAt: Date;
+}): WhitelistEntry {
+  return {
+    id: e.id,
+    steamId: e.steamId,
+    name: e.name,
+    clan: e.clan,
+    role: e.role,
+    groupId: e.groupId,
+    groupName: e.group?.name ?? null,
+    addedBy: e.addedBy,
+    reason: e.reason,
+    expiresAt: e.expiresAt?.toISOString() ?? null,
+    createdAt: e.createdAt.toISOString(),
+  };
+}
+
+function deployInBackground() {
+  triggerSftpDeploy().catch((err) =>
+    console.error("[sftp-deploy] Failed:", err)
+  );
+}
+
 const addEntrySchema = z.object({
   steamId: z.string().min(1),
   name: z.string().optional(),
   clan: z.string().optional(),
   role: z.string().optional(),
+  groupId: z.string().optional(),
   reason: z.string().optional(),
+  expiresAt: z.string().optional(),
 });
 
 const updateEntrySchema = z.object({
@@ -24,31 +61,58 @@ const updateEntrySchema = z.object({
   name: z.string().optional(),
   clan: z.string().optional(),
   role: z.string().optional(),
+  groupId: z.string().nullable().optional(),
   reason: z.string().optional(),
+  expiresAt: z.string().nullable().optional(),
 });
 
 whitelist.get("/", requirePermission("view:whitelist"), async (c) => {
   const entries = await prisma.whitelistEntry.findMany({
+    include: { group: true },
     orderBy: { createdAt: "desc" },
   });
 
-  const result: WhitelistEntry[] = entries.map((e) => ({
-    id: e.id,
-    steamId: e.steamId,
-    name: e.name,
-    clan: e.clan,
-    role: e.role,
-    addedBy: e.addedBy,
-    reason: e.reason,
-    createdAt: e.createdAt.toISOString(),
-  }));
+  return c.json<ApiResponse<WhitelistEntry[]>>({
+    success: true,
+    data: entries.map(toEntry),
+  });
+});
 
-  return c.json<ApiResponse<WhitelistEntry[]>>({ success: true, data: result });
+whitelist.get("/candidates", requirePermission("manage:whitelist"), async (c) => {
+  const existingSteamIds = await prisma.whitelistEntry.findMany({
+    select: { steamId: true },
+  });
+  const existingSet = new Set(existingSteamIds.map((e) => e.steamId));
+
+  const candidates = await prisma.user.findMany({
+    where: {
+      steamId: { not: null },
+      roles: {
+        some: {
+          role: { grantsWhitelist: true },
+        },
+      },
+    },
+    include: {
+      roles: { include: { role: true } },
+    },
+  });
+
+  const result: WhitelistCandidate[] = candidates
+    .filter((u) => u.steamId && !existingSet.has(u.steamId))
+    .map((u) => ({
+      userId: u.id,
+      discordName: u.discordName,
+      steamId: u.steamId!,
+      roleName: u.roles.find((r) => r.role.grantsWhitelist)?.role.name || "",
+    }));
+
+  return c.json<ApiResponse<WhitelistCandidate[]>>({ success: true, data: result });
 });
 
 whitelist.post("/", requirePermission("manage:whitelist"), zValidator("json", addEntrySchema), async (c) => {
   const userId = c.get("userId");
-  const { steamId, name, clan, role, reason } = c.req.valid("json");
+  const { steamId, name, clan, role, groupId, reason, expiresAt } = c.req.valid("json");
 
   try {
     const entry = await prisma.whitelistEntry.create({
@@ -57,23 +121,17 @@ whitelist.post("/", requirePermission("manage:whitelist"), zValidator("json", ad
         name: name ?? null,
         clan: clan ?? null,
         role: role ?? null,
+        groupId: groupId ?? null,
         addedBy: userId,
         reason: reason ?? null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
       },
+      include: { group: true },
     });
 
-    const result: WhitelistEntry = {
-      id: entry.id,
-      steamId: entry.steamId,
-      name: entry.name,
-      clan: entry.clan,
-      role: entry.role,
-      addedBy: entry.addedBy,
-      reason: entry.reason,
-      createdAt: entry.createdAt.toISOString(),
-    };
+    deployInBackground();
 
-    return c.json<ApiResponse<WhitelistEntry>>({ success: true, data: result }, 201);
+    return c.json<ApiResponse<WhitelistEntry>>({ success: true, data: toEntry(entry) }, 201);
   } catch {
     return c.json<ApiResponse<never>>({
       success: false,
@@ -99,26 +157,22 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
         ...(body.name !== undefined && { name: body.name || null }),
         ...(body.clan !== undefined && { clan: body.clan || null }),
         ...(body.role !== undefined && { role: body.role || null }),
+        ...(body.groupId !== undefined && { groupId: body.groupId }),
         ...(body.reason !== undefined && { reason: body.reason || null }),
+        ...(body.expiresAt !== undefined && {
+          expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+        }),
       },
+      include: { group: true },
     });
 
-    const result: WhitelistEntry = {
-      id: entry.id,
-      steamId: entry.steamId,
-      name: entry.name,
-      clan: entry.clan,
-      role: entry.role,
-      addedBy: entry.addedBy,
-      reason: entry.reason,
-      createdAt: entry.createdAt.toISOString(),
-    };
+    deployInBackground();
 
-    return c.json<ApiResponse<WhitelistEntry>>({ success: true, data: result });
+    return c.json<ApiResponse<WhitelistEntry>>({ success: true, data: toEntry(entry) });
   } catch {
     return c.json<ApiResponse<never>>({
       success: false,
-      error: "Failed to update whitelist entry. The Steam ID may already be whitelisted.",
+      error: "Failed to update whitelist entry.",
     }, 400);
   }
 });
@@ -129,6 +183,7 @@ const bulkAddSchema = z.object({
     name: z.string().optional(),
     clan: z.string().optional(),
     role: z.string().optional(),
+    groupId: z.string().optional(),
     reason: z.string().optional(),
   })).min(1).max(500),
 });
@@ -148,6 +203,7 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), zValidator("json"
           name: entry.name ?? null,
           clan: entry.clan ?? null,
           role: entry.role ?? null,
+          groupId: entry.groupId ?? null,
           addedBy: userId,
           reason: entry.reason ?? null,
         },
@@ -157,6 +213,8 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), zValidator("json"
       skipped++;
     }
   }
+
+  deployInBackground();
 
   return c.json<ApiResponse<{ created: number; skipped: number }>>({
     success: true,
@@ -173,6 +231,8 @@ whitelist.delete("/:id", requirePermission("manage:whitelist"), async (c) => {
   }
 
   await prisma.whitelistEntry.delete({ where: { id } });
+
+  deployInBackground();
 
   return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
 });

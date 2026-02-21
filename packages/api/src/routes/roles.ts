@@ -33,6 +33,7 @@ roles.get("/", async (c) => {
     discordRoleId: r.discordRoleId,
     name: r.name,
     permissions: r.permissions.map((p) => p.permission as Permission),
+    grantsWhitelist: r.grantsWhitelist,
   }));
 
   return c.json<ApiResponse<DiscordRole[]>>({
@@ -61,6 +62,7 @@ roles.post("/", zValidator("json", createRoleSchema), async (c) => {
       discordRoleId: role.discordRoleId,
       name: role.name,
       permissions: role.permissions.map((p) => p.permission as Permission),
+      grantsWhitelist: role.grantsWhitelist,
     };
 
     return c.json<ApiResponse<DiscordRole>>({ success: true, data: result }, 201);
@@ -97,9 +99,31 @@ roles.put("/:id/permissions", zValidator("json", updatePermissionsSchema), async
     discordRoleId: updated!.discordRoleId,
     name: updated!.name,
     permissions: updated!.permissions.map((p) => p.permission as Permission),
+    grantsWhitelist: updated!.grantsWhitelist,
   };
 
   return c.json<ApiResponse<DiscordRole>>({ success: true, data: result });
+});
+
+const whitelistGrantSchema = z.object({
+  grantsWhitelist: z.boolean(),
+});
+
+roles.put("/:id/whitelist-grant", zValidator("json", whitelistGrantSchema), async (c) => {
+  const id = c.req.param("id");
+  const { grantsWhitelist } = c.req.valid("json");
+
+  const existing = await prisma.discordRole.findUnique({ where: { id } });
+  if (!existing) {
+    return c.json<ApiResponse<never>>({ success: false, error: "Role not found" }, 404);
+  }
+
+  await prisma.discordRole.update({
+    where: { id },
+    data: { grantsWhitelist },
+  });
+
+  return c.json<ApiResponse<{ updated: true }>>({ success: true, data: { updated: true } });
 });
 
 roles.delete("/:id", async (c) => {

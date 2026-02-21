@@ -3,6 +3,8 @@ import type {
   AuthSyncResponse,
   AuthMeResponse,
   WhitelistEntry,
+  WhitelistCandidate,
+  AdminGroup,
   UserWithRoles,
   Ticket,
   Prospect,
@@ -72,7 +74,7 @@ export function getWhitelist(
 export function addWhitelistEntry(
   token: string,
   steamId: string,
-  opts?: { name?: string; clan?: string; role?: string; reason?: string }
+  opts?: { name?: string; clan?: string; role?: string; groupId?: string; reason?: string; expiresAt?: string }
 ): Promise<ApiResponse<WhitelistEntry>> {
   return request<WhitelistEntry>("/whitelist", {
     method: "POST",
@@ -84,7 +86,7 @@ export function addWhitelistEntry(
 export function updateWhitelistEntry(
   token: string,
   id: string,
-  data: { steamId?: string; name?: string; clan?: string; role?: string; reason?: string }
+  data: { steamId?: string; name?: string; clan?: string; role?: string; groupId?: string | null; reason?: string; expiresAt?: string | null }
 ): Promise<ApiResponse<WhitelistEntry>> {
   return request<WhitelistEntry>(`/whitelist/${id}`, {
     method: "PUT",
@@ -105,12 +107,74 @@ export function deleteWhitelistEntry(
 
 export function bulkAddWhitelist(
   token: string,
-  entries: { steamId: string; name?: string; clan?: string; role?: string; reason?: string }[]
+  entries: { steamId: string; name?: string; clan?: string; role?: string; groupId?: string; reason?: string }[]
 ): Promise<ApiResponse<{ created: number; skipped: number }>> {
   return request<{ created: number; skipped: number }>("/whitelist/bulk", {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ entries }),
+  });
+}
+
+export function getWhitelistCandidates(
+  token: string
+): Promise<ApiResponse<WhitelistCandidate[]>> {
+  return request<WhitelistCandidate[]>("/whitelist/candidates", {
+    headers: authHeaders(token),
+  });
+}
+
+// Admin Groups
+export function getAdminGroups(
+  token: string
+): Promise<ApiResponse<AdminGroup[]>> {
+  return request<AdminGroup[]>("/admin-groups", {
+    headers: authHeaders(token),
+  });
+}
+
+export function createAdminGroup(
+  token: string,
+  data: { name: string; permissions: string; sortOrder?: number }
+): Promise<ApiResponse<AdminGroup>> {
+  return request<AdminGroup>("/admin-groups", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateAdminGroup(
+  token: string,
+  id: string,
+  data: { name?: string; permissions?: string; sortOrder?: number }
+): Promise<ApiResponse<AdminGroup>> {
+  return request<AdminGroup>(`/admin-groups/${id}`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteAdminGroup(
+  token: string,
+  id: string
+): Promise<ApiResponse<{ deleted: true }>> {
+  return request<{ deleted: true }>(`/admin-groups/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export function updateRoleWhitelistGrant(
+  token: string,
+  id: string,
+  grantsWhitelist: boolean
+): Promise<ApiResponse<{ updated: true }>> {
+  return request<{ updated: true }>(`/roles/${id}/whitelist-grant`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify({ grantsWhitelist }),
   });
 }
 

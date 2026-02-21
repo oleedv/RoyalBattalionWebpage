@@ -17,6 +17,7 @@ export interface DiscordRole {
   discordRoleId: string;
   name: string;
   permissions: Permission[];
+  grantsWhitelist: boolean;
 }
 
 export interface RolePermission {

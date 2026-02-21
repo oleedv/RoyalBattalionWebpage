@@ -8,7 +8,9 @@ import tickets from "./routes/tickets";
 import matches from "./routes/matches";
 import servers from "./routes/servers";
 import stats from "./routes/stats";
+import adminGroups from "./routes/admin-groups";
 import { syncMatches } from "./lib/match-sync";
+import { generateAdminsCfg } from "./lib/cfg-generator";
 
 const app = new Hono();
 
@@ -28,7 +30,13 @@ app.use(
 app.route("/auth", auth);
 app.route("/users", users);
 app.route("/roles", roles);
+// Public cfg endpoint (no auth) -- must be before authenticated whitelist routes
+app.get("/whitelist/admins.cfg", async (c) => {
+  const cfg = await generateAdminsCfg();
+  return c.text(cfg, 200, { "Content-Type": "text/plain" });
+});
 app.route("/whitelist", whitelist);
+app.route("/admin-groups", adminGroups);
 app.route("/tickets", tickets);
 app.route("/matches", matches);
 app.route("/servers", servers);

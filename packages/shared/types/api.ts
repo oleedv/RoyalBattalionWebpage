@@ -22,15 +22,33 @@ export interface AuthMeResponse {
   permissions: Permission[];
 }
 
+export interface AdminGroup {
+  id: string;
+  name: string;
+  permissions: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
 export interface WhitelistEntry {
   id: string;
   steamId: string;
   name: string | null;
   clan: string | null;
   role: string | null;
+  groupId: string | null;
+  groupName: string | null;
   addedBy: string;
   reason: string | null;
+  expiresAt: string | null;
   createdAt: string;
+}
+
+export interface WhitelistCandidate {
+  userId: string;
+  discordName: string;
+  steamId: string;
+  roleName: string;
 }
 
 export interface LinkSteamRequest {

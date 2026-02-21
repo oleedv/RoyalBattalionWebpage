@@ -1,0 +1,49 @@
+import prisma from "./db";
+
+export async function generateAdminsCfg(): Promise<string> {
+  const groups = await prisma.adminGroup.findMany({
+    orderBy: { sortOrder: "asc" },
+  });
+
+  const entries = await prisma.whitelistEntry.findMany({
+    where: {
+      OR: [
+        { expiresAt: null },
+        { expiresAt: { gt: new Date() } },
+      ],
+    },
+    include: { group: true },
+    orderBy: [{ clan: "asc" }, { createdAt: "asc" }],
+  });
+
+  const lines: string[] = [];
+
+  // Group definitions
+  for (const g of groups) {
+    lines.push(`Group=${g.name}:${g.permissions}`);
+  }
+
+  if (groups.length > 0) {
+    lines.push("");
+  }
+
+  // Entries grouped by clan
+  const byClan = new Map<string, typeof entries>();
+  for (const e of entries) {
+    const clan = e.clan || "No Clan";
+    if (!byClan.has(clan)) byClan.set(clan, []);
+    byClan.get(clan)!.push(e);
+  }
+
+  for (const [clan, clanEntries] of byClan) {
+    lines.push(`// ${clan}`);
+    for (const e of clanEntries) {
+      const groupName = e.group?.name || e.role || "Whitelist";
+      const playerName = e.name || e.steamId;
+      lines.push(`Admin=${e.steamId}:${groupName} // ${playerName}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}

@@ -5,6 +5,7 @@ import {
   getRoles,
   createRole,
   updateRolePermissions,
+  updateRoleWhitelistGrant,
   deleteRole,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
@@ -32,6 +33,9 @@ export default function RolesPage() {
 
   // Delete confirmation
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Whitelist grant toggle
+  const [togglingWl, setTogglingWl] = useState<string | null>(null);
 
   const canManage = hasPermission("manage:roles");
 
@@ -134,6 +138,20 @@ export default function RolesPage() {
     });
   }
 
+  async function toggleWhitelistGrant(role: DiscordRole) {
+    if (!apiToken) return;
+    setTogglingWl(role.id);
+    const res = await updateRoleWhitelistGrant(apiToken, role.id, !role.grantsWhitelist);
+    if (res.success) {
+      setRoles((prev) =>
+        prev.map((r) =>
+          r.id === role.id ? { ...r, grantsWhitelist: !r.grantsWhitelist } : r
+        )
+      );
+    }
+    setTogglingWl(null);
+  }
+
   async function handleDelete(id: string) {
     if (!apiToken) return;
 
@@ -226,6 +244,20 @@ export default function RolesPage() {
                         {role.discordRoleId}
                       </code>
                     </div>
+                    {canManage && (
+                      <button
+                        onClick={() => toggleWhitelistGrant(role)}
+                        disabled={togglingWl === role.id}
+                        className={`mt-1.5 inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-[10px] font-semibold tracking-wide uppercase transition-all ${
+                          role.grantsWhitelist
+                            ? "border-success/30 bg-success/10 text-success hover:bg-success/20"
+                            : "border-border bg-bg-tertiary text-text-muted hover:border-accent/40 hover:text-text-secondary"
+                        }`}
+                      >
+                        <div className={`h-2 w-2 rounded-full ${role.grantsWhitelist ? "bg-success" : "bg-text-muted/40"}`} />
+                        {role.grantsWhitelist ? "Grants Whitelist" : "No Whitelist"}
+                      </button>
+                    )}
                   </div>
                   {canManage && (
                     <div className="flex items-center gap-2">

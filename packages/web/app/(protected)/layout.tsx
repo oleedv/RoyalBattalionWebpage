@@ -28,7 +28,11 @@ const NAV_ITEMS: NavItem[] = [
     href: "/members",
     requiredPermissions: ["view:members", "manage:members"],
   },
-  { label: "Tickets", href: "/tickets", requiredPermissions: ["admin"] },
+  {
+    label: "Tickets",
+    href: "/tickets",
+    requiredPermissions: ["view:tickets", "manage:tickets"],
+  },
   {
     label: "Roles",
     href: "/roles",

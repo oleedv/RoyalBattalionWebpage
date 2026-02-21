@@ -3,6 +3,8 @@ export const PERMISSIONS = [
   "manage:whitelist",
   "view:members",
   "manage:members",
+  "view:tickets",
+  "manage:tickets",
   "manage:roles",
   "admin",
 ] as const;

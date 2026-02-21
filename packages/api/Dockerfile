@@ -22,4 +22,4 @@ COPY --from=build /app/prisma ./prisma
 
 ENV NODE_ENV=production
 EXPOSE 3001
-CMD ["bun", "run", "dist/index.js"]
+CMD ["sh", "-c", "bunx prisma db push --skip-generate && bun run dist/index.js"]

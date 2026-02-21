@@ -1,40 +1,21 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useState, useEffect } from "react";
-import { syncAuth, getMe, linkSteam } from "@/lib/api-client";
-import type { UserWithRoles, Permission } from "shared";
+import { useState } from "react";
+import { linkSteam } from "@/lib/api-client";
+import { usePermissions } from "@/lib/permission-context";
+import type { UserWithRoles } from "shared";
 
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const [user, setUser] = useState<UserWithRoles | null>(null);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [apiToken, setApiToken] = useState<string | null>(null);
+  const { apiToken, user: contextUser, permissions } = usePermissions();
+  const [linkedUser, setLinkedUser] = useState<UserWithRoles | null>(null);
   const [steamId, setSteamId] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkSuccess, setLinkSuccess] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function init() {
-      if (!session?.accessToken) return;
-
-      try {
-        const syncRes = await syncAuth(session.accessToken);
-        if (syncRes.success && syncRes.data) {
-          setApiToken(syncRes.data.token);
-          setUser(syncRes.data.user);
-          setPermissions(syncRes.data.permissions);
-        }
-      } catch {
-        console.error("Failed to sync auth");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    init();
-  }, [session]);
+  // Use locally-updated user (from Steam link) if available, otherwise context
+  const displayUser = linkedUser || contextUser;
 
   async function handleLinkSteam(e: React.FormEvent) {
     e.preventDefault();
@@ -53,7 +34,7 @@ export default function DashboardPage() {
 
     const res = await linkSteam(apiToken, steamId.trim());
     if (res.success && res.data) {
-      setUser(res.data);
+      setLinkedUser(res.data);
       setSteamId("");
       setLinkSuccess(true);
     } else {
@@ -61,7 +42,7 @@ export default function DashboardPage() {
     }
   }
 
-  if (loading) {
+  if (!apiToken) {
     return (
       <div className="text-text-secondary">Loading dashboard...</div>
     );
@@ -99,8 +80,8 @@ export default function DashboardPage() {
                     Discord ID
                   </span>
                   <div className="mt-0.5 text-sm">
-                    {user?.discordId ? (
-                      <code className="text-accent">{user.discordId}</code>
+                    {displayUser?.discordId ? (
+                      <code className="text-accent">{displayUser.discordId}</code>
                     ) : (
                       <span className="text-text-muted">--</span>
                     )}
@@ -111,8 +92,8 @@ export default function DashboardPage() {
                     Steam ID
                   </span>
                   <div className="mt-0.5 text-sm">
-                    {user?.steamId ? (
-                      <code className="text-accent">{user.steamId}</code>
+                    {displayUser?.steamId ? (
+                      <code className="text-accent">{displayUser.steamId}</code>
                     ) : (
                       <span className="text-text-muted">Not linked</span>
                     )}
@@ -123,8 +104,8 @@ export default function DashboardPage() {
                     EOS ID
                   </span>
                   <div className="mt-0.5 text-sm">
-                    {user?.eosId ? (
-                      <code className="text-accent">{user.eosId}</code>
+                    {displayUser?.eosId ? (
+                      <code className="text-accent">{displayUser.eosId}</code>
                     ) : (
                       <span className="text-text-muted">Not set</span>
                     )}
@@ -138,9 +119,9 @@ export default function DashboardPage() {
         {/* Roles Card */}
         <div className="facet-border rounded-sm bg-bg-card p-6">
           <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Your Roles</h2>
-          {user?.roles && user.roles.length > 0 ? (
+          {displayUser?.roles && displayUser.roles.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              {user.roles.map((role) => (
+              {displayUser.roles.map((role) => (
                 <span
                   key={role.id}
                   className="rounded-sm border border-accent/30 bg-accent/10 px-3 py-1 text-sm text-accent"

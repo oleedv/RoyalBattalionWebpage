@@ -25,6 +25,9 @@ export interface AuthMeResponse {
 export interface WhitelistEntry {
   id: string;
   steamId: string;
+  name: string | null;
+  clan: string | null;
+  role: string | null;
   addedBy: string;
   reason: string | null;
   createdAt: string;

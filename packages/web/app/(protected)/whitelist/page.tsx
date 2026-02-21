@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   getWhitelist,
   addWhitelistEntry,
@@ -11,6 +11,14 @@ import {
 import { usePermissions } from "@/lib/permission-context";
 import type { WhitelistEntry } from "shared";
 
+interface ParsedImportRow {
+  steamId: string;
+  name: string;
+  clan: string;
+  role: string;
+  error: boolean;
+}
+
 export default function WhitelistPage() {
   const { apiToken, hasPermission } = usePermissions();
   const [entries, setEntries] = useState<WhitelistEntry[]>([]);
@@ -19,6 +27,9 @@ export default function WhitelistPage() {
 
   // Add form
   const [newSteamId, setNewSteamId] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newClan, setNewClan] = useState("");
+  const [newRole, setNewRole] = useState("");
   const [newReason, setNewReason] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -26,12 +37,19 @@ export default function WhitelistPage() {
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editSteamId, setEditSteamId] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editClan, setEditClan] = useState("");
+  const [editRole, setEditRole] = useState("");
   const [editReason, setEditReason] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
-  // Import
+  // Import modal
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importRows, setImportRows] = useState<ParsedImportRow[]>([]);
+  const [importStep, setImportStep] = useState<"paste" | "review">("paste");
   const [importStatus, setImportStatus] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
 
   // Search
   const [search, setSearch] = useState("");
@@ -63,15 +81,19 @@ export default function WhitelistPage() {
     setAddError(null);
     setAdding(true);
 
-    const res = await addWhitelistEntry(
-      apiToken,
-      newSteamId.trim(),
-      newReason.trim() || undefined
-    );
+    const res = await addWhitelistEntry(apiToken, newSteamId.trim(), {
+      name: newName.trim() || undefined,
+      clan: newClan.trim() || undefined,
+      role: newRole.trim() || undefined,
+      reason: newReason.trim() || undefined,
+    });
 
     if (res.success && res.data) {
       setEntries((prev) => [res.data!, ...prev]);
       setNewSteamId("");
+      setNewName("");
+      setNewClan("");
+      setNewRole("");
       setNewReason("");
     } else {
       setAddError(res.error || "Failed to add entry");
@@ -82,6 +104,9 @@ export default function WhitelistPage() {
   function startEdit(entry: WhitelistEntry) {
     setEditingId(entry.id);
     setEditSteamId(entry.steamId);
+    setEditName(entry.name || "");
+    setEditClan(entry.clan || "");
+    setEditRole(entry.role || "");
     setEditReason(entry.reason || "");
     setEditError(null);
   }
@@ -97,6 +122,9 @@ export default function WhitelistPage() {
 
     const res = await updateWhitelistEntry(apiToken, id, {
       steamId: editSteamId.trim(),
+      name: editName.trim() || undefined,
+      clan: editClan.trim() || undefined,
+      role: editRole.trim() || undefined,
       reason: editReason.trim() || undefined,
     });
 
@@ -120,10 +148,10 @@ export default function WhitelistPage() {
   }
 
   function handleExport() {
-    const header = "Steam ID,Added By,Reason,Date Added";
+    const header = "Steam ID,Name,Clan,Role,Added By,Reason,Date Added";
     const rows = entries.map(
       (e) =>
-        `${e.steamId},${e.addedBy},"${(e.reason || "").replace(/"/g, '""')}",${e.createdAt}`
+        `${e.steamId},"${(e.name || "").replace(/"/g, '""')}","${(e.clan || "").replace(/"/g, '""')}","${(e.role || "").replace(/"/g, '""')}",${e.addedBy},"${(e.reason || "").replace(/"/g, '""')}",${e.createdAt}`
     );
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -135,33 +163,70 @@ export default function WhitelistPage() {
     URL.revokeObjectURL(url);
   }
 
-  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !apiToken) return;
+  // Import modal functions
+  function openImportModal() {
+    setShowImportModal(true);
+    setImportText("");
+    setImportRows([]);
+    setImportStep("paste");
+    setImportStatus(null);
+  }
 
-    setImportStatus("Importing...");
+  function closeImportModal() {
+    setShowImportModal(false);
+    setImportText("");
+    setImportRows([]);
+    setImportStep("paste");
+    setImportStatus(null);
+  }
 
-    const text = await file.text();
-    const lines = text.split("\n").filter((l) => l.trim());
-
-    const start = lines[0]?.toLowerCase().includes("steam") ? 1 : 0;
-
-    const importEntries: { steamId: string; reason?: string }[] = [];
-    for (let i = start; i < lines.length; i++) {
-      const parts = lines[i].split(",");
-      const steamId = parts[0]?.trim();
-      if (steamId) {
-        const reason = parts[2]?.trim().replace(/^"|"$/g, "") || undefined;
-        importEntries.push({ steamId, reason });
+  function parseImportText() {
+    const lines = importText.split("\n").filter((l) => l.trim());
+    const parsed: ParsedImportRow[] = lines.map((line) => {
+      const match = line.match(/^(.+?)=(\d+):(.+?)\s*\/\/\s*(.+)$/);
+      if (match) {
+        return {
+          clan: match[1].trim(),
+          steamId: match[2].trim(),
+          role: match[3].trim(),
+          name: match[4].trim(),
+          error: false,
+        };
       }
-    }
+      return { steamId: "", name: "", clan: "", role: "", error: true };
+    });
+    setImportRows(parsed);
+    setImportStep("review");
+  }
 
-    if (importEntries.length === 0) {
-      setImportStatus("No valid entries found in CSV");
-      return;
-    }
+  function updateImportRow(index: number, field: keyof ParsedImportRow, value: string) {
+    setImportRows((prev) =>
+      prev.map((row, i) =>
+        i === index ? { ...row, [field]: value, error: false } : row
+      )
+    );
+  }
 
-    const res = await bulkAddWhitelist(apiToken, importEntries);
+  function removeImportRow(index: number) {
+    setImportRows((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function confirmImport() {
+    if (!apiToken) return;
+    const validRows = importRows.filter((r) => r.steamId.trim());
+    if (validRows.length === 0) return;
+
+    setImporting(true);
+    const res = await bulkAddWhitelist(
+      apiToken,
+      validRows.map((r) => ({
+        steamId: r.steamId,
+        name: r.name || undefined,
+        clan: r.clan || undefined,
+        role: r.role || undefined,
+      }))
+    );
+
     if (res.success && res.data) {
       setImportStatus(
         `Imported ${res.data.created} entries, ${res.data.skipped} skipped (duplicates)`
@@ -170,11 +235,11 @@ export default function WhitelistPage() {
       if (wlRes.success && wlRes.data) {
         setEntries(wlRes.data);
       }
+      closeImportModal();
     } else {
       setImportStatus(res.error || "Import failed");
     }
-
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    setImporting(false);
   }
 
   const filtered = search
@@ -182,6 +247,9 @@ export default function WhitelistPage() {
         (e) =>
           e.steamId.includes(search) ||
           e.addedBy.toLowerCase().includes(search.toLowerCase()) ||
+          e.name?.toLowerCase().includes(search.toLowerCase()) ||
+          e.clan?.toLowerCase().includes(search.toLowerCase()) ||
+          e.role?.toLowerCase().includes(search.toLowerCase()) ||
           e.reason?.toLowerCase().includes(search.toLowerCase())
       )
     : entries;
@@ -213,7 +281,7 @@ export default function WhitelistPage() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by Steam ID, added by, or reason..."
+          placeholder="Search by Steam ID, name, clan, role..."
           className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
         />
         <button
@@ -223,16 +291,12 @@ export default function WhitelistPage() {
           Export CSV
         </button>
         {canManage && (
-          <label className="cursor-pointer rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary">
-            Import CSV
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              onChange={handleImport}
-              className="hidden"
-            />
-          </label>
+          <button
+            onClick={openImportModal}
+            className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+          >
+            Import
+          </button>
         )}
       </div>
 
@@ -264,10 +328,31 @@ export default function WhitelistPage() {
           />
           <input
             type="text"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Name (optional)"
+            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-40"
+          />
+          <input
+            type="text"
+            value={newClan}
+            onChange={(e) => setNewClan(e.target.value)}
+            placeholder="Clan (optional)"
+            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-32"
+          />
+          <input
+            type="text"
+            value={newRole}
+            onChange={(e) => setNewRole(e.target.value)}
+            placeholder="Role (optional)"
+            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-32"
+          />
+          <input
+            type="text"
             value={newReason}
             onChange={(e) => setNewReason(e.target.value)}
             placeholder="Reason (optional)"
-            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-64"
+            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-48"
           />
           <button
             type="submit"
@@ -292,10 +377,16 @@ export default function WhitelistPage() {
                   Steam ID
                 </th>
                 <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  Added By
+                  Name
                 </th>
                 <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  Reason
+                  Clan
+                </th>
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+                  Role
+                </th>
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+                  Added By
                 </th>
                 <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
                   Date Added
@@ -311,7 +402,7 @@ export default function WhitelistPage() {
               {filtered.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={canManage ? 5 : 4}
+                    colSpan={canManage ? 7 : 6}
                     className="px-4 py-8 text-center text-text-muted"
                   >
                     {search
@@ -338,22 +429,46 @@ export default function WhitelistPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-text-secondary">
-                      {entry.addedBy}
+                      {editingId === entry.id ? (
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
+                          placeholder="Name"
+                        />
+                      ) : (
+                        entry.name || <span className="text-text-muted">--</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-text-secondary">
                       {editingId === entry.id ? (
                         <input
                           type="text"
-                          value={editReason}
-                          onChange={(e) => setEditReason(e.target.value)}
+                          value={editClan}
+                          onChange={(e) => setEditClan(e.target.value)}
                           className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
-                          placeholder="Reason (optional)"
+                          placeholder="Clan"
                         />
                       ) : (
-                        entry.reason || (
-                          <span className="text-text-muted">--</span>
-                        )
+                        entry.clan || <span className="text-text-muted">--</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3 text-text-secondary">
+                      {editingId === entry.id ? (
+                        <input
+                          type="text"
+                          value={editRole}
+                          onChange={(e) => setEditRole(e.target.value)}
+                          className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
+                          placeholder="Role"
+                        />
+                      ) : (
+                        entry.role || <span className="text-text-muted">--</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-text-secondary">
+                      {entry.addedBy}
                     </td>
                     <td className="px-4 py-3 text-text-secondary">
                       {new Date(entry.createdAt).toLocaleDateString()}
@@ -405,6 +520,163 @@ export default function WhitelistPage() {
           </table>
         </div>
       </div>
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/50" onClick={closeImportModal} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-3xl rounded-sm border border-border bg-bg-secondary p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="font-display text-lg font-semibold tracking-wide">
+                  Import Whitelist
+                </h2>
+                <button
+                  onClick={closeImportModal}
+                  className="text-text-muted transition-colors hover:text-text-primary"
+                >
+                  x
+                </button>
+              </div>
+
+              {importStep === "paste" && (
+                <div>
+                  <p className="mb-3 text-sm text-text-secondary">
+                    Paste whitelist entries in the format:
+                  </p>
+                  <code className="mb-3 block rounded-sm bg-bg-tertiary px-3 py-2 text-xs text-text-secondary">
+                    Admin=76561198310486875:SuperAdmin // Spud
+                  </code>
+                  <textarea
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    placeholder="Paste entries here, one per line..."
+                    rows={10}
+                    className="mb-4 w-full rounded-sm border border-border bg-bg-tertiary px-4 py-3 font-mono text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+                  />
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={closeImportModal}
+                      className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={parseImportText}
+                      disabled={!importText.trim()}
+                      className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50"
+                    >
+                      Parse
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {importStep === "review" && (
+                <div>
+                  <p className="mb-3 text-sm text-text-secondary">
+                    Review parsed entries. Edit fields or remove rows before importing.
+                  </p>
+                  <div className="mb-4 max-h-96 overflow-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border text-left">
+                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+                            Steam ID
+                          </th>
+                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+                            Name
+                          </th>
+                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+                            Clan
+                          </th>
+                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+                            Role
+                          </th>
+                          <th className="w-10 px-3 py-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importRows.map((row, i) => (
+                          <tr
+                            key={i}
+                            className={`border-b border-border/50 ${row.error ? "bg-danger/10" : ""}`}
+                          >
+                            <td className="px-3 py-2">
+                              <input
+                                type="text"
+                                value={row.steamId}
+                                onChange={(e) => updateImportRow(i, "steamId", e.target.value)}
+                                className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none"
+                                placeholder="Steam64 ID"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="text"
+                                value={row.name}
+                                onChange={(e) => updateImportRow(i, "name", e.target.value)}
+                                className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
+                                placeholder="Name"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="text"
+                                value={row.clan}
+                                onChange={(e) => updateImportRow(i, "clan", e.target.value)}
+                                className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
+                                placeholder="Clan"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="text"
+                                value={row.role}
+                                onChange={(e) => updateImportRow(i, "role", e.target.value)}
+                                className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
+                                placeholder="Role"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <button
+                                onClick={() => removeImportRow(i)}
+                                className="text-xs text-text-muted transition-colors hover:text-danger"
+                              >
+                                x
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-text-muted">
+                      {importRows.filter((r) => r.steamId.trim()).length} valid entries
+                    </span>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setImportStep("paste")}
+                        className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+                      >
+                        Back
+                      </button>
+                      <button
+                        onClick={confirmImport}
+                        disabled={importing || importRows.filter((r) => r.steamId.trim()).length === 0}
+                        className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50"
+                      >
+                        {importing ? "Importing..." : "Import"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

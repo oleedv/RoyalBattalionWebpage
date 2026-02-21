@@ -49,6 +49,9 @@ model RolePermission {
 model WhitelistEntry {
   id        String   @id @default(cuid())
   steamId   String   @unique
+  name      String?
+  clan      String?
+  role      String?
   addedBy   String
   reason    String?
   createdAt DateTime @default(now())

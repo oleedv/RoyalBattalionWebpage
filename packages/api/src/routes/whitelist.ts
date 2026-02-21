@@ -13,11 +13,17 @@ whitelist.use("*", authMiddleware);
 
 const addEntrySchema = z.object({
   steamId: z.string().min(1),
+  name: z.string().optional(),
+  clan: z.string().optional(),
+  role: z.string().optional(),
   reason: z.string().optional(),
 });
 
 const updateEntrySchema = z.object({
   steamId: z.string().min(1).optional(),
+  name: z.string().optional(),
+  clan: z.string().optional(),
+  role: z.string().optional(),
   reason: z.string().optional(),
 });
 
@@ -29,6 +35,9 @@ whitelist.get("/", requirePermission("view:whitelist"), async (c) => {
   const result: WhitelistEntry[] = entries.map((e) => ({
     id: e.id,
     steamId: e.steamId,
+    name: e.name,
+    clan: e.clan,
+    role: e.role,
     addedBy: e.addedBy,
     reason: e.reason,
     createdAt: e.createdAt.toISOString(),
@@ -39,12 +48,15 @@ whitelist.get("/", requirePermission("view:whitelist"), async (c) => {
 
 whitelist.post("/", requirePermission("manage:whitelist"), zValidator("json", addEntrySchema), async (c) => {
   const userId = c.get("userId");
-  const { steamId, reason } = c.req.valid("json");
+  const { steamId, name, clan, role, reason } = c.req.valid("json");
 
   try {
     const entry = await prisma.whitelistEntry.create({
       data: {
         steamId,
+        name: name ?? null,
+        clan: clan ?? null,
+        role: role ?? null,
         addedBy: userId,
         reason: reason ?? null,
       },
@@ -53,6 +65,9 @@ whitelist.post("/", requirePermission("manage:whitelist"), zValidator("json", ad
     const result: WhitelistEntry = {
       id: entry.id,
       steamId: entry.steamId,
+      name: entry.name,
+      clan: entry.clan,
+      role: entry.role,
       addedBy: entry.addedBy,
       reason: entry.reason,
       createdAt: entry.createdAt.toISOString(),
@@ -81,6 +96,9 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
       where: { id },
       data: {
         ...(body.steamId !== undefined && { steamId: body.steamId }),
+        ...(body.name !== undefined && { name: body.name || null }),
+        ...(body.clan !== undefined && { clan: body.clan || null }),
+        ...(body.role !== undefined && { role: body.role || null }),
         ...(body.reason !== undefined && { reason: body.reason || null }),
       },
     });
@@ -88,6 +106,9 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
     const result: WhitelistEntry = {
       id: entry.id,
       steamId: entry.steamId,
+      name: entry.name,
+      clan: entry.clan,
+      role: entry.role,
       addedBy: entry.addedBy,
       reason: entry.reason,
       createdAt: entry.createdAt.toISOString(),
@@ -105,6 +126,9 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
 const bulkAddSchema = z.object({
   entries: z.array(z.object({
     steamId: z.string().min(1),
+    name: z.string().optional(),
+    clan: z.string().optional(),
+    role: z.string().optional(),
     reason: z.string().optional(),
   })).min(1).max(500),
 });
@@ -121,6 +145,9 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), zValidator("json"
       await prisma.whitelistEntry.create({
         data: {
           steamId: entry.steamId,
+          name: entry.name ?? null,
+          clan: entry.clan ?? null,
+          role: entry.role ?? null,
           addedBy: userId,
           reason: entry.reason ?? null,
         },

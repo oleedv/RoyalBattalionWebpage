@@ -71,19 +71,19 @@ export function getWhitelist(
 export function addWhitelistEntry(
   token: string,
   steamId: string,
-  reason?: string
+  opts?: { name?: string; clan?: string; role?: string; reason?: string }
 ): Promise<ApiResponse<WhitelistEntry>> {
   return request<WhitelistEntry>("/whitelist", {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ steamId, reason }),
+    body: JSON.stringify({ steamId, ...opts }),
   });
 }
 
 export function updateWhitelistEntry(
   token: string,
   id: string,
-  data: { steamId?: string; reason?: string }
+  data: { steamId?: string; name?: string; clan?: string; role?: string; reason?: string }
 ): Promise<ApiResponse<WhitelistEntry>> {
   return request<WhitelistEntry>(`/whitelist/${id}`, {
     method: "PUT",
@@ -104,7 +104,7 @@ export function deleteWhitelistEntry(
 
 export function bulkAddWhitelist(
   token: string,
-  entries: { steamId: string; reason?: string }[]
+  entries: { steamId: string; name?: string; clan?: string; role?: string; reason?: string }[]
 ): Promise<ApiResponse<{ created: number; skipped: number }>> {
   return request<{ created: number; skipped: number }>("/whitelist/bulk", {
     method: "POST",
@@ -219,6 +219,12 @@ export function getTicketByUuid(
   uuid: string
 ): Promise<ApiResponse<Ticket>> {
   return request<Ticket>(`/tickets/by-uuid/${uuid}`);
+}
+
+export function getProspectByUuid(
+  uuid: string
+): Promise<ApiResponse<Prospect>> {
+  return request<Prospect>(`/tickets/by-uuid/prospect/${uuid}`);
 }
 
 export function getProspects(

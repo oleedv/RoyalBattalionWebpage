@@ -34,6 +34,15 @@ interface Match {
   team2Players: MatchPlayer[];
 }
 
+const THUMBNAILS_BASE =
+  "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/maps/thumbnails";
+
+function getMapThumbnail(map: string, layer: string): string {
+  const mapKey = map.replace(/\s+/g, "");
+  const layerKey = layer.replace(/\s+/g, "_");
+  return `${THUMBNAILS_BASE}/${mapKey}_${layerKey}.jpg`;
+}
+
 const MOCK_MATCHES: Match[] = [
   {
     id: "RB-1042",
@@ -186,25 +195,50 @@ function MatchRow({ match }: { match: Match }) {
   const totalDeaths2 = match.team2Players.reduce((s, p) => s + p.deaths, 0);
   const totalRevives2 = match.team2Players.reduce((s, p) => s + p.revives, 0);
 
+  const thumbUrl = getMapThumbnail(match.map, match.layer);
+
   return (
-    <div className="facet-border rounded-sm bg-bg-card transition-all">
+    <div className="facet-border overflow-hidden rounded-sm bg-bg-card transition-all">
       {/* Match summary row - clickable */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full p-5 text-left transition-colors hover:bg-bg-card-hover"
+        className="relative w-full text-left transition-colors hover:bg-bg-card-hover"
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Map thumbnail background */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <img
+            src={thumbUrl}
+            alt=""
+            className="absolute left-0 top-0 h-full w-48 object-cover opacity-30 sm:w-64 lg:w-80"
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              background: "linear-gradient(90deg, transparent 0%, var(--color-bg-card) 40%, var(--color-bg-card) 100%)",
+            }}
+          />
+          {/* Top/bottom fade for clean edges */}
+          <div
+            className="absolute inset-0"
+            style={{
+              background: "linear-gradient(180deg, var(--color-bg-card) 0%, transparent 15%, transparent 85%, var(--color-bg-card) 100%)",
+            }}
+          />
+        </div>
+
+        <div className="relative flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
           {/* Match Info */}
           <div className="flex items-center gap-5">
-            <div className="hidden sm:block">
-              <div className="flex h-12 w-12 items-center justify-center rounded-sm border border-border bg-bg-tertiary">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-5 w-5 text-text-muted">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
-                </svg>
-              </div>
+            {/* Small thumbnail on the left */}
+            <div className="hidden shrink-0 overflow-hidden rounded-sm border border-border/50 sm:block">
+              <img
+                src={thumbUrl}
+                alt={match.map}
+                className="h-14 w-14 object-cover"
+              />
             </div>
             <div>
-              <div className="flex items-center gap-3 mb-1">
+              <div className="mb-1 flex items-center gap-3">
                 <span className="font-display text-base font-semibold tracking-wide text-text-primary">
                   {match.map}
                 </span>
@@ -212,7 +246,7 @@ function MatchRow({ match }: { match: Match }) {
                   {match.layer}
                 </span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-text-muted">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
                 <span>{match.id}</span>
                 <span className="h-1 w-1 rounded-full bg-text-muted" />
                 <span>{match.date}</span>
@@ -227,8 +261,8 @@ function MatchRow({ match }: { match: Match }) {
           {/* Score + chevron */}
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <div className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase mb-0.5">
-                {match.team1.name}
+              <div className="mb-0.5 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+                {match.team1.faction}
               </div>
               <div className={`font-display text-lg font-bold tracking-wide ${match.team1.result === "WIN" ? "text-success" : "text-text-muted"}`}>
                 {match.team1.tickets}
@@ -238,8 +272,8 @@ function MatchRow({ match }: { match: Match }) {
               vs
             </div>
             <div className="text-left">
-              <div className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase mb-0.5">
-                {match.team2.name}
+              <div className="mb-0.5 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+                {match.team2.faction}
               </div>
               <div className={`font-display text-lg font-bold tracking-wide ${match.team2.result === "WIN" ? "text-success" : "text-text-muted"}`}>
                 {match.team2.tickets}
@@ -267,19 +301,19 @@ function MatchRow({ match }: { match: Match }) {
           {/* Match overview stats */}
           <div className="grid grid-cols-2 gap-4 py-5 sm:grid-cols-4">
             <div className="rounded-sm border border-border/50 bg-bg-tertiary/50 p-3 text-center">
-              <div className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase mb-1">Map</div>
+              <div className="mb-1 text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Map</div>
               <div className="font-display text-sm font-semibold tracking-wide text-text-primary">{match.map}</div>
             </div>
             <div className="rounded-sm border border-border/50 bg-bg-tertiary/50 p-3 text-center">
-              <div className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase mb-1">Layer</div>
+              <div className="mb-1 text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Layer</div>
               <div className="font-display text-sm font-semibold tracking-wide text-text-primary">{match.layer}</div>
             </div>
             <div className="rounded-sm border border-border/50 bg-bg-tertiary/50 p-3 text-center">
-              <div className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase mb-1">Duration</div>
+              <div className="mb-1 text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Duration</div>
               <div className="font-display text-sm font-semibold tracking-wide text-text-primary">{match.duration}</div>
             </div>
             <div className="rounded-sm border border-border/50 bg-bg-tertiary/50 p-3 text-center">
-              <div className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase mb-1">Players</div>
+              <div className="mb-1 text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Players</div>
               <div className="font-display text-sm font-semibold tracking-wide text-text-primary">{match.players}</div>
             </div>
           </div>
@@ -322,19 +356,19 @@ function MatchRow({ match }: { match: Match }) {
             {/* Stats comparison */}
             <div className="grid grid-cols-3 gap-2 text-center text-xs">
               <div>
-                <span className="text-[#4a90d9] font-semibold">{totalKills1}</span>
-                <span className="text-text-muted mx-1">Kills</span>
-                <span className="text-[#d94a4a] font-semibold">{totalKills2}</span>
+                <span className="font-semibold text-[#4a90d9]">{totalKills1}</span>
+                <span className="mx-1 text-text-muted">Kills</span>
+                <span className="font-semibold text-[#d94a4a]">{totalKills2}</span>
               </div>
               <div>
-                <span className="text-[#4a90d9] font-semibold">{totalDeaths1}</span>
-                <span className="text-text-muted mx-1">Deaths</span>
-                <span className="text-[#d94a4a] font-semibold">{totalDeaths2}</span>
+                <span className="font-semibold text-[#4a90d9]">{totalDeaths1}</span>
+                <span className="mx-1 text-text-muted">Deaths</span>
+                <span className="font-semibold text-[#d94a4a]">{totalDeaths2}</span>
               </div>
               <div>
-                <span className="text-[#4a90d9] font-semibold">{totalRevives1}</span>
-                <span className="text-text-muted mx-1">Revives</span>
-                <span className="text-[#d94a4a] font-semibold">{totalRevives2}</span>
+                <span className="font-semibold text-[#4a90d9]">{totalRevives1}</span>
+                <span className="mx-1 text-text-muted">Revives</span>
+                <span className="font-semibold text-[#d94a4a]">{totalRevives2}</span>
               </div>
             </div>
           </div>
@@ -411,18 +445,18 @@ export default function MatchesPage() {
         </div>
       </nav>
 
-      <main className="mx-auto max-w-6xl px-6 py-16">
+      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-16">
         {/* Header */}
-        <section className="mb-12 text-center">
+        <section className="mb-10 text-center sm:mb-12">
           <div className="mb-4 flex items-center justify-center gap-3">
             <div className="h-px w-12 bg-gradient-to-r from-transparent to-accent/40" />
             <div className="h-1.5 w-1.5 rotate-45 bg-accent/50" />
             <div className="h-px w-12 bg-gradient-to-l from-transparent to-accent/40" />
           </div>
-          <h1 className="font-display mb-4 text-4xl font-bold tracking-wide sm:text-5xl">
+          <h1 className="font-display mb-4 text-3xl font-bold tracking-wide sm:text-4xl lg:text-5xl">
             Match History
           </h1>
-          <p className="text-text-secondary text-lg mb-6">
+          <p className="mb-6 text-base text-text-secondary sm:text-lg">
             Recent matches played on Royal Battalion servers.
           </p>
 
@@ -433,8 +467,8 @@ export default function MatchesPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.049.58.025 1.193-.14 1.743" />
               </svg>
               <div>
-                <span className="text-sm font-semibold text-accent tracking-wide">Under Construction</span>
-                <span className="text-sm text-text-secondary ml-2">-- Live match data coming soon</span>
+                <span className="text-sm font-semibold tracking-wide text-accent">Under Construction</span>
+                <span className="ml-2 text-sm text-text-secondary">-- Live match data coming soon</span>
               </div>
             </div>
           </div>

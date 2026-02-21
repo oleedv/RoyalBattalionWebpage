@@ -246,6 +246,10 @@ export function getProspect(
 }
 
 // Matches
+export function getPublicMatches(): Promise<ApiResponse<Match[]>> {
+  return request<Match[]>("/matches/public");
+}
+
 export function getMatches(
   token: string
 ): Promise<ApiResponse<Match[]>> {

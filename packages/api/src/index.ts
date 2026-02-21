@@ -8,6 +8,7 @@ import tickets from "./routes/tickets";
 import matches from "./routes/matches";
 import servers from "./routes/servers";
 import stats from "./routes/stats";
+import { syncMatches } from "./lib/match-sync";
 
 const app = new Hono();
 
@@ -34,6 +35,12 @@ app.route("/servers", servers);
 app.route("/stats", stats);
 
 app.get("/health", (c) => c.json({ status: "ok" }));
+
+// Sync SquadJS matches on startup and every 15 minutes
+if (process.env.SQUADJS_DATABASE_URL) {
+  syncMatches().catch(console.error);
+  setInterval(() => syncMatches().catch(console.error), 15 * 60 * 1000);
+}
 
 export default {
   port: Number(process.env.PORT) || 3001,

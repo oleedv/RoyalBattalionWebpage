@@ -8,12 +8,13 @@
     "start": "bun run dist/index.js"
   },
   "dependencies": {
-    "hono": "^4.7.4",
     "@hono/zod-validator": "^0.4.3",
-    "zod": "^3.24.2",
     "@prisma/client": "^6.4.1",
+    "hono": "^4.7.4",
     "jose": "^6.0.8",
-    "shared": "workspace:*"
+    "mysql2": "^3.17.4",
+    "shared": "workspace:*",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/bun": "^1.2.4",

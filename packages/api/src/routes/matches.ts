@@ -13,21 +13,10 @@ matches.get("/public", async (c) => {
   const entries = await prisma.match.findMany({
     where: { hidden: false },
     orderBy: { date: "desc" },
+    take: 10,
   });
 
-  const result: Match[] = entries.map((e) => ({
-    id: e.id,
-    date: e.date.toISOString(),
-    map: e.map,
-    layer: e.layer,
-    result: e.result,
-    server: e.server,
-    vodUrl: e.vodUrl,
-    hidden: e.hidden,
-    createdBy: e.createdBy,
-    createdAt: e.createdAt.toISOString(),
-    updatedAt: e.updatedAt.toISOString(),
-  }));
+  const result: Match[] = entries.map(toMatch);
 
   return c.json<ApiResponse<Match[]>>({ success: true, data: result });
 });
@@ -98,6 +87,7 @@ function toMatch(e: {
   server: string;
   vodUrl: string | null;
   hidden: boolean;
+  matchDetail?: any;
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;
@@ -111,6 +101,7 @@ function toMatch(e: {
     server: e.server,
     vodUrl: e.vodUrl,
     hidden: e.hidden,
+    matchDetail: e.matchDetail ?? null,
     createdBy: e.createdBy,
     createdAt: e.createdAt.toISOString(),
     updatedAt: e.updatedAt.toISOString(),

@@ -58,15 +58,17 @@ model WhitelistEntry {
 }
 
 model Match {
-  id        String   @id @default(cuid())
-  date      DateTime
-  map       String
-  layer     String
-  result    String
-  server    String   @default("Main Server")
-  vodUrl    String?
-  hidden    Boolean  @default(false)
-  createdBy String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  squadjsId   Int?     @unique
+  date        DateTime
+  map         String
+  layer       String
+  result      String
+  server      String   @default("Main Server")
+  vodUrl      String?
+  hidden      Boolean  @default(false)
+  matchDetail Json?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

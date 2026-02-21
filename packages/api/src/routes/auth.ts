@@ -103,6 +103,7 @@ auth.post("/sync", zValidator("json", syncSchema), async (c) => {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Auth sync failed";
+    console.error("[auth/sync] Error:", err);
     return c.json<ApiResponse<never>>({ success: false, error: message }, 500);
   }
 });

@@ -8,18 +8,11 @@ COPY packages/shared/package.json ./packages/shared/
 COPY prisma/ ./prisma/
 RUN bun install
 
-FROM base AS build
+FROM base AS runtime
 COPY --from=install /app/node_modules ./node_modules
-COPY --from=install /app/packages/api/node_modules ./packages/api/node_modules
 COPY . .
 RUN bunx prisma generate
-RUN cd packages/api && bun run build
-
-FROM base AS runtime
-COPY --from=build /app/packages/api/dist ./dist
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/prisma ./prisma
 
 ENV NODE_ENV=production
 EXPOSE 3001
-CMD ["sh", "-c", "bunx prisma db push --skip-generate && bun run dist/index.js"]
+CMD ["sh", "-c", "bunx prisma db push && bun run packages/api/src/index.ts"]

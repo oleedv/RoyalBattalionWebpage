@@ -18,7 +18,7 @@ interface ServerStatus {
 const CACHE_TTL_MS = 30_000;
 let cache: { data: ServerStatus[]; expiry: number } | null = null;
 
-const DEFAULT_SERVER_IDS = ["27560507"];
+const DEFAULT_SERVER_IDS = ["27560507", "36099124"];
 
 function getServerIds(): string[] {
   const env = process.env.BATTLEMETRICS_SERVER_IDS;

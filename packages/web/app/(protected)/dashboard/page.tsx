@@ -224,13 +224,6 @@ export default function DashboardPage() {
     });
   }
 
-  if (canManageMatches && stats?.matches) {
-    statCards.push({
-      label: "Match Record",
-      value: `${stats.matches.wins}W - ${stats.matches.losses}L - ${stats.matches.draws}D`,
-      href: "/match-manager",
-    });
-  }
 
   return (
     <div>

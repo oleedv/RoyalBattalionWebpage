@@ -2,6 +2,7 @@ FROM oven/bun:1 AS base
 WORKDIR /app
 
 FROM base AS install
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 COPY package.json bun.lock ./
 COPY packages/api/package.json ./packages/api/
 COPY packages/shared/package.json ./packages/shared/

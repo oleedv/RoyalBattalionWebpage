@@ -15,7 +15,7 @@ app.use(
       "http://localhost:3000",
       "https://royalbattalion.com",
       "https://www.royalbattalion.com",
-      "https://stg.royalbattalion.com",
+      "https://stg.royalbattalion.xyz",
     ],
     credentials: true,
   })

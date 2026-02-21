@@ -267,7 +267,7 @@ export default function WhitelistPage() {
             value={newReason}
             onChange={(e) => setNewReason(e.target.value)}
             placeholder="Reason (optional)"
-            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-64
+            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-64"
           />
           <button
             type="submit"

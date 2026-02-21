@@ -10,6 +10,8 @@ RUN bun install
 
 FROM base AS runtime
 COPY --from=install /app/node_modules ./node_modules
+COPY --from=install /app/packages/api/node_modules ./packages/api/node_modules
+COPY --from=install /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY . .
 RUN bunx prisma generate
 

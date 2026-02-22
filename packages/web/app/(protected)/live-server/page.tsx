@@ -93,9 +93,9 @@ export default function LiveServerPage() {
       switch (msg.type) {
         case "servers":
           setServerKeys(msg.data);
-          if (!activeServer && msg.data.length > 0) {
-            setActiveServer(msg.data[0]);
-          }
+          setActiveServer((prev) =>
+            !prev && msg.data.length > 0 ? msg.data[0] : prev
+          );
           break;
         case "snapshot":
           setSquadjsConnected(msg.data.connected);
@@ -116,8 +116,8 @@ export default function LiveServerPage() {
           setTimeout(() => setActionFeedback(null), 4000);
           break;
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("[live-server] Failed to process WebSocket message:", err, event.data);
     }
   }, []);
 
@@ -179,7 +179,10 @@ export default function LiveServerPage() {
       // Reconnect after 3 seconds
       reconnectRef.current = setTimeout(connectWs, 3000);
     };
-    ws.onerror = () => ws.close();
+    ws.onerror = (err) => {
+      console.error("[live-server] WebSocket error:", err);
+      ws.close();
+    };
     ws.onmessage = handleMessage;
   }, [apiToken, handleMessage]);
 

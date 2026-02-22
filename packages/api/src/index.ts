@@ -77,7 +77,8 @@ squadjsSocket.onEvent((serverKey, event, data) => {
       if (ws.data.serverKey === serverKey) {
         ws.send(message);
       }
-    } catch {
+    } catch (err) {
+      console.error("[live-server] Failed to send to client, removing:", err);
       wsClients.delete(ws);
     }
   }
@@ -102,7 +103,8 @@ async function verifyToken(token: string): Promise<WSData | null> {
       canView: isAdmin || permissions.includes("view:live-server") || permissions.includes("manage:live-server"),
       serverKey: "",
     };
-  } catch {
+  } catch (err) {
+    console.error("[live-server] Token verification failed:", err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -122,6 +124,7 @@ export default {
 
       return verifyToken(token).then((data) => {
         if (!data) {
+          console.warn("[live-server] WebSocket auth failed for token");
           return new Response("Invalid token", { status: 401 });
         }
         if (!data.canView) {
@@ -201,7 +204,8 @@ export default {
         }
 
         handleAdminAction(ws, msg);
-      } catch {
+      } catch (err) {
+        console.error("[live-server] Error handling WebSocket message:", err);
         ws.send(
           JSON.stringify({
             type: "action_result",

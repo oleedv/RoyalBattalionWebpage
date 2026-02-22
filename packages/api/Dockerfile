@@ -14,7 +14,7 @@ COPY --from=install /app/node_modules ./node_modules
 COPY --from=install /app/packages/api/node_modules ./packages/api/node_modules
 COPY --from=install /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY . .
-RUN bunx prisma generate
+RUN DATABASE_URL="mysql://placeholder:placeholder@localhost:3306/placeholder" bunx prisma generate
 
 ENV NODE_ENV=production
 EXPOSE 3001

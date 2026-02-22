@@ -30,8 +30,8 @@ interface ServerInfo {
   playerCount: number;
   publicQueue: number;
   reserveQueue: number;
-  currentLayer: string | null;
-  nextLayer: string | null;
+  currentLayer: string | { name: string; [key: string]: unknown } | null;
+  nextLayer: string | { name: string; [key: string]: unknown } | null;
 }
 
 interface ChatMessage {
@@ -138,7 +138,7 @@ export default function LiveServerPage() {
             return {
               ...prev,
               playerCount: (a2s.a2sPlayerCount as number) ?? prev.playerCount,
-              currentLayer: (a2s.currentLayer as string) ?? prev.currentLayer,
+              currentLayer: (a2s.currentLayer as ServerInfo["currentLayer"]) ?? prev.currentLayer,
             };
           });
         }
@@ -248,6 +248,12 @@ export default function LiveServerPage() {
     setKickReason("");
   }
 
+  function layerName(layer: string | { name: string; [key: string]: unknown } | null): string {
+    if (!layer) return "--";
+    if (typeof layer === "string") return layer;
+    return layer.name || "--";
+  }
+
   if (!canView) {
     return <div className="text-danger">Insufficient permissions.</div>;
   }
@@ -337,8 +343,8 @@ export default function LiveServerPage() {
         <div className="facet-border mb-6 grid grid-cols-2 gap-4 rounded-sm bg-bg-card p-4 sm:grid-cols-4 lg:grid-cols-6">
           <InfoCell label="Players" value={`${serverInfo.playerCount} / ${serverInfo.maxPlayers}`} />
           <InfoCell label="Queue" value={`${serverInfo.publicQueue + serverInfo.reserveQueue}`} />
-          <InfoCell label="Layer" value={serverInfo.currentLayer || "--"} />
-          <InfoCell label="Next" value={serverInfo.nextLayer || "--"} />
+          <InfoCell label="Layer" value={layerName(serverInfo.currentLayer)} />
+          <InfoCell label="Next" value={layerName(serverInfo.nextLayer)} />
           <InfoCell label="Tick Rate" value={tickRate ? `${tickRate.toFixed(1)}` : "--"} />
           <InfoCell label="Slots" value={`${serverInfo.publicSlots}+${serverInfo.reserveSlots}`} />
         </div>

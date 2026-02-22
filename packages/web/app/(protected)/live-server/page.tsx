@@ -42,12 +42,22 @@ interface ChatMessage {
   time: string;
 }
 
+interface MetricSample {
+  time: number;
+  tickRate: number | null;
+  playerCount: number;
+  publicQueue: number;
+  reserveQueue: number;
+}
+
 interface Snapshot {
   connected: boolean;
   players: Player[];
   serverInfo: ServerInfo | null;
   chatLog: ChatMessage[];
+  consoleLog: ConsoleEntry[];
   tickRate: number | null;
+  metricHistory: MetricSample[];
 }
 
 type WSMessage =
@@ -90,6 +100,9 @@ export default function LiveServerPage() {
   const [kickReason, setKickReason] = useState("");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [consoleLog, setConsoleLog] = useState<ConsoleEntry[]>([]);
+  const [metricHistory, setMetricHistory] = useState<MetricSample[]>([]);
+  const [team1Search, setTeam1Search] = useState("");
+  const [team2Search, setTeam2Search] = useState("");
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
@@ -110,7 +123,9 @@ export default function LiveServerPage() {
           setPlayers(msg.data.players);
           setServerInfo(msg.data.serverInfo);
           setChatLog(msg.data.chatLog);
+          if (msg.data.consoleLog?.length) setConsoleLog(msg.data.consoleLog);
           setTickRate(msg.data.tickRate);
+          if (msg.data.metricHistory?.length) setMetricHistory(msg.data.metricHistory);
           break;
         case "event":
           handleGameEvent(msg.event, msg.data);
@@ -140,14 +155,33 @@ export default function LiveServerPage() {
         break;
       case "UPDATED_A2S_INFORMATION":
         if (data && typeof data === "object") {
+          const a2s = data as Record<string, unknown>;
           setServerInfo((prev) => {
             if (!prev) return prev;
-            const a2s = data as Record<string, unknown>;
             return {
               ...prev,
               playerCount: (a2s.a2sPlayerCount as number) ?? prev.playerCount,
               currentLayer: (a2s.currentLayer as ServerInfo["currentLayer"]) ?? prev.currentLayer,
+              ...(a2s.nextLayer !== undefined ? { nextLayer: a2s.nextLayer as ServerInfo["nextLayer"] } : {}),
+              ...(typeof a2s.publicQueue === "number" ? { publicQueue: a2s.publicQueue } : {}),
+              ...(typeof a2s.reserveQueue === "number" ? { reserveQueue: a2s.reserveQueue } : {}),
             };
+          });
+          // Update metric history with latest values
+          setMetricHistory((prev) => {
+            const now = Date.now();
+            const last = prev[prev.length - 1];
+            // Only add a sample if 25+ seconds since last
+            if (last && now - last.time < 25_000) return prev;
+            const sample: MetricSample = {
+              time: now,
+              tickRate: null, // will be updated by TICK_RATE event
+              playerCount: (a2s.a2sPlayerCount as number) ?? 0,
+              publicQueue: (a2s.publicQueue as number) ?? 0,
+              reserveQueue: (a2s.reserveQueue as number) ?? 0,
+            };
+            const next = [...prev, sample];
+            return next.length > 240 ? next.slice(-240) : next;
           });
         }
         break;
@@ -258,6 +292,9 @@ export default function LiveServerPage() {
     setChatLog([]);
     setConsoleLog([]);
     setTickRate(null);
+    setMetricHistory([]);
+    setTeam1Search("");
+    setTeam2Search("");
     setSquadjsConnected(false);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: "switch_server", server: key }));
@@ -301,6 +338,18 @@ export default function LiveServerPage() {
     setKickReason("");
   }
 
+  function handleSwitchTeam(player: Player) {
+    sendAction({
+      action: "switchteam",
+      steamId: player.steamID,
+      eosId: player.eosID,
+    });
+  }
+
+  function handleDisbandSquad(teamID: string, squadID: string) {
+    sendAction({ action: "disband", teamID, squadID });
+  }
+
   function layerName(layer: string | { name: string; [key: string]: unknown } | null): string {
     if (!layer) return "--";
     if (typeof layer === "string") return layer;
@@ -325,8 +374,14 @@ export default function LiveServerPage() {
     return <div className="text-danger">Insufficient permissions.</div>;
   }
 
-  const team1 = players.filter((p) => String(p.teamID) === "1");
-  const team2 = players.filter((p) => String(p.teamID) === "2");
+  const team1All = players.filter((p) => String(p.teamID) === "1");
+  const team2All = players.filter((p) => String(p.teamID) === "2");
+  const team1 = team1Search
+    ? team1All.filter((p) => p.name.toLowerCase().includes(team1Search.toLowerCase()))
+    : team1All;
+  const team2 = team2Search
+    ? team2All.filter((p) => p.name.toLowerCase().includes(team2Search.toLowerCase()))
+    : team2All;
   const unassigned = players.filter(
     (p) => String(p.teamID) !== "1" && String(p.teamID) !== "2"
   );
@@ -408,11 +463,17 @@ export default function LiveServerPage() {
       {/* Server info bar */}
       {serverInfo && (
         <div className="facet-border mb-6 grid grid-cols-2 gap-4 rounded-sm bg-bg-card p-4 sm:grid-cols-4 lg:grid-cols-6">
-          <InfoCell label="Players" value={`${serverInfo.playerCount} / ${serverInfo.maxPlayers}`} />
-          <InfoCell label="Queue" value={`${serverInfo.publicQueue + serverInfo.reserveQueue}`} />
+          <InfoCell label="Players" value={`${serverInfo.playerCount} / ${serverInfo.maxPlayers}`}>
+            <Sparkline data={metricHistory.map((s) => s.playerCount)} color="var(--color-accent)" />
+          </InfoCell>
+          <InfoCell label="Queue" value={`${serverInfo.publicQueue + serverInfo.reserveQueue}`}>
+            <Sparkline data={metricHistory.map((s) => s.publicQueue + s.reserveQueue)} color="var(--color-warning)" />
+          </InfoCell>
           <InfoCell label="Layer" value={layerName(serverInfo.currentLayer)} />
           <InfoCell label="Next" value={layerName(serverInfo.nextLayer)} />
-          <InfoCell label="Tick Rate" value={tickRate ? `${tickRate.toFixed(1)}` : "--"} />
+          <InfoCell label="Tick Rate" value={tickRate ? `${tickRate.toFixed(1)}` : "--"}>
+            <Sparkline data={metricHistory.map((s) => s.tickRate ?? 0)} color="var(--color-success)" />
+          </InfoCell>
           <InfoCell label="Slots" value={`${serverInfo.publicSlots}+${serverInfo.reserveSlots}`} />
         </div>
       )}
@@ -437,17 +498,27 @@ export default function LiveServerPage() {
                 <TeamColumn
                   label="Team 1"
                   players={team1}
+                  totalCount={team1All.length}
                   showActions={canManage}
+                  searchValue={team1Search}
+                  onSearchChange={setTeam1Search}
                   onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
+                  onSwitchTeam={handleSwitchTeam}
+                  onDisbandSquad={handleDisbandSquad}
                 />
                 <TeamColumn
                   label="Team 2"
                   players={team2}
+                  totalCount={team2All.length}
                   className="border-t border-border md:border-l md:border-t-0"
                   showActions={canManage}
+                  searchValue={team2Search}
+                  onSearchChange={setTeam2Search}
                   onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
+                  onSwitchTeam={handleSwitchTeam}
+                  onDisbandSquad={handleDisbandSquad}
                 />
               </div>
             )}
@@ -457,9 +528,12 @@ export default function LiveServerPage() {
                 <TeamColumn
                   label="Unassigned"
                   players={unassigned}
+                  totalCount={unassigned.length}
                   showActions={canManage}
                   onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
+                  onSwitchTeam={handleSwitchTeam}
+                  onDisbandSquad={handleDisbandSquad}
                 />
               </div>
             )}
@@ -640,33 +714,67 @@ export default function LiveServerPage() {
 // SUB COMPONENTS
 // ============================================================
 
-function InfoCell({ label, value }: { label: string; value: string }) {
+function InfoCell({ label, value, children }: { label: string; value: string; children?: React.ReactNode }) {
   return (
-    <div>
-      <div className="text-[10px] font-medium uppercase tracking-[0.15em] text-text-muted">
-        {label}
-      </div>
-      <div className="mt-0.5 truncate text-sm font-medium text-text-primary">
-        {value}
+    <div className="relative overflow-hidden">
+      {children && <div className="absolute inset-0 flex items-end opacity-30">{children}</div>}
+      <div className="relative">
+        <div className="text-[10px] font-medium uppercase tracking-[0.15em] text-text-muted">
+          {label}
+        </div>
+        <div className="mt-0.5 truncate text-sm font-medium text-text-primary">
+          {value}
+        </div>
       </div>
     </div>
+  );
+}
+
+function Sparkline({ data, color, height = 28 }: { data: number[]; color: string; height?: number }) {
+  if (data.length < 2) return null;
+  const width = 80;
+  const max = Math.max(...data, 1);
+  const min = Math.min(...data, 0);
+  const range = max - min || 1;
+  const points = data
+    .map((v, i) => {
+      const x = (i / (data.length - 1)) * width;
+      const y = height - ((v - min) / range) * (height - 2) - 1;
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  return (
+    <svg width={width} height={height} className="w-full" preserveAspectRatio="none" viewBox={`0 0 ${width} ${height}`}>
+      <polyline fill="none" stroke={color} strokeWidth="1.5" points={points} />
+    </svg>
   );
 }
 
 function TeamColumn({
   label,
   players,
+  totalCount,
   className = "",
   showActions = false,
+  searchValue,
+  onSearchChange,
   onWarn,
   onKick,
+  onSwitchTeam,
+  onDisbandSquad,
 }: {
   label: string;
   players: Player[];
+  totalCount: number;
   className?: string;
   showActions?: boolean;
+  searchValue?: string;
+  onSearchChange?: (v: string) => void;
   onWarn: (p: Player) => void;
   onKick: (p: Player) => void;
+  onSwitchTeam: (p: Player) => void;
+  onDisbandSquad: (teamID: string, squadID: string) => void;
 }) {
   // Group by squad
   const squads = new Map<string, Player[]>();
@@ -682,21 +790,45 @@ function TeamColumn({
     }
   }
 
+  // Sort SLs to top within each squad
+  for (const members of squads.values()) {
+    members.sort((a, b) => (a.isLeader === b.isLeader ? 0 : a.isLeader ? -1 : 1));
+  }
+
   return (
     <div className={className}>
-      <div className="border-b border-border/50 px-4 py-2">
+      <div className="flex items-center justify-between border-b border-border/50 px-4 py-2">
         <span className="text-xs font-medium tracking-wide text-text-muted uppercase">
-          {label} ({players.length})
+          {label} ({totalCount})
         </span>
+        {onSearchChange && (
+          <input
+            type="text"
+            value={searchValue || ""}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search..."
+            className="w-28 rounded-sm border border-border/50 bg-bg-tertiary px-2 py-0.5 text-[10px] text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+          />
+        )}
       </div>
       <div className="max-h-96 overflow-auto">
         {Array.from(squads.entries()).map(([key, members]) => (
           <div key={key}>
-            <div className="bg-bg-tertiary/50 px-4 py-1 text-[10px] font-medium tracking-wide text-accent uppercase">
-              {members[0].squad?.squadName || `Squad ${members[0].squadID}`} ({members.length})
+            <div className="flex items-center justify-between bg-bg-tertiary/50 px-4 py-1">
+              <span className="text-[10px] font-medium tracking-wide text-accent uppercase">
+                {members[0].squad?.squadName || `Squad ${members[0].squadID}`} ({members.length})
+              </span>
+              {showActions && members[0].squadID && (
+                <button
+                  onClick={() => onDisbandSquad(String(members[0].teamID), String(members[0].squadID))}
+                  className="rounded-sm px-1.5 py-0.5 text-[9px] text-danger/70 transition-colors hover:bg-danger/10 hover:text-danger"
+                >
+                  Disband
+                </button>
+              )}
             </div>
             {members.map((p) => (
-              <PlayerRow key={p.steamID} player={p} showActions={showActions} onWarn={onWarn} onKick={onKick} />
+              <PlayerRow key={p.steamID || p.eosID} player={p} showActions={showActions} onWarn={onWarn} onKick={onKick} onSwitchTeam={onSwitchTeam} />
             ))}
           </div>
         ))}
@@ -708,7 +840,7 @@ function TeamColumn({
               </div>
             )}
             {noSquad.map((p) => (
-              <PlayerRow key={p.steamID} player={p} showActions={showActions} onWarn={onWarn} onKick={onKick} />
+              <PlayerRow key={p.steamID || p.eosID} player={p} showActions={showActions} onWarn={onWarn} onKick={onKick} onSwitchTeam={onSwitchTeam} />
             ))}
           </div>
         )}
@@ -731,11 +863,13 @@ function PlayerRow({
   showActions = false,
   onWarn,
   onKick,
+  onSwitchTeam,
 }: {
   player: Player;
   showActions?: boolean;
   onWarn: (p: Player) => void;
   onKick: (p: Player) => void;
+  onSwitchTeam: (p: Player) => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -758,6 +892,15 @@ function PlayerRow({
       </div>
       {showActions && hovered && (
         <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => onSwitchTeam(player)}
+            className="rounded-sm px-1.5 py-0.5 text-[10px] text-accent transition-colors hover:bg-accent/10"
+            title="Switch team"
+          >
+            <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+            </svg>
+          </button>
           <button
             onClick={() => onWarn(player)}
             className="rounded-sm px-1.5 py-0.5 text-[10px] text-warning transition-colors hover:bg-warning/10"

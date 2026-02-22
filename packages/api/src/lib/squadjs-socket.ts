@@ -55,12 +55,29 @@ const EVENTS_TO_RELAY = [
   "ADMIN_BROADCAST",
 ];
 
+export interface ConsoleEntry {
+  time: string;
+  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "newgame";
+  message: string;
+}
+
+export interface MetricSample {
+  time: number;
+  tickRate: number | null;
+  playerCount: number;
+  publicQueue: number;
+  reserveQueue: number;
+}
+
 interface ServerState {
   socket: Socket;
   players: SquadJSPlayer[];
   serverInfo: SquadJSServerInfo | null;
   chatLog: SquadJSChatMessage[];
+  consoleLog: ConsoleEntry[];
   tickRate: number | null;
+  metricHistory: MetricSample[];
+  metricInterval: ReturnType<typeof setInterval> | null;
   connected: boolean;
 }
 
@@ -111,7 +128,10 @@ class SquadJSSocketManager {
       players: [],
       serverInfo: null,
       chatLog: [],
+      consoleLog: [],
       tickRate: null,
+      metricHistory: [],
+      metricInterval: null,
       connected: false,
     };
 
@@ -165,9 +185,35 @@ class SquadJSSocketManager {
         if (received === infoKeys.length) {
           state.serverInfo = info as SquadJSServerInfo;
           this.broadcast(key, "SNAPSHOT_SERVER_INFO", state.serverInfo);
+          // Start metric sampling once we have server info
+          this.sampleMetric(state);
+          this.startMetricSampling(state);
         }
       });
     }
+  }
+
+  private addConsoleEntry(state: ServerState, type: ConsoleEntry["type"], message: string) {
+    state.consoleLog.push({ time: new Date().toISOString(), type, message });
+    if (state.consoleLog.length > 100) state.consoleLog = state.consoleLog.slice(-100);
+  }
+
+  private sampleMetric(state: ServerState) {
+    const sample: MetricSample = {
+      time: Date.now(),
+      tickRate: state.tickRate,
+      playerCount: state.serverInfo?.playerCount ?? 0,
+      publicQueue: state.serverInfo?.publicQueue ?? 0,
+      reserveQueue: state.serverInfo?.reserveQueue ?? 0,
+    };
+    state.metricHistory.push(sample);
+    // Keep last 2 hours at 30s intervals = 240 samples
+    if (state.metricHistory.length > 240) state.metricHistory = state.metricHistory.slice(-240);
+  }
+
+  private startMetricSampling(state: ServerState) {
+    if (state.metricInterval) return;
+    state.metricInterval = setInterval(() => this.sampleMetric(state), 30_000);
   }
 
   private handleEvent(key: string, state: ServerState, event: string, data: unknown) {
@@ -181,6 +227,11 @@ class SquadJSSocketManager {
           if (state.serverInfo) {
             state.serverInfo.playerCount = (a2s.a2sPlayerCount as number) ?? state.serverInfo.playerCount;
             state.serverInfo.currentLayer = (a2s.currentLayer as string) ?? state.serverInfo.currentLayer;
+            if (a2s.nextLayer !== undefined) {
+              state.serverInfo.nextLayer = (a2s.nextLayer as string) ?? state.serverInfo.nextLayer;
+            }
+            if (typeof a2s.publicQueue === "number") state.serverInfo.publicQueue = a2s.publicQueue;
+            if (typeof a2s.reserveQueue === "number") state.serverInfo.reserveQueue = a2s.reserveQueue;
           }
         }
         break;
@@ -200,7 +251,43 @@ class SquadJSSocketManager {
         break;
       case "NEW_GAME":
         state.chatLog = [];
+        this.addConsoleEntry(state, "newgame", `New game started${(data as { layerClassname?: string })?.layerClassname ? `: ${(data as { layerClassname: string }).layerClassname}` : ""}`);
         break;
+      case "PLAYER_CONNECTED": {
+        const pc = data as { player?: { name?: string } };
+        if (pc?.player?.name) this.addConsoleEntry(state, "connect", `${pc.player.name} connected`);
+        break;
+      }
+      case "PLAYER_DISCONNECTED": {
+        const pd = data as { player?: { name?: string } };
+        if (pd?.player?.name) this.addConsoleEntry(state, "disconnect", `${pd.player.name} disconnected`);
+        break;
+      }
+      case "PLAYER_WARNED": {
+        const pw = data as { player?: { name?: string }; reason?: string };
+        this.addConsoleEntry(state, "warn", `${pw?.player?.name || "Unknown"} warned: ${pw?.reason || "No reason"}`);
+        break;
+      }
+      case "PLAYER_KICKED": {
+        const pk = data as { player?: { name?: string }; reason?: string };
+        this.addConsoleEntry(state, "kick", `${pk?.player?.name || "Unknown"} kicked: ${pk?.reason || "No reason"}`);
+        break;
+      }
+      case "PLAYER_BANNED": {
+        const pb = data as { player?: { name?: string }; reason?: string };
+        this.addConsoleEntry(state, "ban", `${pb?.player?.name || "Unknown"} banned: ${pb?.reason || "No reason"}`);
+        break;
+      }
+      case "ADMIN_BROADCAST": {
+        const ab = data as { message?: string };
+        if (ab?.message) this.addConsoleEntry(state, "broadcast", `Broadcast: ${ab.message}`);
+        break;
+      }
+      case "TEAMKILL": {
+        const tk = data as { attacker?: { name?: string }; victim?: { name?: string }; weapon?: string };
+        this.addConsoleEntry(state, "teamkill", `${tk?.attacker?.name || "Unknown"} teamkilled ${tk?.victim?.name || "Unknown"}${tk?.weapon ? ` (${tk.weapon})` : ""}`);
+        break;
+      }
     }
 
     this.broadcast(key, event, data);
@@ -233,7 +320,9 @@ class SquadJSSocketManager {
       players: state.players,
       serverInfo: state.serverInfo,
       chatLog: state.chatLog,
+      consoleLog: state.consoleLog,
       tickRate: state.tickRate,
+      metricHistory: state.metricHistory,
     };
   }
 

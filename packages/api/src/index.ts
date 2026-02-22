@@ -179,7 +179,7 @@ export default {
       ws.send(
         JSON.stringify({
           type: "snapshot",
-          data: snapshot || { connected: false, players: [], serverInfo: null, chatLog: [], tickRate: null },
+          data: snapshot || { connected: false, players: [], serverInfo: null, chatLog: [], consoleLog: [], tickRate: null, metricHistory: [] },
           server: ws.data.serverKey,
         })
       );
@@ -202,7 +202,7 @@ export default {
           const snapshot = squadjsSocket.getSnapshot(msg.server);
           ws.send(JSON.stringify({
             type: "snapshot",
-            data: snapshot || { connected: false, players: [], serverInfo: null, chatLog: [], tickRate: null },
+            data: snapshot || { connected: false, players: [], serverInfo: null, chatLog: [], consoleLog: [], tickRate: null, metricHistory: [] },
             server: msg.server,
           }));
           return;
@@ -240,7 +240,7 @@ export default {
 
 async function handleAdminAction(
   ws: ServerWebSocket<WSData>,
-  msg: { action: string; server?: string; steamId?: string; eosId?: string; message?: string; reason?: string }
+  msg: { action: string; server?: string; steamId?: string; eosId?: string; message?: string; reason?: string; teamID?: string; squadID?: string }
 ) {
   const serverKey = ws.data.serverKey;
 
@@ -276,6 +276,27 @@ async function handleAdminAction(
         await squadjsSocket.executeRcon(serverKey, "broadcast", msg.message);
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "broadcast" }));
         break;
+
+      case "switchteam": {
+        const playerId = msg.steamId || msg.eosId;
+        if (!playerId) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing player ID" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "forceTeamChange", playerId);
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchteam" }));
+        break;
+      }
+
+      case "disband": {
+        if (!msg.teamID || !msg.squadID) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing team or squad ID" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "disbandSquad", msg.teamID, msg.squadID);
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "disband" }));
+        break;
+      }
 
       default:
         ws.send(JSON.stringify({ type: "action_result", success: false, error: `Unknown action: ${msg.action}` }));

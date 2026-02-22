@@ -99,6 +99,7 @@ export default function LiveServerPage() {
   const [kickTarget, setKickTarget] = useState<Player | null>(null);
   const [kickReason, setKickReason] = useState("");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [switchSquadTarget, setSwitchSquadTarget] = useState<{ squadName: string; players: Player[] } | null>(null);
   const [consoleLog, setConsoleLog] = useState<ConsoleEntry[]>([]);
   const [metricHistory, setMetricHistory] = useState<MetricSample[]>([]);
   const [team1Search, setTeam1Search] = useState("");
@@ -361,6 +362,18 @@ export default function LiveServerPage() {
     sendAction({ action: "disband", teamID, squadID });
   }
 
+  function handleSwitchSquad() {
+    if (!switchSquadTarget) return;
+    for (const p of switchSquadTarget.players) {
+      sendAction({
+        action: "switchteam",
+        steamId: p.steamID,
+        eosId: p.eosID,
+      });
+    }
+    setSwitchSquadTarget(null);
+  }
+
   function layerName(layer: string | { name: string; [key: string]: unknown } | null): string {
     if (!layer) return "--";
     if (typeof layer === "string") return layer;
@@ -533,6 +546,7 @@ export default function LiveServerPage() {
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
                   onSwitchTeam={handleSwitchTeam}
                   onDisbandSquad={handleDisbandSquad}
+                  onSwitchSquad={(name, players) => setSwitchSquadTarget({ squadName: name, players })}
                 />
                 <TeamColumn
                   label="Team 2"
@@ -546,6 +560,7 @@ export default function LiveServerPage() {
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
                   onSwitchTeam={handleSwitchTeam}
                   onDisbandSquad={handleDisbandSquad}
+                  onSwitchSquad={(name, players) => setSwitchSquadTarget({ squadName: name, players })}
                 />
               </div>
             )}
@@ -561,6 +576,7 @@ export default function LiveServerPage() {
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
                   onSwitchTeam={handleSwitchTeam}
                   onDisbandSquad={handleDisbandSquad}
+                  onSwitchSquad={(name, players) => setSwitchSquadTarget({ squadName: name, players })}
                 />
               </div>
             )}
@@ -733,6 +749,29 @@ export default function LiveServerPage() {
           />
         </ActionModal>
       )}
+
+      {/* Switch squad modal */}
+      {switchSquadTarget && (
+        <ActionModal
+          title={`Switch Squad: ${switchSquadTarget.squadName}`}
+          onConfirm={handleSwitchSquad}
+          onCancel={() => setSwitchSquadTarget(null)}
+          confirmLabel={`Switch ${switchSquadTarget.players.length} Players`}
+          confirmClass="bg-warning hover:bg-warning/80"
+        >
+          <div className="space-y-3 text-sm">
+            <div className="rounded-sm border border-warning/20 bg-warning/5 px-3 py-2 text-warning">
+              This is a force team switch. It may exceed the 50-player team cap.
+            </div>
+            <p className="text-text-secondary">
+              All {switchSquadTarget.players.length} players in this squad will be moved to the other team individually.
+            </p>
+            <p className="text-xs text-text-muted">
+              A queue-based switch system is planned for a future update.
+            </p>
+          </div>
+        </ActionModal>
+      )}
     </div>
   );
 }
@@ -828,6 +867,7 @@ function TeamColumn({
   onKick,
   onSwitchTeam,
   onDisbandSquad,
+  onSwitchSquad,
 }: {
   label: string;
   players: Player[];
@@ -840,6 +880,7 @@ function TeamColumn({
   onKick: (p: Player) => void;
   onSwitchTeam: (p: Player) => void;
   onDisbandSquad: (teamID: string, squadID: string) => void;
+  onSwitchSquad: (squadName: string, players: Player[]) => void;
 }) {
   // Group by squad
   const squads = new Map<string, Player[]>();
@@ -884,12 +925,21 @@ function TeamColumn({
                 {members[0].squad?.squadName || `Squad ${members[0].squadID}`} ({members.length})
               </span>
               {showActions && members[0].squadID && (
-                <button
-                  onClick={() => onDisbandSquad(String(members[0].teamID), String(members[0].squadID))}
-                  className="rounded-sm px-1.5 py-0.5 text-[9px] text-danger/70 transition-colors hover:bg-danger/10 hover:text-danger"
-                >
-                  Disband
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => onSwitchSquad(members[0].squad?.squadName || `Squad ${members[0].squadID}`, members)}
+                    className="rounded-sm px-1.5 py-0.5 text-[9px] text-warning/70 transition-colors hover:bg-warning/10 hover:text-warning"
+                    title="Switch entire squad to the other team"
+                  >
+                    Switch
+                  </button>
+                  <button
+                    onClick={() => onDisbandSquad(String(members[0].teamID), String(members[0].squadID))}
+                    className="rounded-sm px-1.5 py-0.5 text-[9px] text-danger/70 transition-colors hover:bg-danger/10 hover:text-danger"
+                  >
+                    Disband
+                  </button>
+                </div>
               )}
             </div>
             {members.map((p) => (

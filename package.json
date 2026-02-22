@@ -14,10 +14,12 @@
   },
   "devDependencies": {
     "dotenv": "^17.3.1",
-    "prisma": "^6.4.1",
+    "prisma": "^7.4.1",
     "typescript": "^5.7.3"
   },
   "dependencies": {
-    "@prisma/client": "^6.4.1"
+    "@prisma/adapter-mariadb": "^7.4.1",
+    "@prisma/client": "^7.4.1",
+    "mariadb": "^3.5.1"
   }
 }

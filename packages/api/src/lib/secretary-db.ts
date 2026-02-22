@@ -1,4 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../generated/prisma";
+import { PrismaMariaDB } from "@prisma/adapter-mariadb";
 
 let _client: PrismaClient | null = null;
 
@@ -8,11 +9,8 @@ export default function getSecretaryDb(): PrismaClient {
     if (!url) {
       throw new Error("SECRETARY_DATABASE_URL is not configured");
     }
-    _client = new PrismaClient({
-      datasources: {
-        db: { url },
-      },
-    });
+    const adapter = new PrismaMariaDB({ connectionString: url });
+    _client = new PrismaClient({ adapter });
   }
   return _client;
 }

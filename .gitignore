@@ -7,3 +7,4 @@ dist/
 .turbo/
 *.tsbuildinfo
 prisma/*.db
+packages/api/src/generated/

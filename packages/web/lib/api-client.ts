@@ -180,6 +180,15 @@ export function updateRoleWhitelistGrant(
 }
 
 // Users
+export function syncUserRoles(
+  token: string
+): Promise<ApiResponse<{ updated: number }>> {
+  return request<{ updated: number }>("/users/sync-roles", {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
 export function getUsers(
   token: string
 ): Promise<ApiResponse<UserWithRoles[]>> {

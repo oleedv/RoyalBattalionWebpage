@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getUsers, updateUser, deleteUser } from "@/lib/api-client";
+import { getUsers, updateUser, deleteUser, syncUserRoles } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import type { UserWithRoles } from "shared";
 
@@ -22,6 +22,9 @@ export default function MembersPage() {
 
   // Delete confirmation
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Role sync
+  const [syncing, setSyncing] = useState(false);
 
   const canManage = hasPermission("manage:members");
 
@@ -73,6 +76,25 @@ export default function MembersPage() {
     }
   }
 
+  async function handleSyncRoles() {
+    if (!apiToken || syncing) return;
+    setSyncing(true);
+    try {
+      const syncRes = await syncUserRoles(apiToken);
+      if (syncRes.success) {
+        // Reload user list to show updated roles
+        const res = await getUsers(apiToken);
+        if (res.success && res.data) {
+          setUsers(res.data);
+        }
+      }
+    } catch {
+      // silent
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function handleDelete(id: string) {
     if (!apiToken) return;
 
@@ -107,9 +129,20 @@ export default function MembersPage() {
         <h1 className="font-display text-3xl font-bold tracking-wide">
           Members
         </h1>
-        <span className="rounded-sm border border-accent/20 bg-accent/10 px-3 py-1 text-sm text-accent">
-          {users.length} members
-        </span>
+        <div className="flex items-center gap-3">
+          {canManage && (
+            <button
+              onClick={handleSyncRoles}
+              disabled={syncing}
+              className="rounded-sm border border-border px-4 py-1.5 text-xs font-medium tracking-wide text-text-secondary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-40"
+            >
+              {syncing ? "Syncing..." : "Refresh Roles"}
+            </button>
+          )}
+          <span className="rounded-sm border border-accent/20 bg-accent/10 px-3 py-1 text-sm text-accent">
+            {users.length} members
+          </span>
+        </div>
       </div>
 
       {/* Search */}

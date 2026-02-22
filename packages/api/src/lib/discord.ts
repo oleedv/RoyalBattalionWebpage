@@ -34,3 +34,42 @@ export async function fetchGuildRoles(accessToken: string, guildId: string) {
   const data = (await res.json()) as { roles: string[] };
   return data.roles;
 }
+
+interface GuildMember {
+  user?: { id: string; username: string };
+  roles: string[];
+}
+
+export async function fetchAllGuildMembers(
+  botToken: string,
+  guildId: string
+): Promise<{ discordId: string; roles: string[] }[]> {
+  const members: { discordId: string; roles: string[] }[] = [];
+  let after = "0";
+
+  // Paginate through all guild members (max 1000 per request)
+  while (true) {
+    const res = await fetch(
+      `${DISCORD_API}/guilds/${guildId}/members?limit=1000&after=${after}`,
+      { headers: { Authorization: `Bot ${botToken}` } }
+    );
+
+    if (!res.ok) {
+      throw new Error(`Discord guild members fetch failed: ${res.status}`);
+    }
+
+    const batch = (await res.json()) as GuildMember[];
+    if (batch.length === 0) break;
+
+    for (const m of batch) {
+      if (m.user) {
+        members.push({ discordId: m.user.id, roles: m.roles });
+      }
+    }
+
+    if (batch.length < 1000) break;
+    after = batch[batch.length - 1].user?.id || after;
+  }
+
+  return members;
+}

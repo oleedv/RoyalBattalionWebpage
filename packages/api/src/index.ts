@@ -14,6 +14,7 @@ import squadjsConfig from "./routes/squadjs-config";
 import { syncMatches } from "./lib/match-sync";
 import { generateAdminsCfg } from "./lib/cfg-generator";
 import { squadjsSocket } from "./lib/squadjs-socket";
+import { syncAllUserRoles } from "./lib/role-sync";
 import type { Permission } from "shared";
 import type { ServerWebSocket } from "bun";
 
@@ -55,6 +56,20 @@ app.get("/health", (c) => c.json({ status: "ok" }));
 if (process.env.SQUADJS_DATABASE_URL) {
   syncMatches().catch(console.error);
   setInterval(() => syncMatches().catch(console.error), 15 * 60 * 1000);
+}
+
+// Sync Discord roles for all users on startup and every 2 minutes
+if (process.env.DISCORD_BOT_TOKEN) {
+  syncAllUserRoles()
+    .then((n) => console.log(`[role-sync] Initial sync: ${n} users updated`))
+    .catch(console.error);
+  setInterval(
+    () =>
+      syncAllUserRoles()
+        .then((n) => { if (n > 0) console.log(`[role-sync] ${n} users updated`); })
+        .catch(console.error),
+    2 * 60 * 1000
+  );
 }
 
 // --- WebSocket for live server ---

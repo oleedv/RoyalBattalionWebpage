@@ -5,6 +5,7 @@ import type { ApiResponse, UserWithRoles } from "shared";
 import prisma from "../lib/db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
+import { syncAllUserRoles } from "../lib/role-sync";
 
 const users = new Hono();
 
@@ -51,6 +52,26 @@ function mapUser(u: any): UserWithRoles {
     })),
   };
 }
+
+users.post("/sync-roles", authMiddleware, requirePermission("manage:members"), async (c) => {
+  if (!process.env.DISCORD_BOT_TOKEN) {
+    return c.json<ApiResponse<never>>(
+      { success: false, error: "DISCORD_BOT_TOKEN is not configured" },
+      503
+    );
+  }
+
+  try {
+    const updated = await syncAllUserRoles();
+    return c.json<ApiResponse<{ updated: number }>>({
+      success: true,
+      data: { updated },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Sync failed";
+    return c.json<ApiResponse<never>>({ success: false, error: message }, 500);
+  }
+});
 
 users.get("/", authMiddleware, requirePermission("view:members", "manage:members"), async (c) => {
   const dbUsers = await prisma.user.findMany({

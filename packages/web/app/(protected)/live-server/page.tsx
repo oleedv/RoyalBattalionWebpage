@@ -68,11 +68,22 @@ type WSMessage =
 
 interface ConsoleEntry {
   time: string;
-  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "newgame";
+  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "newgame" | "wound" | "revive" | "squad";
   message: string;
 }
 
 type ChatFilter = "All" | "ChatAll" | "ChatTeam" | "ChatSquad" | "ChatAdmin";
+
+const CONSOLE_TYPES: ConsoleEntry["type"][] = [
+  "warn", "kick", "ban", "broadcast", "connect", "disconnect", "teamkill", "newgame", "wound", "revive", "squad",
+];
+
+const WARN_TEMPLATES = [
+  "Stop teamkilling",
+  "Stay with your squad",
+  "English only in all chat",
+  "No locked 1-man squads",
+];
 
 export default function LiveServerPage() {
   const { apiToken, hasPermission } = usePermissions();
@@ -104,6 +115,8 @@ export default function LiveServerPage() {
   const [metricHistory, setMetricHistory] = useState<MetricSample[]>([]);
   const [team1Search, setTeam1Search] = useState("");
   const [team2Search, setTeam2Search] = useState("");
+  const [consoleFilters, setConsoleFilters] = useState<Set<ConsoleEntry["type"]>>(new Set(CONSOLE_TYPES));
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
@@ -250,6 +263,27 @@ export default function LiveServerPage() {
         addConsoleEntry("teamkill", `${tk?.attacker?.name || "Unknown"} teamkilled ${tk?.victim?.name || "Unknown"}${tk?.weapon ? ` (${tk.weapon})` : ""}`);
         break;
       }
+      case "PLAYER_WOUNDED": {
+        const pw2 = data as { attacker?: { name?: string }; victim?: { name?: string }; weapon?: string };
+        if (pw2?.attacker?.name && pw2?.victim?.name) {
+          addConsoleEntry("wound", `${pw2.attacker.name} wounded ${pw2.victim.name}${pw2.weapon ? ` (${pw2.weapon})` : ""}`);
+        }
+        break;
+      }
+      case "PLAYER_REVIVED": {
+        const pr = data as { reviver?: { name?: string }; victim?: { name?: string } };
+        if (pr?.reviver?.name && pr?.victim?.name) {
+          addConsoleEntry("revive", `${pr.reviver.name} revived ${pr.victim.name}`);
+        }
+        break;
+      }
+      case "SQUAD_CREATED": {
+        const sc = data as { player?: { name?: string }; squad?: { squadName?: string } };
+        if (sc?.squad?.squadName) {
+          addConsoleEntry("squad", `Squad "${sc.squad.squadName}" created${sc.player?.name ? ` by ${sc.player.name}` : ""}`);
+        }
+        break;
+      }
     }
   }
 
@@ -389,9 +423,29 @@ export default function LiveServerPage() {
       case "connect": return "text-success";
       case "disconnect": return "text-text-muted";
       case "teamkill": return "text-danger/70";
+      case "wound": return "text-orange-400/70";
+      case "revive": return "text-emerald-400";
+      case "squad": return "text-blue-400";
       case "newgame": return "text-accent font-bold";
       default: return "text-text-secondary";
     }
+  }
+
+  function toggleConsoleFilter(type: ConsoleEntry["type"]) {
+    setConsoleFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }
+
+  function formatPlaytime(seconds?: number): string {
+    if (!seconds || seconds < 60) return "";
+    const mins = Math.floor(seconds / 60);
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    return `${hrs}h${mins % 60}m`;
   }
 
   if (!canView) {
@@ -534,6 +588,9 @@ export default function LiveServerPage() {
                 {connected ? "No players online" : "Connecting..."}
               </div>
             ) : (
+              <>
+              {/* Team balance bar */}
+              <BalanceBar team1={team1All.length} team2={team2All.length} />
               <div className="grid gap-0 md:grid-cols-2">
                 <TeamColumn
                   label="Team 1"
@@ -547,6 +604,8 @@ export default function LiveServerPage() {
                   onSwitchTeam={handleSwitchTeam}
                   onDisbandSquad={handleDisbandSquad}
                   onSwitchSquad={(name, players) => setSwitchSquadTarget({ squadName: name, players })}
+                  onSelectPlayer={setSelectedPlayer}
+                  formatPlaytime={formatPlaytime}
                 />
                 <TeamColumn
                   label="Team 2"
@@ -561,8 +620,11 @@ export default function LiveServerPage() {
                   onSwitchTeam={handleSwitchTeam}
                   onDisbandSquad={handleDisbandSquad}
                   onSwitchSquad={(name, players) => setSwitchSquadTarget({ squadName: name, players })}
+                  onSelectPlayer={setSelectedPlayer}
+                  formatPlaytime={formatPlaytime}
                 />
               </div>
+              </>
             )}
 
             {unassigned.length > 0 && (
@@ -577,6 +639,8 @@ export default function LiveServerPage() {
                   onSwitchTeam={handleSwitchTeam}
                   onDisbandSquad={handleDisbandSquad}
                   onSwitchSquad={(name, players) => setSwitchSquadTarget({ squadName: name, players })}
+                  onSelectPlayer={setSelectedPlayer}
+                  formatPlaytime={formatPlaytime}
                 />
               </div>
             )}
@@ -677,10 +741,33 @@ export default function LiveServerPage() {
 
           {/* Console */}
           <div className="facet-border flex flex-col rounded-sm bg-bg-card" style={{ height: "300px" }}>
-            <div className="border-b border-border px-4 py-3">
-              <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
-                Console
-              </h2>
+            <div className="border-b border-border px-4 py-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
+                  Console
+                </h2>
+                <button
+                  onClick={() => setConsoleLog([])}
+                  className="text-[10px] text-text-muted transition-colors hover:text-text-secondary"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {CONSOLE_TYPES.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => toggleConsoleFilter(t)}
+                    className={`rounded-sm px-1.5 py-0.5 text-[9px] font-medium tracking-wide transition-colors ${
+                      consoleFilters.has(t)
+                        ? "bg-accent/10 text-accent"
+                        : "text-text-muted/50 line-through"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="flex-1 overflow-auto px-4 py-2 font-mono">
               {consoleLog.length === 0 ? (
@@ -688,7 +775,9 @@ export default function LiveServerPage() {
                   No events yet
                 </div>
               ) : (
-                consoleLog.map((entry, i) => (
+                consoleLog
+                  .filter((e) => consoleFilters.has(e.type))
+                  .map((entry, i) => (
                   <div key={i} className="mb-1 text-xs">
                     <span className="text-text-muted">
                       {new Date(entry.time).toLocaleTimeString("en-GB", {
@@ -719,14 +808,32 @@ export default function LiveServerPage() {
           confirmLabel="Send Warning"
           confirmDisabled={!warnMsg.trim()}
         >
-          <input
-            type="text"
-            value={warnMsg}
-            onChange={(e) => setWarnMsg(e.target.value)}
-            placeholder="Warning message..."
-            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-            autoFocus
-          />
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-1.5">
+              {WARN_TEMPLATES.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setWarnMsg(t)}
+                  className={`rounded-sm border px-2 py-1 text-xs transition-colors ${
+                    warnMsg === t
+                      ? "border-warning/30 bg-warning/10 text-warning"
+                      : "border-border text-text-muted hover:border-warning/20 hover:text-text-secondary"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={warnMsg}
+              onChange={(e) => setWarnMsg(e.target.value)}
+              placeholder="Warning message..."
+              className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+              autoFocus
+            />
+          </div>
         </ActionModal>
       )}
 
@@ -771,6 +878,19 @@ export default function LiveServerPage() {
             </p>
           </div>
         </ActionModal>
+      )}
+
+      {/* Player card */}
+      {selectedPlayer && (
+        <PlayerCard
+          player={selectedPlayer}
+          showActions={canManage}
+          onClose={() => setSelectedPlayer(null)}
+          onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
+          onKick={(p) => { setKickTarget(p); setKickReason(""); }}
+          onSwitchTeam={handleSwitchTeam}
+          formatPlaytime={formatPlaytime}
+        />
       )}
     </div>
   );
@@ -868,6 +988,8 @@ function TeamColumn({
   onSwitchTeam,
   onDisbandSquad,
   onSwitchSquad,
+  onSelectPlayer,
+  formatPlaytime,
 }: {
   label: string;
   players: Player[];
@@ -881,6 +1003,8 @@ function TeamColumn({
   onSwitchTeam: (p: Player) => void;
   onDisbandSquad: (teamID: string, squadID: string) => void;
   onSwitchSquad: (squadName: string, players: Player[]) => void;
+  onSelectPlayer: (p: Player) => void;
+  formatPlaytime: (s?: number) => string;
 }) {
   // Group by squad
   const squads = new Map<string, Player[]>();
@@ -943,7 +1067,7 @@ function TeamColumn({
               )}
             </div>
             {members.map((p) => (
-              <PlayerRow key={p.steamID || p.eosID} player={p} showActions={showActions} onWarn={onWarn} onKick={onKick} onSwitchTeam={onSwitchTeam} />
+              <PlayerRow key={p.steamID || p.eosID} player={p} showActions={showActions} onWarn={onWarn} onKick={onKick} onSwitchTeam={onSwitchTeam} onSelect={onSelectPlayer} formatPlaytime={formatPlaytime} />
             ))}
           </div>
         ))}
@@ -955,7 +1079,7 @@ function TeamColumn({
               </div>
             )}
             {noSquad.map((p) => (
-              <PlayerRow key={p.steamID || p.eosID} player={p} showActions={showActions} onWarn={onWarn} onKick={onKick} onSwitchTeam={onSwitchTeam} />
+              <PlayerRow key={p.steamID || p.eosID} player={p} showActions={showActions} onWarn={onWarn} onKick={onKick} onSwitchTeam={onSwitchTeam} onSelect={onSelectPlayer} formatPlaytime={formatPlaytime} />
             ))}
           </div>
         )}
@@ -979,14 +1103,19 @@ function PlayerRow({
   onWarn,
   onKick,
   onSwitchTeam,
+  onSelect,
+  formatPlaytime,
 }: {
   player: Player;
   showActions?: boolean;
   onWarn: (p: Player) => void;
   onKick: (p: Player) => void;
   onSwitchTeam: (p: Player) => void;
+  onSelect: (p: Player) => void;
+  formatPlaytime: (s?: number) => string;
 }) {
   const [hovered, setHovered] = useState(false);
+  const pt = formatPlaytime(player.playtime);
 
   return (
     <div
@@ -1000,9 +1129,17 @@ function PlayerRow({
             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
           </svg>
         )}
-        <span className="truncate text-xs text-text-primary">{player.name}</span>
+        <button
+          onClick={() => onSelect(player)}
+          className="truncate text-xs text-text-primary hover:text-accent hover:underline"
+        >
+          {player.name}
+        </button>
         {player.role && (
           <span className="flex-shrink-0 text-[10px] text-text-muted">{formatRole(player.role)}</span>
+        )}
+        {pt && (
+          <span className="flex-shrink-0 rounded-sm bg-bg-tertiary px-1 py-0.5 text-[9px] text-text-muted">{pt}</span>
         )}
       </div>
       {showActions && hovered && (
@@ -1077,6 +1214,139 @@ function ActionModal({
               {confirmLabel}
             </button>
           </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function BalanceBar({ team1, team2 }: { team1: number; team2: number }) {
+  const total = team1 + team2 || 1;
+  const pct1 = (team1 / total) * 100;
+  const diff = Math.abs(team1 - team2);
+  const color = diff <= 2 ? "bg-success" : diff <= 4 ? "bg-warning" : "bg-danger";
+
+  return (
+    <div className="flex items-center gap-2 border-b border-border/50 px-4 py-1.5">
+      <span className="text-[10px] font-medium text-blue-400">{team1}</span>
+      <div className="flex-1 flex h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
+        <div className={`${color} transition-all duration-500`} style={{ width: `${pct1}%` }} />
+      </div>
+      <span className="text-[10px] font-medium text-red-400">{team2}</span>
+    </div>
+  );
+}
+
+function CopyableField({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  const truncated = value.length > 20 ? value.slice(0, 12) + "..." : value;
+
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[10px] text-text-muted">{label}</span>
+      <button
+        onClick={() => { navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+        className="flex items-center gap-1 text-xs text-text-secondary hover:text-accent"
+        title={value}
+      >
+        <code>{truncated}</code>
+        <span className="text-[9px] text-text-muted">{copied ? "Copied!" : "Copy"}</span>
+      </button>
+    </div>
+  );
+}
+
+function PlayerCard({
+  player,
+  showActions,
+  onClose,
+  onWarn,
+  onKick,
+  onSwitchTeam,
+  formatPlaytime,
+}: {
+  player: Player;
+  showActions: boolean;
+  onClose: () => void;
+  onWarn: (p: Player) => void;
+  onKick: (p: Player) => void;
+  onSwitchTeam: (p: Player) => void;
+  formatPlaytime: (s?: number) => string;
+}) {
+  const pt = formatPlaytime(player.playtime);
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-xs rounded-sm border border-border bg-bg-secondary p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-text-primary">{player.name}</span>
+                {player.isLeader && (
+                  <svg className="h-3 w-3 text-warning" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                )}
+              </div>
+              {player.role && (
+                <span className="text-[10px] text-text-muted">{formatRole(player.role)}</span>
+              )}
+            </div>
+            <button onClick={onClose} className="text-text-muted hover:text-text-primary">x</button>
+          </div>
+
+          <div className="mb-3 space-y-1.5 rounded-sm border border-border/50 bg-bg-tertiary/50 p-2">
+            {player.steamID && <CopyableField label="Steam ID" value={player.steamID} />}
+            {player.eosID && <CopyableField label="EOS ID" value={player.eosID} />}
+            {pt && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-text-muted">Playtime</span>
+                <span className="text-xs text-text-secondary">{pt}</span>
+              </div>
+            )}
+            {player.squad && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-text-muted">Squad</span>
+                <span className="text-xs text-text-secondary">
+                  {player.squad.squadName}
+                  {player.squad.creatorName && (
+                    <span className="text-text-muted"> (by {player.squad.creatorName})</span>
+                  )}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-text-muted">Team</span>
+              <span className={`text-xs font-medium ${String(player.teamID) === "1" ? "text-blue-400" : String(player.teamID) === "2" ? "text-red-400" : "text-text-muted"}`}>
+                Team {player.teamID}
+              </span>
+            </div>
+          </div>
+
+          {showActions && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => { onSwitchTeam(player); onClose(); }}
+                className="flex-1 rounded-sm border border-accent/20 py-1.5 text-xs text-accent transition-colors hover:bg-accent/10"
+              >
+                Switch Team
+              </button>
+              <button
+                onClick={() => { onWarn(player); onClose(); }}
+                className="flex-1 rounded-sm border border-warning/20 py-1.5 text-xs text-warning transition-colors hover:bg-warning/10"
+              >
+                Warn
+              </button>
+              <button
+                onClick={() => { onKick(player); onClose(); }}
+                className="flex-1 rounded-sm border border-danger/20 py-1.5 text-xs text-danger transition-colors hover:bg-danger/10"
+              >
+                Kick
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </>

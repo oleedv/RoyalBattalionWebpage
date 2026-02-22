@@ -11,6 +11,7 @@ import servers from "./routes/servers";
 import stats from "./routes/stats";
 import adminGroups from "./routes/admin-groups";
 import squadjsConfig from "./routes/squadjs-config";
+import serverConfig from "./routes/server-config";
 import { syncMatches } from "./lib/match-sync";
 import { generateAdminsCfg } from "./lib/cfg-generator";
 import { squadjsSocket } from "./lib/squadjs-socket";
@@ -43,10 +44,12 @@ app.route("/matches", matches);
 app.route("/servers", servers);
 app.route("/stats", stats);
 app.route("/squadjs-config", squadjsConfig);
+app.route("/server-config", serverConfig);
 
 // Public cfg endpoint (no auth) -- separate from /whitelist to avoid auth middleware
 app.get("/admins.cfg", async (c) => {
-  const cfg = await generateAdminsCfg();
+  const server = c.req.query("server");
+  const cfg = await generateAdminsCfg(server || undefined);
   return c.text(cfg, 200, { "Content-Type": "text/plain" });
 });
 
@@ -85,6 +88,8 @@ interface WSData {
 const wsClients = new Set<ServerWebSocket<WSData>>();
 
 // Relay SquadJS events to subscribed WebSocket clients
+// Clear previous listeners first (handles bun --watch re-evaluation)
+squadjsSocket.clearListeners();
 squadjsSocket.onEvent((serverKey, event, data) => {
   const message = JSON.stringify({ type: "event", event, data, server: serverKey });
   for (const ws of wsClients) {
@@ -243,6 +248,7 @@ async function handleAdminAction(
   msg: { action: string; server?: string; steamId?: string; eosId?: string; message?: string; reason?: string; teamID?: string; squadID?: string }
 ) {
   const serverKey = ws.data.serverKey;
+  console.log(`[live-server] RCON ${msg.action} from user ${ws.data.userId} on ${serverKey}`);
 
   try {
     switch (msg.action) {

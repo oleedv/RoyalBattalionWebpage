@@ -15,6 +15,7 @@ whitelist.use("*", authMiddleware);
 function toEntry(e: {
   id: string;
   steamId: string;
+  server: string;
   name: string | null;
   clan: string | null;
   role: string | null;
@@ -28,6 +29,7 @@ function toEntry(e: {
   return {
     id: e.id,
     steamId: e.steamId,
+    server: e.server,
     name: e.name,
     clan: e.clan,
     role: e.role,
@@ -40,14 +42,15 @@ function toEntry(e: {
   };
 }
 
-function deployInBackground() {
-  triggerSftpDeploy().catch((err) =>
+function deployInBackground(server?: string) {
+  triggerSftpDeploy(server).catch((err) =>
     console.error("[sftp-deploy] Failed:", err)
   );
 }
 
 const addEntrySchema = z.object({
   steamId: z.string().min(1),
+  server: z.string().min(1).default("main"),
   name: z.string().optional(),
   clan: z.string().optional(),
   role: z.string().optional(),
@@ -67,7 +70,10 @@ const updateEntrySchema = z.object({
 });
 
 whitelist.get("/", requirePermission("view:whitelist"), async (c) => {
+  const server = c.req.query("server");
+
   const entries = await prisma.whitelistEntry.findMany({
+    where: server ? { server } : {},
     include: { group: true },
     orderBy: { createdAt: "desc" },
   });
@@ -79,7 +85,10 @@ whitelist.get("/", requirePermission("view:whitelist"), async (c) => {
 });
 
 whitelist.get("/candidates", requirePermission("manage:whitelist"), async (c) => {
+  const server = c.req.query("server") || "main";
+
   const existingSteamIds = await prisma.whitelistEntry.findMany({
+    where: { server },
     select: { steamId: true },
   });
   const existingSet = new Set(existingSteamIds.map((e) => e.steamId));
@@ -112,12 +121,13 @@ whitelist.get("/candidates", requirePermission("manage:whitelist"), async (c) =>
 
 whitelist.post("/", requirePermission("manage:whitelist"), zValidator("json", addEntrySchema), async (c) => {
   const userId = c.get("userId");
-  const { steamId, name, clan, role, groupId, reason, expiresAt } = c.req.valid("json");
+  const { steamId, server, name, clan, role, groupId, reason, expiresAt } = c.req.valid("json");
 
   try {
     const entry = await prisma.whitelistEntry.create({
       data: {
         steamId,
+        server,
         name: name ?? null,
         clan: clan ?? null,
         role: role ?? null,
@@ -129,13 +139,13 @@ whitelist.post("/", requirePermission("manage:whitelist"), zValidator("json", ad
       include: { group: true },
     });
 
-    deployInBackground();
+    deployInBackground(server);
 
     return c.json<ApiResponse<WhitelistEntry>>({ success: true, data: toEntry(entry) }, 201);
   } catch {
     return c.json<ApiResponse<never>>({
       success: false,
-      error: "Failed to add whitelist entry. The Steam ID may already be whitelisted.",
+      error: "Failed to add whitelist entry. The Steam ID may already be whitelisted on this server.",
     }, 400);
   }
 });
@@ -166,7 +176,7 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
       include: { group: true },
     });
 
-    deployInBackground();
+    deployInBackground(existing.server);
 
     return c.json<ApiResponse<WhitelistEntry>>({ success: true, data: toEntry(entry) });
   } catch {
@@ -178,6 +188,7 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
 });
 
 const bulkAddSchema = z.object({
+  server: z.string().min(1).default("main"),
   entries: z.array(z.object({
     steamId: z.string().min(1),
     name: z.string().optional(),
@@ -190,7 +201,7 @@ const bulkAddSchema = z.object({
 
 whitelist.post("/bulk", requirePermission("manage:whitelist"), zValidator("json", bulkAddSchema), async (c) => {
   const userId = c.get("userId");
-  const { entries } = c.req.valid("json");
+  const { server, entries } = c.req.valid("json");
 
   let created = 0;
   let skipped = 0;
@@ -200,6 +211,7 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), zValidator("json"
       await prisma.whitelistEntry.create({
         data: {
           steamId: entry.steamId,
+          server,
           name: entry.name ?? null,
           clan: entry.clan ?? null,
           role: entry.role ?? null,
@@ -214,7 +226,7 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), zValidator("json"
     }
   }
 
-  deployInBackground();
+  deployInBackground(server);
 
   return c.json<ApiResponse<{ created: number; skipped: number }>>({
     success: true,
@@ -232,7 +244,7 @@ whitelist.delete("/:id", requirePermission("manage:whitelist"), async (c) => {
 
   await prisma.whitelistEntry.delete({ where: { id } });
 
-  deployInBackground();
+  deployInBackground(existing.server);
 
   return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
 });

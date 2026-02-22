@@ -5,6 +5,7 @@ import type {
   WhitelistEntry,
   WhitelistCandidate,
   AdminGroup,
+  ServerConfig,
   UserWithRoles,
   Ticket,
   Prospect,
@@ -65,9 +66,11 @@ export function getMe(token: string): Promise<ApiResponse<AuthMeResponse>> {
 
 // Whitelist
 export function getWhitelist(
-  token: string
+  token: string,
+  server?: string
 ): Promise<ApiResponse<WhitelistEntry[]>> {
-  return request<WhitelistEntry[]>("/whitelist", {
+  const qs = server ? `?server=${encodeURIComponent(server)}` : "";
+  return request<WhitelistEntry[]>(`/whitelist${qs}`, {
     headers: authHeaders(token),
   });
 }
@@ -75,7 +78,7 @@ export function getWhitelist(
 export function addWhitelistEntry(
   token: string,
   steamId: string,
-  opts?: { name?: string; clan?: string; role?: string; groupId?: string; reason?: string; expiresAt?: string }
+  opts?: { name?: string; clan?: string; role?: string; groupId?: string; reason?: string; expiresAt?: string; server?: string }
 ): Promise<ApiResponse<WhitelistEntry>> {
   return request<WhitelistEntry>("/whitelist", {
     method: "POST",
@@ -108,19 +111,22 @@ export function deleteWhitelistEntry(
 
 export function bulkAddWhitelist(
   token: string,
-  entries: { steamId: string; name?: string; clan?: string; role?: string; groupId?: string; reason?: string }[]
+  entries: { steamId: string; name?: string; clan?: string; role?: string; groupId?: string; reason?: string }[],
+  server?: string
 ): Promise<ApiResponse<{ created: number; skipped: number }>> {
   return request<{ created: number; skipped: number }>("/whitelist/bulk", {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ entries }),
+    body: JSON.stringify({ entries, server: server || "main" }),
   });
 }
 
 export function getWhitelistCandidates(
-  token: string
+  token: string,
+  server?: string
 ): Promise<ApiResponse<WhitelistCandidate[]>> {
-  return request<WhitelistCandidate[]>("/whitelist/candidates", {
+  const qs = server ? `?server=${encodeURIComponent(server)}` : "";
+  return request<WhitelistCandidate[]>(`/whitelist/candidates${qs}`, {
     headers: authHeaders(token),
   });
 }
@@ -395,6 +401,25 @@ export function deleteMatch(
 ): Promise<ApiResponse<{ deleted: true }>> {
   return request<{ deleted: true }>(`/matches/${id}`, {
     method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+// Server Config
+export function getServerConfigs(
+  token: string
+): Promise<ApiResponse<ServerConfig[]>> {
+  return request<ServerConfig[]>("/server-config", {
+    headers: authHeaders(token),
+  });
+}
+
+export function toggleServerSync(
+  token: string,
+  server: string
+): Promise<ApiResponse<ServerConfig>> {
+  return request<ServerConfig>(`/server-config/${encodeURIComponent(server)}/sync`, {
+    method: "PUT",
     headers: authHeaders(token),
   });
 }

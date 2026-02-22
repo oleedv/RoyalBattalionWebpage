@@ -44,6 +44,7 @@ const EVENTS_TO_RELAY = [
   "NEW_GAME",
   "TEAMKILL",
   "PLAYER_WOUNDED",
+  "PLAYER_DIED",
   "PLAYER_REVIVED",
   "UPDATED_PLAYER_INFORMATION",
   "UPDATED_A2S_INFORMATION",
@@ -57,7 +58,7 @@ const EVENTS_TO_RELAY = [
 
 export interface ConsoleEntry {
   time: string;
-  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "newgame";
+  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "kill" | "newgame";
   message: string;
 }
 
@@ -283,6 +284,13 @@ class SquadJSSocketManager {
         if (ab?.message) this.addConsoleEntry(state, "broadcast", `Broadcast: ${ab.message}`);
         break;
       }
+      case "PLAYER_DIED": {
+        const pd2 = data as { attacker?: { name?: string }; victim?: { name?: string }; weapon?: string };
+        if (pd2?.attacker?.name && pd2?.victim?.name) {
+          this.addConsoleEntry(state, "kill", `${pd2.attacker.name} killed ${pd2.victim.name}${pd2.weapon ? ` (${pd2.weapon})` : ""}`);
+        }
+        break;
+      }
       case "TEAMKILL": {
         const tk = data as { attacker?: { name?: string }; victim?: { name?: string }; weapon?: string };
         this.addConsoleEntry(state, "teamkill", `${tk?.attacker?.name || "Unknown"} teamkilled ${tk?.victim?.name || "Unknown"}${tk?.weapon ? ` (${tk.weapon})` : ""}`);
@@ -306,6 +314,10 @@ class SquadJSSocketManager {
   onEvent(callback: EventCallback): () => void {
     this.listeners.add(callback);
     return () => this.listeners.delete(callback);
+  }
+
+  clearListeners() {
+    this.listeners.clear();
   }
 
   getServerKeys(): string[] {

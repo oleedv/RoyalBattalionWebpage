@@ -1,12 +1,13 @@
 import prisma from "./db";
 
-export async function generateAdminsCfg(): Promise<string> {
+export async function generateAdminsCfg(server?: string): Promise<string> {
   const groups = await prisma.adminGroup.findMany({
     orderBy: { sortOrder: "asc" },
   });
 
   const entries = await prisma.whitelistEntry.findMany({
     where: {
+      ...(server ? { server } : {}),
       OR: [
         { expiresAt: null },
         { expiresAt: { gt: new Date() } },

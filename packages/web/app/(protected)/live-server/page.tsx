@@ -68,14 +68,14 @@ type WSMessage =
 
 interface ConsoleEntry {
   time: string;
-  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "newgame" | "wound" | "revive" | "squad";
+  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "kill" | "newgame" | "wound" | "revive" | "squad";
   message: string;
 }
 
 type ChatFilter = "All" | "ChatAll" | "ChatTeam" | "ChatSquad" | "ChatAdmin";
 
 const CONSOLE_TYPES: ConsoleEntry["type"][] = [
-  "warn", "kick", "ban", "broadcast", "connect", "disconnect", "teamkill", "newgame", "wound", "revive", "squad",
+  "warn", "kick", "ban", "broadcast", "connect", "disconnect", "teamkill", "kill", "newgame", "wound", "revive", "squad",
 ];
 
 const WARN_TEMPLATES = [
@@ -116,6 +116,7 @@ export default function LiveServerPage() {
   const [team1Search, setTeam1Search] = useState("");
   const [team2Search, setTeam2Search] = useState("");
   const [consoleFilters, setConsoleFilters] = useState<Set<ConsoleEntry["type"]>>(new Set(CONSOLE_TYPES));
+  const [consoleFilterOpen, setConsoleFilterOpen] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -270,6 +271,13 @@ export default function LiveServerPage() {
         }
         break;
       }
+      case "PLAYER_DIED": {
+        const pd2 = data as { attacker?: { name?: string }; victim?: { name?: string }; weapon?: string };
+        if (pd2?.attacker?.name && pd2?.victim?.name) {
+          addConsoleEntry("kill", `${pd2.attacker.name} killed ${pd2.victim.name}${pd2.weapon ? ` (${pd2.weapon})` : ""}`);
+        }
+        break;
+      }
       case "PLAYER_REVIVED": {
         const pr = data as { reviver?: { name?: string }; victim?: { name?: string } };
         if (pr?.reviver?.name && pr?.victim?.name) {
@@ -295,7 +303,16 @@ export default function LiveServerPage() {
   }
 
   const connectWs = useCallback(() => {
-    if (!apiToken || wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (!apiToken) return;
+    // Clean up any existing connection without triggering reconnect
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+    }
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current);
+      reconnectRef.current = null;
+    }
 
     const ws = new WebSocket(`${WS_BASE}/live-server/ws?token=${apiToken}`);
     wsRef.current = ws;
@@ -303,8 +320,10 @@ export default function LiveServerPage() {
     ws.onopen = () => setConnected(true);
     ws.onclose = () => {
       setConnected(false);
-      // Reconnect after 3 seconds
-      reconnectRef.current = setTimeout(connectWs, 3000);
+      // Only reconnect if this is still the active WebSocket
+      if (wsRef.current === ws) {
+        reconnectRef.current = setTimeout(connectWs, 3000);
+      }
     };
     ws.onerror = (err) => {
       console.error("[live-server] WebSocket error:", err);
@@ -318,8 +337,15 @@ export default function LiveServerPage() {
     connectWs();
 
     return () => {
-      if (reconnectRef.current) clearTimeout(reconnectRef.current);
-      wsRef.current?.close();
+      if (reconnectRef.current) {
+        clearTimeout(reconnectRef.current);
+        reconnectRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     };
   }, [apiToken, canView, connectWs]);
 
@@ -423,6 +449,7 @@ export default function LiveServerPage() {
       case "connect": return "text-success";
       case "disconnect": return "text-text-muted";
       case "teamkill": return "text-danger/70";
+      case "kill": return "text-red-400";
       case "wound": return "text-orange-400/70";
       case "revive": return "text-emerald-400";
       case "squad": return "text-blue-400";
@@ -742,31 +769,56 @@ export default function LiveServerPage() {
           {/* Console */}
           <div className="facet-border flex flex-col rounded-sm bg-bg-card" style={{ height: "300px" }}>
             <div className="border-b border-border px-4 py-2">
-              <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center justify-between">
                 <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
                   Console
                 </h2>
-                <button
-                  onClick={() => setConsoleLog([])}
-                  className="text-[10px] text-text-muted transition-colors hover:text-text-secondary"
-                >
-                  Clear
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {CONSOLE_TYPES.map((t) => (
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <button
+                      onClick={() => setConsoleFilterOpen((v) => !v)}
+                      className="flex items-center gap-1 text-[10px] text-text-muted transition-colors hover:text-text-secondary"
+                    >
+                      Filters
+                      {consoleFilters.size < CONSOLE_TYPES.length && (
+                        <span className="rounded-sm bg-accent/15 px-1 text-[9px] font-bold text-accent">
+                          {consoleFilters.size}/{CONSOLE_TYPES.length}
+                        </span>
+                      )}
+                    </button>
+                    {consoleFilterOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setConsoleFilterOpen(false)}
+                        />
+                        <div className="absolute right-0 top-full z-50 mt-1 rounded-sm border border-border bg-bg-secondary p-2 shadow-lg">
+                          <div className="flex flex-wrap gap-1" style={{ width: "220px" }}>
+                            {CONSOLE_TYPES.map((t) => (
+                              <button
+                                key={t}
+                                onClick={() => toggleConsoleFilter(t)}
+                                className={`rounded-sm px-1.5 py-0.5 text-[9px] font-medium tracking-wide transition-colors ${
+                                  consoleFilters.has(t)
+                                    ? "bg-accent/10 text-accent"
+                                    : "text-text-muted/50 line-through"
+                                }`}
+                              >
+                                {t}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                   <button
-                    key={t}
-                    onClick={() => toggleConsoleFilter(t)}
-                    className={`rounded-sm px-1.5 py-0.5 text-[9px] font-medium tracking-wide transition-colors ${
-                      consoleFilters.has(t)
-                        ? "bg-accent/10 text-accent"
-                        : "text-text-muted/50 line-through"
-                    }`}
+                    onClick={() => setConsoleLog([])}
+                    className="text-[10px] text-text-muted transition-colors hover:text-text-secondary"
                   >
-                    {t}
+                    Clear
                   </button>
-                ))}
+                </div>
               </div>
             </div>
             <div className="flex-1 overflow-auto px-4 py-2 font-mono">

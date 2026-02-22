@@ -12,9 +12,11 @@ import {
   createAdminGroup,
   updateAdminGroup,
   deleteAdminGroup,
+  getServerConfigs,
+  toggleServerSync,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
-import type { WhitelistEntry, WhitelistCandidate, AdminGroup } from "shared";
+import type { WhitelistEntry, WhitelistCandidate, AdminGroup, ServerConfig } from "shared";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -35,6 +37,12 @@ interface ParsedImportRow {
   error: boolean;
 }
 
+// Default servers if no ServerConfig exists in DB
+const DEFAULT_SERVERS = [
+  { server: "main", label: "Main Server" },
+  { server: "battle", label: "Battle Server" },
+];
+
 // --- Expiry helpers ---
 function formatExpiry(expiresAt: string | null): { label: string; expired: boolean } | null {
   if (!expiresAt) return null;
@@ -48,36 +56,59 @@ function formatExpiry(expiresAt: string | null): { label: string; expired: boole
   return { label: `${hours}h left`, expired: false };
 }
 
+function getStoredDefaultServer(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("rb-default-server") || "";
+}
+
 export default function WhitelistPage() {
   const { apiToken, hasPermission } = usePermissions();
   const canManage = hasPermission("manage:whitelist");
+  const isAdmin = hasPermission("admin");
 
   const [tab, setTab] = useState<Tab>("entries");
   const [entries, setEntries] = useState<WhitelistEntry[]>([]);
   const [candidates, setCandidates] = useState<WhitelistCandidate[]>([]);
   const [groups, setGroups] = useState<AdminGroup[]>([]);
+  const [serverConfigs, setServerConfigs] = useState<ServerConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Server selection
+  const [servers, setServers] = useState<{ server: string; label: string }[]>(DEFAULT_SERVERS);
+  const [activeServer, setActiveServer] = useState<string>("");
 
   // Dismissed candidates (client-side only)
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
+  // Toggling sync
+  const [togglingSync, setTogglingSync] = useState(false);
+
+  // Initialize: fetch server configs then load data for default server
   useEffect(() => {
     async function init() {
       if (!apiToken) return;
       try {
-        const [wlRes, grpRes] = await Promise.all([
-          getWhitelist(apiToken),
-          getAdminGroups(apiToken),
-        ]);
-        if (wlRes.success && wlRes.data) setEntries(wlRes.data);
-        else setError(wlRes.error || "Failed to load whitelist");
-        if (grpRes.success && grpRes.data) setGroups(grpRes.data);
-
-        if (canManage) {
-          const candRes = await getWhitelistCandidates(apiToken);
-          if (candRes.success && candRes.data) setCandidates(candRes.data);
+        // Fetch server configs
+        const configRes = await getServerConfigs(apiToken);
+        if (configRes.success && configRes.data && configRes.data.length > 0) {
+          setServerConfigs(configRes.data);
+          const srvList = configRes.data.map((c) => ({ server: c.server, label: c.label }));
+          setServers(srvList);
+          // Use stored default or first server
+          const stored = getStoredDefaultServer();
+          const initial = srvList.find((s) => s.server === stored)?.server || srvList[0].server;
+          setActiveServer(initial);
+        } else {
+          // No configs in DB, use defaults
+          const stored = getStoredDefaultServer();
+          const initial = DEFAULT_SERVERS.find((s) => s.server === stored)?.server || "main";
+          setActiveServer(initial);
         }
+
+        // Fetch groups (shared across servers)
+        const grpRes = await getAdminGroups(apiToken);
+        if (grpRes.success && grpRes.data) setGroups(grpRes.data);
       } catch {
         setError("Failed to initialize");
       } finally {
@@ -85,20 +116,88 @@ export default function WhitelistPage() {
       }
     }
     init();
-  }, [apiToken, canManage]);
+  }, [apiToken]);
+
+  // Fetch entries and candidates when active server changes
+  useEffect(() => {
+    async function loadServer() {
+      if (!apiToken || !activeServer) return;
+      try {
+        const wlRes = await getWhitelist(apiToken, activeServer);
+        if (wlRes.success && wlRes.data) setEntries(wlRes.data);
+        else setError(wlRes.error || "Failed to load whitelist");
+
+        if (canManage) {
+          const candRes = await getWhitelistCandidates(apiToken, activeServer);
+          if (candRes.success && candRes.data) setCandidates(candRes.data);
+        }
+      } catch {
+        setError("Failed to load whitelist");
+      }
+    }
+    loadServer();
+  }, [apiToken, activeServer, canManage]);
+
+  async function handleToggleSync() {
+    if (!apiToken || !activeServer) return;
+    setTogglingSync(true);
+    const res = await toggleServerSync(apiToken, activeServer);
+    if (res.success && res.data) {
+      setServerConfigs((prev) =>
+        prev.map((c) => (c.server === activeServer ? res.data! : c))
+      );
+    }
+    setTogglingSync(false);
+  }
 
   if (loading) return <div className="text-text-secondary">Loading whitelist...</div>;
   if (error) return <div className="text-danger">{error}</div>;
 
   const pendingCandidates = candidates.filter((c) => !dismissed.has(c.userId));
+  const currentConfig = serverConfigs.find((c) => c.server === activeServer);
 
   return (
     <div>
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between">
         <h1 className="font-display text-3xl font-bold tracking-wide">Whitelist</h1>
         <span className="rounded-sm border border-accent/20 bg-accent/10 px-3 py-1 text-sm text-accent">
           {entries.length} entries
         </span>
+      </div>
+
+      {/* Server tabs */}
+      <div className="mb-6 flex items-center gap-3">
+        <div className="flex gap-1 rounded-sm border border-border bg-bg-tertiary p-1">
+          {servers.map((s) => (
+            <button
+              key={s.server}
+              onClick={() => setActiveServer(s.server)}
+              className={`rounded-sm px-4 py-2 text-sm font-medium tracking-wide transition-all ${
+                activeServer === s.server
+                  ? "bg-accent/10 text-accent border border-accent/20"
+                  : "text-text-secondary hover:text-text-primary border border-transparent"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        {/* SFTP Sync toggle (admin only) */}
+        {isAdmin && currentConfig && (
+          <button
+            onClick={handleToggleSync}
+            disabled={togglingSync}
+            className={`ml-auto flex items-center gap-2 rounded-sm border px-4 py-2 text-sm font-medium tracking-wide transition-all disabled:opacity-50 ${
+              currentConfig.syncEnabled
+                ? "border-success/30 bg-success/10 text-success"
+                : "border-border bg-bg-tertiary text-text-muted"
+            }`}
+          >
+            <span className={`inline-block h-2 w-2 rounded-full ${currentConfig.syncEnabled ? "bg-success" : "bg-text-muted"}`} />
+            SFTP Sync {currentConfig.syncEnabled ? "On" : "Off"}
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -133,6 +232,7 @@ export default function WhitelistPage() {
           groups={groups}
           apiToken={apiToken}
           canManage={canManage}
+          activeServer={activeServer}
         />
       )}
       {tab === "requests" && (
@@ -145,6 +245,7 @@ export default function WhitelistPage() {
           setDismissed={setDismissed}
           apiToken={apiToken}
           canManage={canManage}
+          activeServer={activeServer}
         />
       )}
       {tab === "groups" && (
@@ -169,12 +270,14 @@ function EntriesTab({
   groups,
   apiToken,
   canManage,
+  activeServer,
 }: {
   entries: WhitelistEntry[];
   setEntries: React.Dispatch<React.SetStateAction<WhitelistEntry[]>>;
   groups: AdminGroup[];
   apiToken: string | null;
   canManage: boolean;
+  activeServer: string;
 }) {
   const [search, setSearch] = useState("");
 
@@ -224,6 +327,7 @@ function EntriesTab({
       groupId: newGroupId || undefined,
       reason: newReason.trim() || undefined,
       expiresAt: newExpiresAt || undefined,
+      server: activeServer,
     });
 
     if (res.success && res.data) {
@@ -281,7 +385,7 @@ function EntriesTab({
   }
 
   function handleExport() {
-    window.open(`${BASE_URL}/admins.cfg`, "_blank");
+    window.open(`${BASE_URL}/admins.cfg?server=${encodeURIComponent(activeServer)}`, "_blank");
   }
 
   async function handleReviewCfg() {
@@ -289,7 +393,7 @@ function EntriesTab({
     setCfgLoading(true);
     setCfgCopied(false);
     try {
-      const res = await fetch(`${BASE_URL}/admins.cfg`);
+      const res = await fetch(`${BASE_URL}/admins.cfg?server=${encodeURIComponent(activeServer)}`);
       setCfgContent(await res.text());
     } catch {
       setCfgContent("Failed to load admins.cfg");
@@ -339,12 +443,13 @@ function EntriesTab({
         name: r.name || undefined,
         clan: r.clan || undefined,
         role: r.role || undefined,
-      }))
+      })),
+      activeServer
     );
 
     if (res.success && res.data) {
       setImportStatus(`Imported ${res.data.created} entries, ${res.data.skipped} skipped`);
-      const wlRes = await getWhitelist(apiToken);
+      const wlRes = await getWhitelist(apiToken, activeServer);
       if (wlRes.success && wlRes.data) setEntries(wlRes.data);
       setShowImportModal(false);
     } else {
@@ -534,7 +639,7 @@ function EntriesTab({
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="flex w-full max-w-3xl flex-col rounded-sm border border-border bg-bg-secondary" style={{ maxHeight: "80vh" }}>
               <div className="flex items-center justify-between border-b border-border px-6 py-4">
-                <h2 className="font-display text-lg font-semibold tracking-wide">admins.cfg</h2>
+                <h2 className="font-display text-lg font-semibold tracking-wide">admins.cfg ({activeServer})</h2>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleCopyCfg}
@@ -565,7 +670,7 @@ function EntriesTab({
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="w-full max-w-3xl rounded-sm border border-border bg-bg-secondary p-6">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-display text-lg font-semibold tracking-wide">Import Whitelist</h2>
+                <h2 className="font-display text-lg font-semibold tracking-wide">Import Whitelist ({activeServer})</h2>
                 <button onClick={() => setShowImportModal(false)} className="text-text-muted transition-colors hover:text-text-primary">x</button>
               </div>
 
@@ -648,6 +753,7 @@ function RequestsTab({
   setDismissed,
   apiToken,
   canManage,
+  activeServer,
 }: {
   candidates: WhitelistCandidate[];
   groups: AdminGroup[];
@@ -657,6 +763,7 @@ function RequestsTab({
   setDismissed: React.Dispatch<React.SetStateAction<Set<string>>>;
   apiToken: string | null;
   canManage: boolean;
+  activeServer: string;
 }) {
   const [approving, setApproving] = useState<string | null>(null);
   const [approveGroupId, setApproveGroupId] = useState<Record<string, string>>({});
@@ -669,6 +776,7 @@ function RequestsTab({
     const res = await addWhitelistEntry(apiToken, candidate.steamId, {
       name: candidate.discordName,
       groupId,
+      server: activeServer,
     });
 
     if (res.success && res.data) {

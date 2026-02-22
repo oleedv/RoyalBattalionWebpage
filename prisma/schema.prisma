@@ -58,7 +58,8 @@ model AdminGroup {
 
 model WhitelistEntry {
   id        String      @id @default(cuid())
-  steamId   String      @unique
+  steamId   String
+  server    String      @default("main")
   name      String?
   clan      String?
   role      String?
@@ -68,6 +69,20 @@ model WhitelistEntry {
   reason    String?
   expiresAt DateTime?
   createdAt DateTime    @default(now())
+
+  @@unique([steamId, server])
+}
+
+model ServerConfig {
+  id          String  @id @default(cuid())
+  server      String  @unique
+  label       String
+  sftpHost    String?
+  sftpPort    Int     @default(22)
+  sftpUser    String?
+  sftpPass    String?
+  sftpPath    String?
+  syncEnabled Boolean @default(true)
 }
 
 model Match {

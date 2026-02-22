@@ -33,6 +33,7 @@ export interface AdminGroup {
 export interface WhitelistEntry {
   id: string;
   steamId: string;
+  server: string;
   name: string | null;
   clan: string | null;
   role: string | null;
@@ -42,6 +43,18 @@ export interface WhitelistEntry {
   reason: string | null;
   expiresAt: string | null;
   createdAt: string;
+}
+
+export interface ServerConfig {
+  id: string;
+  server: string;
+  label: string;
+  sftpHost: string | null;
+  sftpPort: number;
+  sftpUser: string | null;
+  sftpPass: string | null;
+  sftpPath: string | null;
+  syncEnabled: boolean;
 }
 
 export interface WhitelistCandidate {

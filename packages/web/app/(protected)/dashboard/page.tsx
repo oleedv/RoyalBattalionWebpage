@@ -86,14 +86,27 @@ function Sparkline({ lines, height = 64 }: { lines: SparklineLine[]; height?: nu
 
 /* ── Server Card ────────────────────────────────────────────────────── */
 
-function ServerStatusCard({ server, metrics }: { server: ServerStatus; metrics?: MetricSample[] }) {
+interface SquadJSMetrics {
+  metricHistory: MetricSample[];
+  playerCount: number;
+  publicQueue: number;
+  reserveQueue: number;
+  maxPlayers: number;
+}
+
+function ServerStatusCard({ server, sqMetrics }: { server: ServerStatus; sqMetrics?: SquadJSMetrics }) {
   const isOnline = server.status === "online";
   const meta = Object.values(SERVER_META).find((m) =>
     server.name.toLowerCase().includes(m.label.toLowerCase().split(" ")[0].toLowerCase())
   ) || { label: server.name, connectUrl: "#" };
 
-  const playerData = metrics?.map((s) => s.playerCount) || [];
-  const queueData = metrics?.map((s) => s.publicQueue + s.reserveQueue) || [];
+  // Prefer SquadJS data when available (more real-time)
+  const players = sqMetrics ? sqMetrics.playerCount : server.players;
+  const maxPlayers = sqMetrics?.maxPlayers || server.maxPlayers;
+  const queue = sqMetrics ? sqMetrics.publicQueue + sqMetrics.reserveQueue : 0;
+
+  const playerData = sqMetrics?.metricHistory.map((s) => s.playerCount) || [];
+  const queueData = sqMetrics?.metricHistory.map((s) => s.publicQueue + s.reserveQueue) || [];
 
   return (
     <div className="facet-border group rounded-sm bg-bg-card transition-colors hover:bg-bg-card-hover">
@@ -118,17 +131,24 @@ function ServerStatusCard({ server, metrics }: { server: ServerStatus; metrics?:
           </div>
         </div>
 
-        <div className="mb-3 flex items-baseline gap-1">
-          <span className="font-display text-3xl font-bold tracking-wide text-text-primary">
-            {server.players}
-          </span>
-          <span className="text-sm text-text-muted">/ {server.maxPlayers}</span>
+        <div className="mb-3 flex items-baseline gap-2">
+          <div className="flex items-baseline gap-1">
+            <span className="font-display text-3xl font-bold tracking-wide text-text-primary">
+              {players}
+            </span>
+            <span className="text-sm text-text-muted">/ {maxPlayers}</span>
+          </div>
+          {queue > 0 && (
+            <span className="rounded-sm bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+              +{queue} queue
+            </span>
+          )}
         </div>
 
         <div className="mb-3 h-1 w-full overflow-hidden rounded-full bg-bg-tertiary">
           <div
             className="h-full rounded-full bg-accent transition-all duration-500"
-            style={{ width: `${(server.players / server.maxPlayers) * 100}%` }}
+            style={{ width: `${(players / maxPlayers) * 100}%` }}
           />
         </div>
 
@@ -415,17 +435,30 @@ export default function DashboardPage() {
       ) : stats?.servers && stats.servers.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2">
           {stats.servers.map((server) => {
+            // Match SquadJS metrics to BattleMetrics servers using multi-word fuzzy matching
             const metricsEntry = stats.serverMetrics
-              ? Object.values(stats.serverMetrics).find((m) =>
-                  server.name.toLowerCase().includes(m.serverName.toLowerCase().split(" ")[0].toLowerCase()) ||
-                  m.serverName.toLowerCase().includes(server.name.toLowerCase().split(" ")[0].toLowerCase())
-                )
+              ? Object.entries(stats.serverMetrics).find(([key, m]) => {
+                  const bmWords = server.name.toLowerCase().split(/[\s|_-]+/).filter((w) => w.length > 2);
+                  const sqWords = m.serverName.toLowerCase().split(/[\s|_-]+/).filter((w) => w.length > 2);
+                  // Match if any significant word appears in both names, or the key matches
+                  return bmWords.some((w) => sqWords.some((sw) => sw.includes(w) || w.includes(sw)))
+                    || server.name.toLowerCase().includes(key.toLowerCase());
+                })?.[1]
+              : undefined;
+            const sqMetrics: SquadJSMetrics | undefined = metricsEntry
+              ? {
+                  metricHistory: metricsEntry.metricHistory as MetricSample[],
+                  playerCount: (metricsEntry as any).playerCount ?? 0,
+                  publicQueue: (metricsEntry as any).publicQueue ?? 0,
+                  reserveQueue: (metricsEntry as any).reserveQueue ?? 0,
+                  maxPlayers: (metricsEntry as any).maxPlayers ?? 0,
+                }
               : undefined;
             return (
               <ServerStatusCard
                 key={server.id}
                 server={server}
-                metrics={metricsEntry?.metricHistory}
+                sqMetrics={sqMetrics}
               />
             );
           })}

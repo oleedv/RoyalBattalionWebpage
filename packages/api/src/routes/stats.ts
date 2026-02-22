@@ -21,14 +21,25 @@ stats.get("/summary", async (c) => {
     result.servers = data;
   });
 
-  // SquadJS metric history - keyed by server name for frontend matching
-  const serverMetrics: Record<string, { serverName: string; metricHistory: unknown[] }> = {};
+  // SquadJS metric history + current counts - keyed by server key for frontend matching
+  const serverMetrics: Record<string, {
+    serverName: string;
+    metricHistory: unknown[];
+    playerCount: number;
+    publicQueue: number;
+    reserveQueue: number;
+    maxPlayers: number;
+  }> = {};
   for (const key of squadjsSocket.getServerKeys()) {
     const snapshot = squadjsSocket.getSnapshot(key);
     if (snapshot) {
       serverMetrics[key] = {
         serverName: snapshot.serverInfo?.serverName || key,
         metricHistory: snapshot.metricHistory,
+        playerCount: snapshot.serverInfo?.playerCount ?? 0,
+        publicQueue: snapshot.serverInfo?.publicQueue ?? 0,
+        reserveQueue: snapshot.serverInfo?.reserveQueue ?? 0,
+        maxPlayers: snapshot.serverInfo?.maxPlayers ?? 0,
       };
     }
   }

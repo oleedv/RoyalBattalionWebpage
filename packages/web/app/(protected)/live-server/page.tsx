@@ -325,10 +325,10 @@ export default function LiveServerPage() {
     return <div className="text-danger">Insufficient permissions.</div>;
   }
 
-  const team1 = players.filter((p) => p.teamID === "1");
-  const team2 = players.filter((p) => p.teamID === "2");
+  const team1 = players.filter((p) => String(p.teamID) === "1");
+  const team2 = players.filter((p) => String(p.teamID) === "2");
   const unassigned = players.filter(
-    (p) => p.teamID !== "1" && p.teamID !== "2"
+    (p) => String(p.teamID) !== "1" && String(p.teamID) !== "2"
   );
 
   const filteredChat =
@@ -522,29 +522,37 @@ export default function LiveServerPage() {
                   No chat messages yet
                 </div>
               ) : (
-                filteredChat.map((msg, i) => (
-                  <div key={i} className="mb-1.5 text-xs">
-                    <span className="text-text-muted">
-                      {new Date(msg.time).toLocaleTimeString("en-GB", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>{" "}
-                    <span
-                      className={`font-medium ${
-                        msg.chat === "ChatAdmin"
-                          ? "text-warning"
-                          : msg.chat === "ChatTeam"
-                            ? "text-accent"
-                            : "text-text-primary"
-                      }`}
-                    >
-                      [{msg.chat?.replace("Chat", "") || "?"}]
-                    </span>{" "}
-                    <span className="text-text-secondary">{msg.name}:</span>{" "}
-                    <span className="text-text-primary">{msg.message}</span>
-                  </div>
-                ))
+                filteredChat.map((msg, i) => {
+                  const player = players.find((p) => p.steamID === msg.steamID);
+                  const teamColor = String(player?.teamID) === "1"
+                    ? "text-blue-400"
+                    : String(player?.teamID) === "2"
+                      ? "text-red-400"
+                      : "text-text-secondary";
+                  return (
+                    <div key={i} className="mb-1.5 text-xs">
+                      <span className="text-text-muted">
+                        {new Date(msg.time).toLocaleTimeString("en-GB", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>{" "}
+                      <span
+                        className={`font-medium ${
+                          msg.chat === "ChatAdmin"
+                            ? "text-warning"
+                            : msg.chat === "ChatTeam"
+                              ? "text-accent"
+                              : "text-text-primary"
+                        }`}
+                      >
+                        [{msg.chat?.replace("Chat", "") || "?"}]
+                      </span>{" "}
+                      <span className={`font-medium ${teamColor}`}>{msg.name}:</span>{" "}
+                      <span className="text-text-primary">{msg.message}</span>
+                    </div>
+                  );
+                })
               )}
               <div ref={chatEndRef} />
             </div>
@@ -709,6 +717,15 @@ function TeamColumn({
   );
 }
 
+function formatRole(role: string): string {
+  // SquadJS roles: "USA_Rifleman_01", "RUS_Medic_02", "CAF_SL_01", etc.
+  const parts = role.split("_");
+  if (parts.length < 2) return role;
+  // Remove faction prefix and trailing number
+  const filtered = parts.slice(1).filter((p) => !/^\d+$/.test(p));
+  return filtered.join(" ") || role;
+}
+
 function PlayerRow({
   player,
   showActions = false,
@@ -735,6 +752,9 @@ function PlayerRow({
           </svg>
         )}
         <span className="truncate text-xs text-text-primary">{player.name}</span>
+        {player.role && (
+          <span className="flex-shrink-0 text-[10px] text-text-muted">{formatRole(player.role)}</span>
+        )}
       </div>
       {showActions && hovered && (
         <div className="flex items-center gap-1.5">

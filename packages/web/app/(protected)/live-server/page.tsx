@@ -462,15 +462,31 @@ export default function LiveServerPage() {
 
       {/* Server info bar */}
       {serverInfo && (
-        <div className="facet-border mb-6 grid grid-cols-2 gap-4 rounded-sm bg-bg-card p-4 sm:grid-cols-4 lg:grid-cols-6">
+        <div className="facet-border mb-6 grid grid-cols-2 gap-3 rounded-sm bg-bg-card p-3 sm:grid-cols-3 lg:grid-cols-6">
           <InfoCell label="Players" value={`${serverInfo.playerCount} / ${serverInfo.maxPlayers}`}>
             <Sparkline data={metricHistory.map((s) => s.playerCount)} color="var(--color-accent)" />
           </InfoCell>
           <InfoCell label="Queue" value={`${serverInfo.publicQueue + serverInfo.reserveQueue}`}>
             <Sparkline data={metricHistory.map((s) => s.publicQueue + s.reserveQueue)} color="var(--color-warning)" />
           </InfoCell>
-          <InfoCell label="Layer" value={layerName(serverInfo.currentLayer)} />
-          <InfoCell label="Next" value={layerName(serverInfo.nextLayer)} />
+          <InfoCell label="Layer" value={layerName(serverInfo.currentLayer)}>
+            {layerName(serverInfo.currentLayer) !== "--" && (
+              <MapImg
+                urls={getMapThumbnailUrls(layerName(serverInfo.currentLayer))}
+                alt=""
+                className="h-full w-full object-cover opacity-30"
+              />
+            )}
+          </InfoCell>
+          <InfoCell label="Next" value={layerName(serverInfo.nextLayer)}>
+            {layerName(serverInfo.nextLayer) !== "--" && (
+              <MapImg
+                urls={getMapThumbnailUrls(layerName(serverInfo.nextLayer))}
+                alt=""
+                className="h-full w-full object-cover opacity-30"
+              />
+            )}
+          </InfoCell>
           <InfoCell label="Tick Rate" value={tickRate ? `${tickRate.toFixed(1)}` : "--"}>
             <Sparkline data={metricHistory.map((s) => s.tickRate ?? 0)} color="var(--color-success)" />
           </InfoCell>
@@ -714,15 +730,51 @@ export default function LiveServerPage() {
 // SUB COMPONENTS
 // ============================================================
 
+const THUMBNAILS_BASE =
+  "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/maps/thumbnails";
+
+function getMapThumbnailUrls(layer: string): string[] {
+  const cleaned = layer
+    .replace(/^SEC_?\d*_?/, "")
+    .replace(/\s+/g, "_");
+
+  const m = cleaned.match(/^(.+_v)(\d+)$/);
+  if (m) {
+    const prefix = m[1];
+    const num = m[2];
+    const padded = num.padStart(2, "0");
+    if (padded !== num) {
+      return [
+        `${THUMBNAILS_BASE}/${prefix}${num}.jpg`,
+        `${THUMBNAILS_BASE}/${prefix}${padded}.jpg`,
+      ];
+    }
+  }
+  return [`${THUMBNAILS_BASE}/${cleaned}.jpg`];
+}
+
+function MapImg({ urls, alt, className }: { urls: string[]; alt: string; className?: string }) {
+  const [idx, setIdx] = useState(0);
+  if (idx >= urls.length) return null;
+  return (
+    <img
+      src={urls[idx]}
+      alt={alt}
+      className={className}
+      onError={() => setIdx((i) => i + 1)}
+    />
+  );
+}
+
 function InfoCell({ label, value, children }: { label: string; value: string; children?: React.ReactNode }) {
   return (
-    <div className="relative overflow-hidden">
-      {children && <div className="absolute inset-0 flex items-end opacity-30">{children}</div>}
-      <div className="relative">
+    <div className="relative min-h-[56px] overflow-hidden rounded-sm">
+      {children && <div className="absolute inset-0">{children}</div>}
+      <div className="relative flex h-full flex-col justify-end p-1">
         <div className="text-[10px] font-medium uppercase tracking-[0.15em] text-text-muted">
           {label}
         </div>
-        <div className="mt-0.5 truncate text-sm font-medium text-text-primary">
+        <div className="mt-0.5 truncate text-sm font-semibold text-text-primary">
           {value}
         </div>
       </div>
@@ -730,23 +782,25 @@ function InfoCell({ label, value, children }: { label: string; value: string; ch
   );
 }
 
-function Sparkline({ data, color, height = 28 }: { data: number[]; color: string; height?: number }) {
+function Sparkline({ data, color, height = 48 }: { data: number[]; color: string; height?: number }) {
   if (data.length < 2) return null;
-  const width = 80;
+  const width = 120;
   const max = Math.max(...data, 1);
   const min = Math.min(...data, 0);
   const range = max - min || 1;
-  const points = data
-    .map((v, i) => {
-      const x = (i / (data.length - 1)) * width;
-      const y = height - ((v - min) / range) * (height - 2) - 1;
-      return `${x},${y}`;
-    })
-    .join(" ");
+  const coords = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = height - ((v - min) / range) * (height - 4) - 2;
+    return { x, y };
+  });
+  const linePoints = coords.map((c) => `${c.x},${c.y}`).join(" ");
+  // Closed polygon for area fill: line points + bottom-right + bottom-left
+  const areaPoints = `${linePoints} ${width},${height} 0,${height}`;
 
   return (
-    <svg width={width} height={height} className="w-full" preserveAspectRatio="none" viewBox={`0 0 ${width} ${height}`}>
-      <polyline fill="none" stroke={color} strokeWidth="1.5" points={points} />
+    <svg width={width} height={height} className="h-full w-full" preserveAspectRatio="none" viewBox={`0 0 ${width} ${height}`}>
+      <polygon fill={color} fillOpacity="0.15" points={areaPoints} />
+      <polyline fill="none" stroke={color} strokeWidth="1.5" points={linePoints} />
     </svg>
   );
 }
@@ -894,7 +948,7 @@ function PlayerRow({
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => onSwitchTeam(player)}
-            className="rounded-sm px-1.5 py-0.5 text-[10px] text-accent transition-colors hover:bg-accent/10"
+            className="rounded-sm border border-transparent px-1.5 py-0.5 text-[10px] text-accent transition-all hover:border-accent/30 hover:bg-accent/10"
             title="Switch team"
           >
             <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -903,13 +957,13 @@ function PlayerRow({
           </button>
           <button
             onClick={() => onWarn(player)}
-            className="rounded-sm px-1.5 py-0.5 text-[10px] text-warning transition-colors hover:bg-warning/10"
+            className="rounded-sm border border-transparent px-1.5 py-0.5 text-[10px] text-warning transition-all hover:border-warning/30 hover:bg-warning/10"
           >
             Warn
           </button>
           <button
             onClick={() => onKick(player)}
-            className="rounded-sm px-1.5 py-0.5 text-[10px] text-danger transition-colors hover:bg-danger/10"
+            className="rounded-sm border border-transparent px-1.5 py-0.5 text-[10px] text-danger transition-all hover:border-danger/30 hover:bg-danger/10"
           >
             Kick
           </button>

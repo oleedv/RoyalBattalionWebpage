@@ -44,6 +44,8 @@ auth.post("/sync", zValidator("json", syncSchema), async (c) => {
       fetchGuildRoles(accessToken, guildId),
     ]);
 
+    console.log(`[auth/sync] User ${discordUser.username}(${discordUser.id}) has ${guildRoles.length} Discord roles:`, guildRoles);
+
     const avatarUrl = discordUser.avatar
       ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
       : null;
@@ -68,6 +70,8 @@ auth.post("/sync", zValidator("json", syncSchema), async (c) => {
       include: { permissions: true },
     });
 
+    console.log(`[auth/sync] Matched ${knownRoles.length}/${guildRoles.length} roles to DB:`, knownRoles.map((r) => `${r.name}(${r.discordRoleId})`));
+
     // Sync user roles: remove old, add new
     await prisma.userRole.deleteMany({ where: { userId: user.id } });
 
@@ -88,6 +92,8 @@ auth.post("/sync", zValidator("json", syncSchema), async (c) => {
         )
       ),
     ];
+
+    console.log(`[auth/sync] Final permissions for ${discordUser.username}:`, permissions);
 
     // Master user: always grant admin
     if (discordUser.id === "195412349153312768" && !permissions.includes("admin")) {

@@ -105,8 +105,9 @@ function DownloadButton({ text, filename }: { text: string; filename: string }) 
   );
 }
 
-function parseAttachments(raw: string | null): string[] {
+function parseAttachments(raw: string | string[] | null): string[] {
   if (!raw) return [];
+  if (Array.isArray(raw)) return raw.filter((u: unknown) => typeof u === "string");
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) return parsed.filter((u: unknown) => typeof u === "string");

@@ -11,6 +11,7 @@ import {
   getAvailableEnvironments,
   isConfigured,
   fetchPluginDescriptions,
+  fetchPluginFieldDescriptions,
   type Environment,
 } from "../lib/github-config";
 
@@ -33,13 +34,16 @@ squadjsConfig.get("/", requirePermission("view:squadjs", "manage:squadjs"), asyn
   });
 });
 
-// GET /descriptions -- fetch plugin descriptions from source code (must be before /:env)
+// GET /descriptions -- fetch plugin + field descriptions from source code (must be before /:env)
 squadjsConfig.get("/descriptions", requirePermission("view:squadjs", "manage:squadjs"), async (c) => {
   try {
-    const descriptions = await fetchPluginDescriptions();
-    return c.json<ApiResponse<{ descriptions: Record<string, string> }>>({
+    const [descriptions, fieldDescriptions] = await Promise.all([
+      fetchPluginDescriptions(),
+      fetchPluginFieldDescriptions(),
+    ]);
+    return c.json<ApiResponse<{ descriptions: Record<string, string>; fieldDescriptions: Record<string, Record<string, string>> }>>({
       success: true,
-      data: { descriptions },
+      data: { descriptions, fieldDescriptions },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch descriptions";

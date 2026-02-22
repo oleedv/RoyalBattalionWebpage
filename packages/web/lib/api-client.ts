@@ -414,8 +414,8 @@ export function updateSquadJSPlugins(
 
 export function getSquadJSDescriptions(
   token: string
-): Promise<ApiResponse<{ descriptions: Record<string, string> }>> {
-  return request<{ descriptions: Record<string, string> }>(
+): Promise<ApiResponse<{ descriptions: Record<string, string>; fieldDescriptions: Record<string, Record<string, string>> }>> {
+  return request<{ descriptions: Record<string, string>; fieldDescriptions: Record<string, Record<string, string>> }>(
     "/squadjs-config/descriptions",
     { headers: authHeaders(token) }
   );

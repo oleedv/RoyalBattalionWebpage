@@ -26,6 +26,7 @@ export default function SquadJSConfigPage() {
   const [showDiff, setShowDiff] = useState(false);
   const [search, setSearch] = useState("");
   const [descriptions, setDescriptions] = useState<Record<string, string>>({});
+  const [fieldDescriptions, setFieldDescriptions] = useState<Record<string, Record<string, string>>>({});
 
   // Load environments + descriptions
   useEffect(() => {
@@ -35,6 +36,9 @@ export default function SquadJSConfigPage() {
         const res = await getSquadJSDescriptions(apiToken);
         if (res.success && res.data) {
           setDescriptions(res.data.descriptions);
+          if (res.data.fieldDescriptions) {
+            setFieldDescriptions(res.data.fieldDescriptions);
+          }
         }
       } catch {
         // Non-critical, descriptions are optional
@@ -259,6 +263,7 @@ export default function SquadJSConfigPage() {
                 key={`${activeEnv}-${plugin.plugin}`}
                 plugin={plugin}
                 description={descriptions[plugin.plugin] || null}
+                fieldDescs={fieldDescriptions[plugin.plugin] || {}}
                 readOnly={!canManage}
                 onChange={(updated) => handlePluginChange(index, updated)}
               />
@@ -289,11 +294,13 @@ export default function SquadJSConfigPage() {
 function PluginCard({
   plugin,
   description,
+  fieldDescs,
   readOnly,
   onChange,
 }: {
   plugin: SquadJSPlugin;
   description: string | null;
+  fieldDescs: Record<string, string>;
   readOnly?: boolean;
   onChange: (updated: SquadJSPlugin) => void;
 }) {
@@ -388,6 +395,7 @@ function PluginCard({
                 key={key}
                 fieldKey={key}
                 value={plugin[key] as SquadJSPluginOptionValue}
+                description={fieldDescs[key] || null}
                 readOnly={readOnly}
                 onChange={(v) => handleFieldChange(key, v)}
               />
@@ -406,11 +414,13 @@ function PluginCard({
 function PluginField({
   fieldKey,
   value,
+  description,
   readOnly,
   onChange,
 }: {
   fieldKey: string;
   value: SquadJSPluginOptionValue;
+  description: string | null;
   readOnly?: boolean;
   onChange: (value: SquadJSPluginOptionValue) => void;
 }) {
@@ -433,9 +443,12 @@ function PluginField({
 
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">
+      <label className="mb-0.5 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">
         {fieldKey}
       </label>
+      {description && (
+        <p className="mb-1.5 text-[11px] text-text-muted/70">{description}</p>
+      )}
       {typeof value === "boolean" ? (
         <button
           onClick={readOnly ? undefined : () => onChange(!value)}

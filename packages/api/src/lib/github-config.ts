@@ -156,38 +156,37 @@ export function isConfigured(): boolean {
 const PLUGINS_DIR = "squad-server/plugins";
 const SKIP_FILES = new Set(["base-plugin.js", "discord-base-plugin.js", "discord-base-message-updater.js", "index.js", "readme.md"]);
 
-let descriptionCache: Record<string, string> | null = null;
-let descriptionCacheTime = 0;
+interface PluginMeta {
+  description: string;
+  fieldDescriptions: Record<string, string>;
+}
+
+let metaCache: Record<string, PluginMeta> | null = null;
+let metaCacheTime = 0;
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
-export async function fetchPluginDescriptions(): Promise<Record<string, string>> {
-  if (descriptionCache && Date.now() - descriptionCacheTime < CACHE_TTL) {
-    return descriptionCache;
-  }
-
+async function fetchPluginSources(): Promise<{ name: string; content: string }[]> {
   const token = getToken();
-  if (!token) return {};
+  if (!token) return [];
 
-  // List all files in the plugins directory
   const listRes = await fetch(
     `https://api.github.com/repos/${REPO}/contents/${PLUGINS_DIR}?ref=${BRANCH}`,
     { headers: headers() }
   );
 
-  if (!listRes.ok) return {};
+  if (!listRes.ok) return [];
 
   const files = (await listRes.json()) as { name: string; download_url: string }[];
   const pluginFiles = files.filter(
     (f) => f.name.endsWith(".js") && !SKIP_FILES.has(f.name)
   );
 
-  const descriptions: Record<string, string> = {};
-
-  // Fetch files in parallel (batched to avoid rate limits)
+  const results: { name: string; content: string }[] = [];
   const batchSize = 10;
+
   for (let i = 0; i < pluginFiles.length; i += batchSize) {
     const batch = pluginFiles.slice(i, i + batchSize);
-    const results = await Promise.all(
+    const batchResults = await Promise.all(
       batch.map(async (file) => {
         try {
           const res = await fetch(file.download_url);
@@ -200,26 +199,86 @@ export async function fetchPluginDescriptions(): Promise<Record<string, string>>
       })
     );
 
-    for (const result of results) {
-      if (!result) continue;
-
-      // Extract class name from "class XYZ extends"
-      const classMatch = result.content.match(/class\s+(\w+)\s+extends/);
-
-      // Extract description from static getter
-      const descMatch = result.content.match(
-        /static\s+get\s+description\s*\(\s*\)\s*\{[\s\S]*?return\s+['"`]([\s\S]*?)['"`]\s*;?\s*\}/
-      );
-
-      if (classMatch && descMatch) {
-        // Strip HTML tags for clean display
-        const desc = descMatch[1].replace(/<[^>]+>/g, "").trim();
-        descriptions[classMatch[1]] = desc;
-      }
+    for (const r of batchResults) {
+      if (r) results.push(r);
     }
   }
 
-  descriptionCache = descriptions;
-  descriptionCacheTime = Date.now();
+  return results;
+}
+
+function extractFieldDescriptions(content: string): Record<string, string> {
+  const fieldDescs: Record<string, string> = {};
+
+  // Extract the optionsSpecification getter body
+  const optionsMatch = content.match(
+    /static\s+get\s+optionsSpecification\s*\(\s*\)\s*\{([\s\S]*?)\n\s*\}/
+  );
+  if (!optionsMatch) return fieldDescs;
+
+  const body = optionsMatch[1];
+
+  // Match each field with its description property
+  const fieldRegex = /(\w+)\s*:\s*\{[^}]*?description\s*:\s*['"`]([\s\S]*?)['"`]/g;
+  let match;
+  while ((match = fieldRegex.exec(body)) !== null) {
+    fieldDescs[match[1]] = match[2].replace(/<[^>]+>/g, "").trim();
+  }
+
+  return fieldDescs;
+}
+
+async function fetchPluginMeta(): Promise<Record<string, PluginMeta>> {
+  if (metaCache && Date.now() - metaCacheTime < CACHE_TTL) {
+    return metaCache;
+  }
+
+  const sources = await fetchPluginSources();
+  const meta: Record<string, PluginMeta> = {};
+
+  for (const source of sources) {
+    const classMatch = source.content.match(/class\s+(\w+)\s+extends/);
+    if (!classMatch) continue;
+
+    const className = classMatch[1];
+
+    // Extract plugin description
+    const descMatch = source.content.match(
+      /static\s+get\s+description\s*\(\s*\)\s*\{[\s\S]*?return\s+['"`]([\s\S]*?)['"`]\s*;?\s*\}/
+    );
+    const description = descMatch
+      ? descMatch[1].replace(/<[^>]+>/g, "").trim()
+      : "";
+
+    // Extract field descriptions from optionsSpecification
+    const fieldDescriptions = extractFieldDescriptions(source.content);
+
+    if (description || Object.keys(fieldDescriptions).length > 0) {
+      meta[className] = { description, fieldDescriptions };
+    }
+  }
+
+  metaCache = meta;
+  metaCacheTime = Date.now();
+  return meta;
+}
+
+export async function fetchPluginDescriptions(): Promise<Record<string, string>> {
+  const meta = await fetchPluginMeta();
+  const descriptions: Record<string, string> = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (value.description) descriptions[key] = value.description;
+  }
   return descriptions;
+}
+
+export async function fetchPluginFieldDescriptions(): Promise<Record<string, Record<string, string>>> {
+  const meta = await fetchPluginMeta();
+  const fieldDescs: Record<string, Record<string, string>> = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (Object.keys(value.fieldDescriptions).length > 0) {
+      fieldDescs[key] = value.fieldDescriptions;
+    }
+  }
+  return fieldDescs;
 }

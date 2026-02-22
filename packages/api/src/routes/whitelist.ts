@@ -6,6 +6,7 @@ import prisma from "../lib/db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { triggerSftpDeploy } from "../lib/sftp-deploy";
+import { audit } from "../lib/audit";
 
 const whitelist = new Hono();
 
@@ -140,6 +141,7 @@ whitelist.post("/", requirePermission("manage:whitelist"), zValidator("json", ad
     });
 
     deployInBackground(server);
+    audit(c, "whitelist.add", "WhitelistEntry", entry.id, { steamId, server, name, role });
 
     return c.json<ApiResponse<WhitelistEntry>>({ success: true, data: toEntry(entry) }, 201);
   } catch {
@@ -177,6 +179,7 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
     });
 
     deployInBackground(existing.server);
+    audit(c, "whitelist.update", "WhitelistEntry", id, { steamId: existing.steamId, changes: body });
 
     return c.json<ApiResponse<WhitelistEntry>>({ success: true, data: toEntry(entry) });
   } catch {
@@ -227,6 +230,7 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), zValidator("json"
   }
 
   deployInBackground(server);
+  audit(c, "whitelist.bulk_add", "WhitelistEntry", null, { server, created, skipped, total: entries.length });
 
   return c.json<ApiResponse<{ created: number; skipped: number }>>({
     success: true,
@@ -245,6 +249,7 @@ whitelist.delete("/:id", requirePermission("manage:whitelist"), async (c) => {
   await prisma.whitelistEntry.delete({ where: { id } });
 
   deployInBackground(existing.server);
+  audit(c, "whitelist.delete", "WhitelistEntry", id, { steamId: existing.steamId, name: existing.name, server: existing.server });
 
   return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
 });

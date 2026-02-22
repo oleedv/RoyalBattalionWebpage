@@ -5,6 +5,7 @@ import type { ApiResponse, SquadJSPlugin } from "shared";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import prisma from "../lib/db";
+import { audit } from "../lib/audit";
 import {
   readSquadJSConfig,
   writeSquadJSConfig,
@@ -118,6 +119,9 @@ squadjsConfig.put(
         : null;
 
       await writeSquadJSConfig(env, result.raw, plugins as SquadJSPlugin[], user?.discordName ?? undefined);
+
+      const pluginNames = (plugins as SquadJSPlugin[]).map((p) => p.plugin);
+      audit(c, "squadjs.update_config", "SquadJSConfig", env, { environment: env, plugins: pluginNames });
 
       return c.json<ApiResponse<{ saved: true }>>({
         success: true,

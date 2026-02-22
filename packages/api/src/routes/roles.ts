@@ -6,6 +6,7 @@ import type { ApiResponse, DiscordRole, Permission } from "shared";
 import prisma from "../lib/db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
+import { audit } from "../lib/audit";
 
 const roles = new Hono();
 
@@ -65,6 +66,8 @@ roles.post("/", zValidator("json", createRoleSchema), async (c) => {
       grantsWhitelist: role.grantsWhitelist,
     };
 
+    audit(c, "role.create", "DiscordRole", role.id, { name, discordRoleId, permissions });
+
     return c.json<ApiResponse<DiscordRole>>({ success: true, data: result }, 201);
   } catch {
     return c.json<ApiResponse<never>>({
@@ -102,6 +105,8 @@ roles.put("/:id/permissions", zValidator("json", updatePermissionsSchema), async
     grantsWhitelist: updated!.grantsWhitelist,
   };
 
+  audit(c, "role.update_permissions", "DiscordRole", id, { name: existing.name, permissions });
+
   return c.json<ApiResponse<DiscordRole>>({ success: true, data: result });
 });
 
@@ -123,6 +128,8 @@ roles.put("/:id/whitelist-grant", zValidator("json", whitelistGrantSchema), asyn
     data: { grantsWhitelist },
   });
 
+  audit(c, "role.update_whitelist_grant", "DiscordRole", id, { name: existing.name, grantsWhitelist });
+
   return c.json<ApiResponse<{ updated: true }>>({ success: true, data: { updated: true } });
 });
 
@@ -135,6 +142,8 @@ roles.delete("/:id", async (c) => {
   }
 
   await prisma.discordRole.delete({ where: { id } });
+
+  audit(c, "role.delete", "DiscordRole", id, { name: existing.name, discordRoleId: existing.discordRoleId });
 
   return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
 });

@@ -107,6 +107,33 @@ export default function LiveServerPage() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
+  // Refs for metric sampling interval (needs current values without re-creating interval)
+  const serverInfoRef = useRef(serverInfo);
+  const tickRateRef = useRef(tickRate);
+  serverInfoRef.current = serverInfo;
+  tickRateRef.current = tickRate;
+
+  // Sample metrics every 30s from current state
+  useEffect(() => {
+    if (!connected) return;
+    const interval = setInterval(() => {
+      const si = serverInfoRef.current;
+      if (!si) return;
+      setMetricHistory((prev) => {
+        const sample: MetricSample = {
+          time: Date.now(),
+          tickRate: tickRateRef.current,
+          playerCount: si.playerCount,
+          publicQueue: si.publicQueue,
+          reserveQueue: si.reserveQueue,
+        };
+        const next = [...prev, sample];
+        return next.length > 240 ? next.slice(-240) : next;
+      });
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [connected]);
+
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
       const msg: WSMessage = JSON.parse(event.data);
@@ -166,22 +193,6 @@ export default function LiveServerPage() {
               ...(typeof a2s.publicQueue === "number" ? { publicQueue: a2s.publicQueue } : {}),
               ...(typeof a2s.reserveQueue === "number" ? { reserveQueue: a2s.reserveQueue } : {}),
             };
-          });
-          // Update metric history with latest values
-          setMetricHistory((prev) => {
-            const now = Date.now();
-            const last = prev[prev.length - 1];
-            // Only add a sample if 25+ seconds since last
-            if (last && now - last.time < 25_000) return prev;
-            const sample: MetricSample = {
-              time: now,
-              tickRate: null, // will be updated by TICK_RATE event
-              playerCount: (a2s.a2sPlayerCount as number) ?? 0,
-              publicQueue: (a2s.publicQueue as number) ?? 0,
-              reserveQueue: (a2s.reserveQueue as number) ?? 0,
-            };
-            const next = [...prev, sample];
-            return next.length > 240 ? next.slice(-240) : next;
           });
         }
         break;

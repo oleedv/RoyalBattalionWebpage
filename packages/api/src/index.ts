@@ -16,6 +16,8 @@ import { syncMatches } from "./lib/match-sync";
 import { generateAdminsCfg } from "./lib/cfg-generator";
 import { squadjsSocket } from "./lib/squadjs-socket";
 import { syncAllUserRoles } from "./lib/role-sync";
+import { auditDirect } from "./lib/audit";
+import prisma from "./lib/db";
 import type { Permission } from "shared";
 import type { ServerWebSocket } from "bun";
 
@@ -78,14 +80,37 @@ if (process.env.DISCORD_BOT_TOKEN) {
 // --- WebSocket for live server ---
 
 interface WSData {
+  wsType: "live-server" | "presence";
   userId: string;
+  userName: string;
+  avatarUrl: string | null;
   permissions: Permission[];
   canManage: boolean;
   canView: boolean;
   serverKey: string;
+  currentPage: string;
 }
 
 const wsClients = new Set<ServerWebSocket<WSData>>();
+
+// --- Presence tracking ---
+const presenceClients = new Set<ServerWebSocket<WSData>>();
+
+function broadcastPresence() {
+  const users = Array.from(presenceClients).map((ws) => ({
+    userId: ws.data.userId,
+    userName: ws.data.userName,
+    avatarUrl: ws.data.avatarUrl,
+    currentPage: ws.data.currentPage,
+  }));
+  // Deduplicate by userId (keep latest)
+  const seen = new Map<string, typeof users[0]>();
+  for (const u of users) seen.set(u.userId, u);
+  const payload = JSON.stringify({ type: "presence", users: Array.from(seen.values()) });
+  for (const ws of presenceClients) {
+    try { ws.send(payload); } catch {}
+  }
+}
 
 // Relay SquadJS events to subscribed WebSocket clients
 // Clear previous listeners first (handles bun --watch re-evaluation)
@@ -116,12 +141,17 @@ async function verifyToken(token: string): Promise<WSData | null> {
     const permissions = payload.permissions as Permission[];
     if (!userId || !permissions) return null;
     const isAdmin = permissions.includes("admin");
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { discordName: true, avatarUrl: true } });
     return {
+      wsType: "live-server" as const,
       userId,
+      userName: user?.discordName ?? "Unknown",
+      avatarUrl: user?.avatarUrl ?? null,
       permissions,
       canManage: isAdmin || permissions.includes("manage:live-server"),
       canView: isAdmin || permissions.includes("view:live-server") || permissions.includes("manage:live-server"),
       serverKey: "",
+      currentPage: "",
     };
   } catch (err) {
     console.error("[live-server] Token verification failed:", err instanceof Error ? err.message : err);
@@ -159,6 +189,27 @@ export default {
       });
     }
 
+    // Handle WebSocket upgrade for presence
+    if (url.pathname === "/presence/ws") {
+      const token = url.searchParams.get("token");
+      if (!token) {
+        return new Response("Missing token", { status: 401 });
+      }
+
+      return verifyToken(token).then((data) => {
+        if (!data) {
+          return new Response("Invalid token", { status: 401 });
+        }
+        data.wsType = "presence";
+        data.currentPage = url.searchParams.get("page") || "/dashboard";
+        const upgraded = server.upgrade(req, { data });
+        if (!upgraded) {
+          return new Response("WebSocket upgrade failed", { status: 500 });
+        }
+        return undefined as unknown as Response;
+      });
+    }
+
     // REST endpoint to list available SquadJS servers
     if (url.pathname === "/live-server/servers") {
       return app.fetch(req);
@@ -169,6 +220,13 @@ export default {
   },
   websocket: {
     open(ws: ServerWebSocket<WSData>) {
+      if (ws.data.wsType === "presence") {
+        presenceClients.add(ws);
+        console.log(`[presence] Connected (${presenceClients.size} clients)`);
+        broadcastPresence();
+        return;
+      }
+
       wsClients.add(ws);
       console.log(`[live-server] WebSocket connected (${wsClients.size} clients)`);
 
@@ -190,6 +248,18 @@ export default {
       );
     },
     message(ws: ServerWebSocket<WSData>, message: string | Buffer) {
+      if (ws.data.wsType === "presence") {
+        try {
+          const text = typeof message === "string" ? message : message.toString();
+          const msg = JSON.parse(text) as { page?: string };
+          if (msg.page) {
+            ws.data.currentPage = msg.page;
+            broadcastPresence();
+          }
+        } catch {}
+        return;
+      }
+
       try {
         const text = typeof message === "string" ? message : message.toString();
         const msg = JSON.parse(text) as {
@@ -239,6 +309,13 @@ export default {
       }
     },
     close(ws: ServerWebSocket<WSData>) {
+      if (ws.data.wsType === "presence") {
+        presenceClients.delete(ws);
+        console.log(`[presence] Disconnected (${presenceClients.size} clients)`);
+        broadcastPresence();
+        return;
+      }
+
       wsClients.delete(ws);
       console.log(`[live-server] WebSocket disconnected (${wsClients.size} clients)`);
     },
@@ -261,6 +338,7 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "warn", playerId, msg.message);
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.warn", "LiveServer", serverKey, { playerId, message: msg.message });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "warn" }));
         break;
       }
@@ -272,6 +350,7 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "kick", playerId, msg.reason || "Kicked by admin");
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.kick", "LiveServer", serverKey, { playerId, reason: msg.reason });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "kick" }));
         break;
       }
@@ -282,6 +361,7 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "broadcast", msg.message);
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.broadcast", "LiveServer", serverKey, { message: msg.message });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "broadcast" }));
         break;
 
@@ -292,6 +372,7 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "forceTeamChange", playerId);
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchteam", "LiveServer", serverKey, { playerId });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchteam" }));
         break;
       }
@@ -302,6 +383,7 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "disbandSquad", msg.teamID, msg.squadID);
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.disband", "LiveServer", serverKey, { teamID: msg.teamID, squadID: msg.squadID });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "disband" }));
         break;
       }

@@ -2,7 +2,7 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import type { ReactNode } from "react";
@@ -61,6 +61,11 @@ function canSeeNavItem(item: NavItem, permissions: Permission[]): boolean {
   return item.requiredPermissions.some((p) => permissions.includes(p));
 }
 
+function formatPageName(path: string): string {
+  const name = path.replace(/^\//, "") || "dashboard";
+  return name.split(/[-/]/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
 export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -73,6 +78,8 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const [retryCount, setRetryCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [candidateCount, setCandidateCount] = useState(0);
+  const [onlineUsers, setOnlineUsers] = useState<{ userId: string; userName: string; avatarUrl: string | null; currentPage: string }[]>([]);
+  const presenceWsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -112,6 +119,53 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
   // Close mobile menu on navigation
   useEffect(() => {
     setMobileOpen(false);
+  }, [pathname]);
+
+  // Presence WebSocket
+  useEffect(() => {
+    if (!apiToken) return;
+    let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+
+    function connect() {
+      if (cancelled) return;
+      const wsBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001").replace(/^http/, "ws");
+      const ws = new WebSocket(`${wsBase}/presence/ws?token=${apiToken}&page=${encodeURIComponent(pathname)}`);
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === "presence") {
+            setOnlineUsers(msg.users);
+          }
+        } catch {}
+      };
+      ws.onclose = () => {
+        presenceWsRef.current = null;
+        if (!cancelled) reconnectTimer = setTimeout(connect, 5000);
+      };
+      presenceWsRef.current = ws;
+    }
+
+    connect();
+    return () => {
+      cancelled = true;
+      clearTimeout(reconnectTimer);
+      const ws = presenceWsRef.current;
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+        presenceWsRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiToken]);
+
+  // Send page changes to presence WS
+  useEffect(() => {
+    const ws = presenceWsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ page: pathname }));
+    }
   }, [pathname]);
 
   if (status === "loading" || !synced) {
@@ -231,6 +285,37 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           }
         )}
       </nav>
+
+      {onlineUsers.length > 0 && (
+        <div className="border-t border-border px-4 py-3">
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+            Online ({onlineUsers.length})
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {onlineUsers.map((u) => (
+              <div key={u.userId} className="group relative">
+                {u.avatarUrl ? (
+                  <Image
+                    src={u.avatarUrl}
+                    alt={u.userName}
+                    width={28}
+                    height={28}
+                    className="rounded-full ring-2 ring-green-500/50"
+                  />
+                ) : (
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/20 text-[11px] font-bold text-accent ring-2 ring-green-500/50">
+                    {u.userName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded bg-bg-primary px-2 py-1 text-xs whitespace-nowrap opacity-0 shadow-lg ring-1 ring-border transition-opacity group-hover:opacity-100">
+                  <div className="font-medium text-text-primary">{u.userName}</div>
+                  <div className="text-text-muted">{formatPageName(u.currentPage)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="border-t border-border px-4 py-4">
         <div className="truncate text-sm text-text-secondary">

@@ -191,6 +191,7 @@ export default {
           action: string;
           server?: string;
           steamId?: string;
+          eosId?: string;
           message?: string;
           reason?: string;
         };
@@ -239,29 +240,33 @@ export default {
 
 async function handleAdminAction(
   ws: ServerWebSocket<WSData>,
-  msg: { action: string; server?: string; steamId?: string; message?: string; reason?: string }
+  msg: { action: string; server?: string; steamId?: string; eosId?: string; message?: string; reason?: string }
 ) {
   const serverKey = ws.data.serverKey;
 
   try {
     switch (msg.action) {
-      case "warn":
-        if (!msg.steamId || !msg.message) {
-          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing steamId or message" }));
+      case "warn": {
+        const playerId = msg.steamId || msg.eosId;
+        if (!playerId || !msg.message) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing player ID or message" }));
           return;
         }
-        await squadjsSocket.executeRcon(serverKey, "warn", msg.steamId, msg.message);
+        await squadjsSocket.executeRcon(serverKey, "warn", playerId, msg.message);
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "warn" }));
         break;
+      }
 
-      case "kick":
-        if (!msg.steamId) {
-          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing steamId" }));
+      case "kick": {
+        const playerId = msg.steamId || msg.eosId;
+        if (!playerId) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing player ID" }));
           return;
         }
-        await squadjsSocket.executeRcon(serverKey, "kick", msg.steamId, msg.reason || "Kicked by admin");
+        await squadjsSocket.executeRcon(serverKey, "kick", playerId, msg.reason || "Kicked by admin");
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "kick" }));
         break;
+      }
 
       case "broadcast":
         if (!msg.message) {

@@ -56,6 +56,12 @@ type WSMessage =
   | { type: "event"; event: string; data: unknown; server?: string }
   | { type: "action_result"; success: boolean; error?: string; action?: string };
 
+interface ConsoleEntry {
+  time: string;
+  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "newgame";
+  message: string;
+}
+
 type ChatFilter = "All" | "ChatAll" | "ChatTeam" | "ChatSquad" | "ChatAdmin";
 
 export default function LiveServerPage() {
@@ -83,8 +89,10 @@ export default function LiveServerPage() {
   const [kickTarget, setKickTarget] = useState<Player | null>(null);
   const [kickReason, setKickReason] = useState("");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [consoleLog, setConsoleLog] = useState<ConsoleEntry[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const consoleEndRef = useRef<HTMLDivElement>(null);
 
   const handleMessage = useCallback((event: MessageEvent) => {
     try {
@@ -159,12 +167,51 @@ export default function LiveServerPage() {
         break;
       case "NEW_GAME":
         setChatLog([]);
+        addConsoleEntry("newgame", `New game started${(data as { layerClassname?: string })?.layerClassname ? `: ${(data as { layerClassname: string }).layerClassname}` : ""}`);
         break;
-      case "PLAYER_CONNECTED":
-      case "PLAYER_DISCONNECTED":
-        // Will be updated by UPDATED_PLAYER_INFORMATION
+      case "PLAYER_CONNECTED": {
+        const pc = data as { player?: { name?: string } };
+        if (pc?.player?.name) addConsoleEntry("connect", `${pc.player.name} connected`);
         break;
+      }
+      case "PLAYER_DISCONNECTED": {
+        const pd = data as { player?: { name?: string } };
+        if (pd?.player?.name) addConsoleEntry("disconnect", `${pd.player.name} disconnected`);
+        break;
+      }
+      case "PLAYER_WARNED": {
+        const pw = data as { player?: { name?: string }; reason?: string };
+        addConsoleEntry("warn", `${pw?.player?.name || "Unknown"} warned: ${pw?.reason || "No reason"}`);
+        break;
+      }
+      case "PLAYER_KICKED": {
+        const pk = data as { player?: { name?: string }; reason?: string };
+        addConsoleEntry("kick", `${pk?.player?.name || "Unknown"} kicked: ${pk?.reason || "No reason"}`);
+        break;
+      }
+      case "PLAYER_BANNED": {
+        const pb = data as { player?: { name?: string }; reason?: string };
+        addConsoleEntry("ban", `${pb?.player?.name || "Unknown"} banned: ${pb?.reason || "No reason"}`);
+        break;
+      }
+      case "ADMIN_BROADCAST": {
+        const ab = data as { message?: string };
+        if (ab?.message) addConsoleEntry("broadcast", `Broadcast: ${ab.message}`);
+        break;
+      }
+      case "TEAMKILL": {
+        const tk = data as { attacker?: { name?: string }; victim?: { name?: string }; weapon?: string };
+        addConsoleEntry("teamkill", `${tk?.attacker?.name || "Unknown"} teamkilled ${tk?.victim?.name || "Unknown"}${tk?.weapon ? ` (${tk.weapon})` : ""}`);
+        break;
+      }
     }
+  }
+
+  function addConsoleEntry(type: ConsoleEntry["type"], message: string) {
+    setConsoleLog((prev) => {
+      const next = [...prev, { time: new Date().toISOString(), type, message }];
+      return next.length > 200 ? next.slice(-200) : next;
+    });
   }
 
   const connectWs = useCallback(() => {
@@ -196,16 +243,20 @@ export default function LiveServerPage() {
     };
   }, [apiToken, canView, connectWs]);
 
-  // Auto-scroll chat
+  // Auto-scroll chat & console
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatLog]);
+  useEffect(() => {
+    consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [consoleLog]);
 
   function switchServer(key: string) {
     setActiveServer(key);
     setPlayers([]);
     setServerInfo(null);
     setChatLog([]);
+    setConsoleLog([]);
     setTickRate(null);
     setSquadjsConnected(false);
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -231,6 +282,7 @@ export default function LiveServerPage() {
     sendAction({
       action: "warn",
       steamId: warnTarget.steamID,
+      eosId: warnTarget.eosID,
       message: warnMsg.trim(),
     });
     setWarnTarget(null);
@@ -242,6 +294,7 @@ export default function LiveServerPage() {
     sendAction({
       action: "kick",
       steamId: kickTarget.steamID,
+      eosId: kickTarget.eosID,
       reason: kickReason.trim() || "Kicked by admin",
     });
     setKickTarget(null);
@@ -252,6 +305,20 @@ export default function LiveServerPage() {
     if (!layer) return "--";
     if (typeof layer === "string") return layer;
     return layer.name || "--";
+  }
+
+  function consoleTypeColor(type: ConsoleEntry["type"]): string {
+    switch (type) {
+      case "warn": return "text-warning font-medium";
+      case "kick": return "text-danger font-medium";
+      case "ban": return "text-danger font-bold";
+      case "broadcast": return "text-accent font-medium";
+      case "connect": return "text-success";
+      case "disconnect": return "text-text-muted";
+      case "teamkill": return "text-danger/70";
+      case "newgame": return "text-accent font-bold";
+      default: return "text-text-secondary";
+    }
   }
 
   if (!canView) {
@@ -425,7 +492,7 @@ export default function LiveServerPage() {
           )}
 
           {/* Chat feed */}
-          <div className="facet-border flex flex-col rounded-sm bg-bg-card" style={{ height: "500px" }}>
+          <div className="facet-border flex flex-col rounded-sm bg-bg-card" style={{ height: "350px" }}>
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
                 Chat
@@ -480,6 +547,39 @@ export default function LiveServerPage() {
                 ))
               )}
               <div ref={chatEndRef} />
+            </div>
+          </div>
+
+          {/* Console */}
+          <div className="facet-border flex flex-col rounded-sm bg-bg-card" style={{ height: "300px" }}>
+            <div className="border-b border-border px-4 py-3">
+              <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
+                Console
+              </h2>
+            </div>
+            <div className="flex-1 overflow-auto px-4 py-2 font-mono">
+              {consoleLog.length === 0 ? (
+                <div className="py-8 text-center text-xs text-text-muted">
+                  No events yet
+                </div>
+              ) : (
+                consoleLog.map((entry, i) => (
+                  <div key={i} className="mb-1 text-xs">
+                    <span className="text-text-muted">
+                      {new Date(entry.time).toLocaleTimeString("en-GB", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
+                    </span>{" "}
+                    <span className={consoleTypeColor(entry.type)}>
+                      [{entry.type.toUpperCase()}]
+                    </span>{" "}
+                    <span className="text-text-primary">{entry.message}</span>
+                  </div>
+                ))
+              )}
+              <div ref={consoleEndRef} />
             </div>
           </div>
         </div>

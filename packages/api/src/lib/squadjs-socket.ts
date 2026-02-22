@@ -79,7 +79,9 @@ interface ServerState {
   tickRate: number | null;
   metricHistory: MetricSample[];
   metricInterval: ReturnType<typeof setInterval> | null;
+  pollInterval: ReturnType<typeof setInterval> | null;
   connected: boolean;
+  lastRcon: Map<string, number>;
 }
 
 // Parse env: SQUADJS_SERVERS="staging|ws://ip:4001|token,production|ws://ip:4000|token"
@@ -133,7 +135,9 @@ class SquadJSSocketManager {
       tickRate: null,
       metricHistory: [],
       metricInterval: null,
+      pollInterval: null,
       connected: false,
+      lastRcon: new Map(),
     };
 
     this.servers.set(key, state);
@@ -186,12 +190,24 @@ class SquadJSSocketManager {
         if (received === infoKeys.length) {
           state.serverInfo = info as SquadJSServerInfo;
           this.broadcast(key, "SNAPSHOT_SERVER_INFO", state.serverInfo);
-          // Start metric sampling once we have server info
           this.sampleMetric(state);
           this.startMetricSampling(state);
         }
       });
     }
+
+    // Lightweight poll: just refresh player list every 30s to keep count accurate
+    if (state.pollInterval) clearInterval(state.pollInterval);
+    state.pollInterval = setInterval(() => {
+      if (!state.connected) return;
+      state.socket.emit("players", (data: SquadJSPlayer[]) => {
+        if (Array.isArray(data)) {
+          state.players = data;
+          if (state.serverInfo) state.serverInfo.playerCount = data.length;
+          this.broadcast(key, "UPDATED_PLAYER_INFORMATION", data);
+        }
+      });
+    }, 30_000);
   }
 
   private addConsoleEntry(state: ServerState, type: ConsoleEntry["type"], message: string) {
@@ -220,7 +236,11 @@ class SquadJSSocketManager {
   private handleEvent(key: string, state: ServerState, event: string, data: unknown) {
     switch (event) {
       case "UPDATED_PLAYER_INFORMATION":
-        if (Array.isArray(data)) state.players = data;
+        if (Array.isArray(data)) {
+          state.players = data;
+          // Keep playerCount in sync with actual player list
+          if (state.serverInfo) state.serverInfo.playerCount = data.length;
+        }
         break;
       case "UPDATED_A2S_INFORMATION":
         if (data && typeof data === "object") {
@@ -347,6 +367,25 @@ class SquadJSSocketManager {
     if (!state || !state.connected) {
       throw new Error(`Not connected to ${serverKey}`);
     }
+
+    // Deduplication: prevent same command within 2 seconds
+    const dedupeKey = `${method}:${args.map(String).join(":")}`;
+    const now = Date.now();
+    const lastExec = state.lastRcon.get(dedupeKey);
+    if (lastExec && now - lastExec < 2000) {
+      console.warn(`[squadjs-socket] Dedup: skipping duplicate rcon.${method} on ${serverKey}`);
+      return "deduplicated";
+    }
+    state.lastRcon.set(dedupeKey, now);
+
+    // Clean old entries every 50 commands
+    if (state.lastRcon.size > 50) {
+      for (const [k, t] of state.lastRcon) {
+        if (now - t > 5000) state.lastRcon.delete(k);
+      }
+    }
+
+    console.log(`[squadjs-socket] RCON ${serverKey}: rcon.${method}(${args.map(String).join(", ")})`);
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error("RCON timeout")), 10000);

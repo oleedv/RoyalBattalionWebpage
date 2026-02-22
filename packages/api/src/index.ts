@@ -199,6 +199,8 @@ export default {
           eosId?: string;
           message?: string;
           reason?: string;
+          teamID?: string;
+          squadID?: string;
         };
 
         // Handle server switching

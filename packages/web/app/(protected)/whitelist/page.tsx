@@ -198,6 +198,12 @@ function EntriesTab({
   const [editExpiresAt, setEditExpiresAt] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
+  // Review cfg modal
+  const [showCfgModal, setShowCfgModal] = useState(false);
+  const [cfgContent, setCfgContent] = useState("");
+  const [cfgLoading, setCfgLoading] = useState(false);
+  const [cfgCopied, setCfgCopied] = useState(false);
+
   // Import modal
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState("");
@@ -278,6 +284,26 @@ function EntriesTab({
     window.open(`${BASE_URL}/admins.cfg`, "_blank");
   }
 
+  async function handleReviewCfg() {
+    setShowCfgModal(true);
+    setCfgLoading(true);
+    setCfgCopied(false);
+    try {
+      const res = await fetch(`${BASE_URL}/admins.cfg`);
+      setCfgContent(await res.text());
+    } catch {
+      setCfgContent("Failed to load admins.cfg");
+    } finally {
+      setCfgLoading(false);
+    }
+  }
+
+  function handleCopyCfg() {
+    navigator.clipboard.writeText(cfgContent);
+    setCfgCopied(true);
+    setTimeout(() => setCfgCopied(false), 1500);
+  }
+
   // Import
   function openImportModal() {
     setShowImportModal(true);
@@ -350,6 +376,12 @@ function EntriesTab({
           placeholder="Search by Steam ID, name, clan, group..."
           className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
         />
+        <button
+          onClick={handleReviewCfg}
+          className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+        >
+          Review admins.cfg
+        </button>
         <button
           onClick={handleExport}
           className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
@@ -494,6 +526,37 @@ function EntriesTab({
           </table>
         </div>
       </div>
+
+      {/* Review admins.cfg Modal */}
+      {showCfgModal && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setShowCfgModal(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="flex w-full max-w-3xl flex-col rounded-sm border border-border bg-bg-secondary" style={{ maxHeight: "80vh" }}>
+              <div className="flex items-center justify-between border-b border-border px-6 py-4">
+                <h2 className="font-display text-lg font-semibold tracking-wide">admins.cfg</h2>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleCopyCfg}
+                    disabled={cfgLoading}
+                    className="rounded-sm border border-border px-4 py-1.5 text-xs font-medium tracking-wide text-text-secondary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-40"
+                  >
+                    {cfgCopied ? "Copied!" : "Copy"}
+                  </button>
+                  <button onClick={() => setShowCfgModal(false)} className="text-text-muted transition-colors hover:text-text-primary">x</button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-auto p-6">
+                {cfgLoading ? (
+                  <div className="text-text-muted">Loading...</div>
+                ) : (
+                  <pre className="whitespace-pre font-mono text-xs leading-relaxed text-text-secondary">{cfgContent}</pre>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Import Modal */}
       {showImportModal && (

@@ -5,6 +5,30 @@ import { getUsers, updateUser, deleteUser, syncUserRoles } from "@/lib/api-clien
 import { usePermissions } from "@/lib/permission-context";
 import type { UserWithRoles } from "shared";
 
+function CopyableId({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const truncated = value.length > 12 ? value.slice(0, 8) + "..." : value;
+
+  function handleCopy() {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      title={value}
+      className="group flex items-center gap-1 text-left"
+    >
+      <code className="text-text-secondary">{truncated}</code>
+      <span className="text-[10px] text-text-muted opacity-0 transition-opacity group-hover:opacity-100">
+        {copied ? "Copied!" : "Copy"}
+      </span>
+    </button>
+  );
+}
+
 export default function MembersPage() {
   const { apiToken, hasPermission } = usePermissions();
   const [users, setUsers] = useState<UserWithRoles[]>([]);
@@ -250,7 +274,7 @@ export default function MembersPage() {
                           placeholder="EOS ID"
                         />
                       ) : user.eosId ? (
-                        <code className="text-text-secondary">{user.eosId}</code>
+                        <CopyableId value={user.eosId} />
                       ) : (
                         <span className="text-text-muted">--</span>
                       )}

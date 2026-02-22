@@ -7,7 +7,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { ReactNode } from "react";
 import type { Permission, UserWithRoles } from "shared";
-import { syncAuth } from "@/lib/api-client";
+import { syncAuth, getWhitelistCandidates } from "@/lib/api-client";
 import { PermissionProvider } from "@/lib/permission-context";
 
 interface NavItem {
@@ -72,6 +72,7 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [candidateCount, setCandidateCount] = useState(0);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -88,6 +89,13 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           setApiToken(res.data.token);
           setPermissions(res.data.permissions);
           setUser(res.data.user);
+          // Fetch whitelist candidate count for nav badge
+          const perms = res.data.permissions;
+          if (perms.includes("admin") || perms.includes("manage:whitelist")) {
+            getWhitelistCandidates(res.data.token).then((r) => {
+              if (r.success && r.data) setCandidateCount(r.data.length);
+            }).catch(() => {});
+          }
         } else if (!res.success) {
           setSyncError(res.error === "NOT_IN_GUILD" ? "NOT_IN_GUILD" : res.error || "Failed to sync");
         }
@@ -205,13 +213,18 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`mb-1 flex items-center rounded-sm px-3 py-2.5 text-sm tracking-wide transition-colors ${
+                className={`mb-1 flex items-center justify-between rounded-sm px-3 py-2.5 text-sm tracking-wide transition-colors ${
                   isActive
                     ? "bg-accent/10 text-accent border border-accent/20"
                     : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
                 }`}
               >
                 {item.label}
+                {item.href === "/whitelist" && candidateCount > 0 && (
+                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">
+                    {candidateCount}
+                  </span>
+                )}
               </Link>
             );
           }

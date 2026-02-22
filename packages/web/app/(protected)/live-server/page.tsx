@@ -608,8 +608,8 @@ export default function LiveServerPage() {
       {/* Main grid: Players + Chat */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Player list - 2 cols */}
-        <div className="lg:col-span-2">
-          <div className="facet-border rounded-sm bg-bg-card">
+        <div className="lg:col-span-2 flex flex-col">
+          <div className="facet-border flex flex-1 flex-col rounded-sm bg-bg-card">
             <div className="border-b border-border px-4 py-3">
               <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
                 Players ({players.length})
@@ -622,7 +622,7 @@ export default function LiveServerPage() {
               </div>
             ) : (
               <>
-              <div className="grid gap-0 md:grid-cols-2">
+              <div className="grid flex-1 gap-0 md:grid-cols-2">
                 <TeamColumn
                   label="Team 1"
                   players={team1}
@@ -1097,7 +1097,7 @@ function TeamColumn({
           />
         )}
       </div>
-      <div className="max-h-96 overflow-auto">
+      <div className="flex-1 overflow-auto">
         {Array.from(squads.entries()).map(([key, members]) => (
           <div key={key}>
             <div className="flex items-center justify-between bg-bg-tertiary/50 px-4 py-1">

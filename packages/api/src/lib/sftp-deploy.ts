@@ -9,8 +9,10 @@ export async function triggerSftpDeploy(server?: string): Promise<void> {
   } else {
     const configs = await prisma.serverConfig.findMany({ where: { syncEnabled: true } });
     if (configs.length === 0) {
-      // Fall back to env vars for backward compat (deploy all entries)
-      await deployWithEnvVars();
+      // Fall back to env vars only if SFTP_SYNC_ENABLED is explicitly set
+      if (process.env.SFTP_SYNC_ENABLED === "true") {
+        await deployWithEnvVars();
+      }
       return;
     }
     for (const config of configs) {

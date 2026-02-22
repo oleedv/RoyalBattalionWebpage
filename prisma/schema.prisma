@@ -82,7 +82,7 @@ model ServerConfig {
   sftpUser    String?
   sftpPass    String?
   sftpPath    String?
-  syncEnabled Boolean @default(true)
+  syncEnabled Boolean @default(false)
 }
 
 model Match {

@@ -120,6 +120,9 @@ export default function WhitelistPage() {
 
   // Fetch entries and candidates when active server changes
   useEffect(() => {
+    // Clear dismissed set so candidates approved on other servers still show
+    setDismissed(new Set());
+
     async function loadServer() {
       if (!apiToken || !activeServer) return;
       try {

@@ -291,28 +291,40 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
             Online ({onlineUsers.length})
           </div>
-          <div className="flex flex-wrap gap-1">
-            {onlineUsers.map((u) => (
-              <div key={u.userId} className="group relative">
+          <div className="flex items-center">
+            {onlineUsers.slice(0, 15).map((u, i) => (
+              <div
+                key={u.userId}
+                className="group relative"
+                style={{ marginLeft: i === 0 ? 0 : -6, zIndex: 15 - i }}
+              >
                 {u.avatarUrl ? (
-                  <Image
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
                     src={u.avatarUrl}
                     alt={u.userName}
-                    width={28}
-                    height={28}
-                    className="rounded-full ring-2 ring-green-500/50"
+                    className="h-6 w-6 rounded-full object-cover ring-2 ring-bg-secondary"
                   />
                 ) : (
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent/20 text-[11px] font-bold text-accent ring-2 ring-green-500/50">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/20 text-[10px] font-bold text-accent ring-2 ring-bg-secondary">
                     {u.userName.charAt(0).toUpperCase()}
                   </div>
                 )}
+                <span className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full bg-green-500 ring-1 ring-bg-secondary" />
                 <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded bg-bg-primary px-2 py-1 text-xs whitespace-nowrap opacity-0 shadow-lg ring-1 ring-border transition-opacity group-hover:opacity-100">
                   <div className="font-medium text-text-primary">{u.userName}</div>
                   <div className="text-text-muted">{formatPageName(u.currentPage)}</div>
                 </div>
               </div>
             ))}
+            {onlineUsers.length > 15 && (
+              <div
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-tertiary text-[9px] font-bold text-text-muted ring-2 ring-bg-secondary"
+                style={{ marginLeft: -6, zIndex: 0 }}
+              >
+                +{onlineUsers.length - 15}
+              </div>
+            )}
           </div>
         </div>
       )}

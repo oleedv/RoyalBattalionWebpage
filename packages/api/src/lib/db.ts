@@ -1,7 +1,7 @@
 import { PrismaClient } from "../generated/prisma/client";
-import { PrismaMariaDB } from "@prisma/adapter-mariadb";
+import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 
-const adapter = new PrismaMariaDB({
+const adapter = new PrismaMariaDb({
   connectionString: process.env.DATABASE_URL!,
 });
 

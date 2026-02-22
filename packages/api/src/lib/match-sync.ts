@@ -55,3 +55,38 @@ export async function syncMatches(): Promise<{ synced: number; total: number }> 
 
   return { synced, total: matchIds.length };
 }
+
+export async function resyncAllMatches(): Promise<{ resynced: number }> {
+  const pool = getSquadJSPool();
+
+  const matches = await prisma.match.findMany({
+    where: { squadjsId: { not: null } },
+    select: { id: true, squadjsId: true },
+  });
+
+  let resynced = 0;
+  for (const match of matches) {
+    if (!match.squadjsId) continue;
+
+    try {
+      const assembled = await assembleMatchDetail(pool, match.squadjsId);
+      if (!assembled) continue;
+
+      await prisma.match.update({
+        where: { id: match.id },
+        data: {
+          matchDetail: assembled.detail as any,
+          map: assembled.meta.map,
+          layer: assembled.meta.layer,
+          result: assembled.meta.result,
+        },
+      });
+      resynced++;
+    } catch (err) {
+      console.error(`[match-sync] Failed to resync match ${match.squadjsId}:`, err);
+    }
+  }
+
+  console.log(`[match-sync] Resynced ${resynced}/${matches.length} matches`);
+  return { resynced };
+}

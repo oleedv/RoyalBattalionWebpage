@@ -350,11 +350,40 @@ export async function assembleMatchDetail(
     p.isSquadLeader = p.role === "Squad Leader" || p.role === "SL Crewman";
   }
 
-  // Assign squad names from SquadCreations
+  // Add squad creators to playerMap + assign squad names
   for (const sq of squadDetailRows as any[]) {
-    const steamId = steamByEos.get(sq.playerEOSID);
-    if (steamId && playerMap.has(steamId)) {
-      playerMap.get(steamId)!.squad = sq.squadName;
+    const eosID = sq.playerEOSID;
+    const steamId = steamByEos.get(eosID) || eosID;
+    const name = nameByEos.get(eosID) || "Unknown";
+
+    // Determine teamId from faction
+    let teamId = 0;
+    for (const [tid, faction] of teamFactions.entries()) {
+      if (faction === sq.teamName) {
+        teamId = tid;
+        break;
+      }
+    }
+
+    const p = getOrCreate(steamId, name, teamId);
+    p.squad = sq.squadName;
+    p.isSquadLeader = true;
+  }
+
+  // Resolve remaining teamId=0 players from deaths data
+  for (const [steamId, p] of playerMap) {
+    if (p.teamId !== 0) continue;
+
+    const asAttacker = deaths.find((d: any) => d.attacker === steamId);
+    if (asAttacker?.attackerTeamID) {
+      p.teamId = asAttacker.attackerTeamID;
+      continue;
+    }
+
+    const asVictim = deaths.find((d: any) => d.victim === steamId);
+    if (asVictim?.victimTeamID) {
+      p.teamId = asVictim.victimTeamID;
+      continue;
     }
   }
 

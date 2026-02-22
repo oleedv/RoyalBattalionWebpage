@@ -3,6 +3,7 @@ import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import type { ApiResponse, Match } from "shared";
 import prisma from "../lib/db";
+import { resyncAllMatches } from "../lib/match-sync";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 
@@ -145,6 +146,18 @@ matches.put("/:id", requirePermission("manage:matches"), zValidator("json", upda
       success: false,
       error: "Failed to update match",
     }, 400);
+  }
+});
+
+matches.post("/resync", requirePermission("manage:matches"), async (c) => {
+  try {
+    const result = await resyncAllMatches();
+    return c.json<ApiResponse<{ resynced: number }>>({ success: true, data: result });
+  } catch (err) {
+    return c.json<ApiResponse<never>>({
+      success: false,
+      error: err instanceof Error ? err.message : "Resync failed",
+    }, 500);
   }
 });
 

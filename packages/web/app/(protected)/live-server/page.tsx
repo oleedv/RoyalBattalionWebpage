@@ -37,6 +37,7 @@ interface ServerInfo {
 interface ChatMessage {
   chat: string;
   steamID: string;
+  eosID: string;
   name: string;
   message: string;
   time: string;
@@ -621,8 +622,6 @@ export default function LiveServerPage() {
               </div>
             ) : (
               <>
-              {/* Team balance bar */}
-              <BalanceBar team1={team1All.length} team2={team2All.length} />
               <div className="grid gap-0 md:grid-cols-2">
                 <TeamColumn
                   label="Team 1"
@@ -736,7 +735,7 @@ export default function LiveServerPage() {
                 </div>
               ) : (
                 filteredChat.map((msg, i) => {
-                  const player = players.find((p) => p.steamID === msg.steamID);
+                  const player = players.find((p) => p.steamID === msg.steamID || p.eosID === msg.eosID);
                   const teamColor = String(player?.teamID) === "1"
                     ? "text-blue-400"
                     : String(player?.teamID) === "2"
@@ -1278,22 +1277,6 @@ function ActionModal({
   );
 }
 
-function BalanceBar({ team1, team2 }: { team1: number; team2: number }) {
-  const total = team1 + team2 || 1;
-  const pct1 = (team1 / total) * 100;
-  const diff = Math.abs(team1 - team2);
-  const color = diff <= 2 ? "bg-success" : diff <= 4 ? "bg-warning" : "bg-danger";
-
-  return (
-    <div className="flex items-center gap-2 border-b border-border/50 px-4 py-1.5">
-      <span className="text-[10px] font-medium text-blue-400">{team1}</span>
-      <div className="flex-1 flex h-1.5 rounded-full bg-bg-tertiary overflow-hidden">
-        <div className={`${color} transition-all duration-500`} style={{ width: `${pct1}%` }} />
-      </div>
-      <span className="text-[10px] font-medium text-red-400">{team2}</span>
-    </div>
-  );
-}
 
 function CopyableField({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);

@@ -182,8 +182,10 @@ export async function assembleMatchDetail(
   const steamByEos = new Map<string, string>();
   const nameByEos = new Map<string, string>();
   for (const p of playerRows as any[]) {
-    eosBysteam.set(p.steamID, p.eosID);
-    steamByEos.set(p.eosID, p.steamID);
+    if (p.steamID) {
+      eosBysteam.set(p.steamID, p.eosID);
+      steamByEos.set(p.eosID, p.steamID);
+    }
     nameByEos.set(p.eosID, p.lastName);
   }
 
@@ -199,10 +201,10 @@ export async function assembleMatchDetail(
 
     // Find this player's teamID from deaths
     const asAttacker = deaths.find(
-      (d: any) => d.attacker === steamByEos.get(eosID) || d.attacker === eosID
+      (d: any) => d.attacker === steamByEos.get(eosID) || d.attacker === eosID || d.attackerEosID === eosID
     );
     const asVictim = deaths.find(
-      (d: any) => d.victim === steamByEos.get(eosID) || d.victim === eosID
+      (d: any) => d.victim === steamByEos.get(eosID) || d.victim === eosID || d.victimEosID === eosID
     );
 
     if (asAttacker && !teamFactions.has(asAttacker.attackerTeamID)) {
@@ -310,8 +312,8 @@ export async function assembleMatchDetail(
 
   // Process deaths for kills/deaths/TKs
   for (const d of deaths) {
-    const attackerSteam = d.attacker;
-    const victimSteam = d.victim;
+    const attackerSteam = d.attacker || d.attackerEosID;
+    const victimSteam = d.victim || d.victimEosID;
 
     if (attackerSteam) {
       const attacker = getOrCreate(attackerSteam, d.attackerName, d.attackerTeamID);
@@ -327,7 +329,7 @@ export async function assembleMatchDetail(
 
   // Process revives
   for (const r of revives) {
-    const reviverSteam = r.reviver;
+    const reviverSteam = r.reviver || r.reviverEosID;
     if (reviverSteam) {
       const reviver = getOrCreate(reviverSteam, r.reviverName, r.reviverTeamID);
       reviver.revives++;

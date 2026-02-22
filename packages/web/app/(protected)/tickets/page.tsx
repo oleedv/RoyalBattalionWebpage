@@ -6,6 +6,7 @@ import {
   getTicket,
   getProspects,
   getProspect,
+  resolveDiscordNames,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import type { Ticket, Prospect } from "shared";
@@ -185,10 +186,32 @@ function TierBadge({ tier }: { tier: string }) {
   );
 }
 
-function TicketDetail({ ticket }: { ticket: Ticket }) {
+function TicketDetail({ ticket, displayName }: { ticket: Ticket; displayName: (id: string | null) => string }) {
   return (
     <div className="border-t border-border/50 px-5 pb-5 pt-4">
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex items-start justify-between">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">User</span>
+            <div className="text-sm text-text-primary">{displayName(ticket.userId)}</div>
+          </div>
+          <div>
+            <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Created</span>
+            <div className="text-sm text-text-primary">{new Date(ticket.createdAt).toLocaleString()}</div>
+          </div>
+          {ticket.closedAt && (
+            <div>
+              <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Closed</span>
+              <div className="text-sm text-text-primary">{new Date(ticket.closedAt).toLocaleString()}</div>
+            </div>
+          )}
+          {ticket.closedBy && (
+            <div>
+              <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Closed By</span>
+              <div className="text-sm text-text-primary">{displayName(ticket.closedBy)}</div>
+            </div>
+          )}
+        </div>
         <DownloadButton text={exportTicketText(ticket)} filename={`ticket-${ticket.id}.txt`} />
       </div>
       {/* Events timeline */}
@@ -207,7 +230,7 @@ function TicketDetail({ ticket }: { ticket: Ticket }) {
                       {event.eventType}
                     </span>
                     <span className="text-xs text-text-muted">
-                      by {event.actorId}
+                      by {displayName(event.actorId)}
                     </span>
                   </div>
                   {event.detail && (
@@ -273,7 +296,7 @@ function TicketDetail({ ticket }: { ticket: Ticket }) {
   );
 }
 
-function ProspectDetail({ prospect }: { prospect: Prospect }) {
+function ProspectDetail({ prospect, displayName }: { prospect: Prospect; displayName: (id: string | null) => string }) {
   return (
     <div className="border-t border-border/50 px-5 pb-5 pt-4">
       <div className="mb-4 flex justify-end">
@@ -320,7 +343,7 @@ function ProspectDetail({ prospect }: { prospect: Prospect }) {
         {prospect.mentorId && (
           <div>
             <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Mentor</span>
-            <div className="text-sm text-text-primary">{prospect.mentorId}</div>
+            <div className="text-sm text-text-primary">{displayName(prospect.mentorId)}</div>
           </div>
         )}
       </div>
@@ -369,7 +392,7 @@ function ProspectDetail({ prospect }: { prospect: Prospect }) {
                       {event.eventType.replace(/_/g, " ")}
                     </span>
                     <span className="text-xs text-text-muted">
-                      by {event.actorId}
+                      by {displayName(event.actorId)}
                     </span>
                   </div>
                   {event.detail && (
@@ -429,11 +452,12 @@ function ProspectDetail({ prospect }: { prospect: Prospect }) {
   );
 }
 
-function TicketRow({ ticket, onExpand, expanded, detail }: {
+function TicketRow({ ticket, onExpand, expanded, detail, displayName }: {
   ticket: Ticket;
   onExpand: () => void;
   expanded: boolean;
   detail: Ticket | null;
+  displayName: (id: string | null) => string;
 }) {
   return (
     <div className="facet-border rounded-sm bg-bg-card transition-all">
@@ -458,7 +482,7 @@ function TicketRow({ ticket, onExpand, expanded, detail }: {
                   <TierBadge tier={ticket.tier} />
                 </div>
                 <div className="flex items-center gap-2 text-xs text-text-muted">
-                  <span>User: {ticket.userId}</span>
+                  <span>{displayName(ticket.userId)}</span>
                   <span className="h-1 w-1 rounded-full bg-text-muted" />
                   <span>{new Date(ticket.createdAt).toLocaleDateString()}</span>
                   {ticket.closedAt && (
@@ -493,7 +517,7 @@ function TicketRow({ ticket, onExpand, expanded, detail }: {
           </svg>
         </a>
       </div>
-      {expanded && detail && <TicketDetail ticket={detail} />}
+      {expanded && detail && <TicketDetail ticket={detail} displayName={displayName} />}
       {expanded && !detail && (
         <div className="border-t border-border/50 px-5 py-6 text-center text-sm text-text-muted">
           Loading details...
@@ -503,11 +527,12 @@ function TicketRow({ ticket, onExpand, expanded, detail }: {
   );
 }
 
-function ProspectRow({ prospect, onExpand, expanded, detail }: {
+function ProspectRow({ prospect, onExpand, expanded, detail, displayName }: {
   prospect: Prospect;
   onExpand: () => void;
   expanded: boolean;
   detail: Prospect | null;
+  displayName: (id: string | null) => string;
 }) {
   return (
     <div className="facet-border rounded-sm bg-bg-card transition-all">
@@ -568,7 +593,7 @@ function ProspectRow({ prospect, onExpand, expanded, detail }: {
           </svg>
         </a>
       </div>
-      {expanded && detail && <ProspectDetail prospect={detail} />}
+      {expanded && detail && <ProspectDetail prospect={detail} displayName={displayName} />}
       {expanded && !detail && (
         <div className="border-t border-border/50 px-5 py-6 text-center text-sm text-text-muted">
           Loading details...
@@ -595,19 +620,43 @@ export default function TicketsPage() {
   const [expandedProspect, setExpandedProspect] = useState<number | null>(null);
   const [prospectDetails, setProspectDetails] = useState<Record<number, Prospect>>({});
 
+  // Discord ID -> display name map
+  const [nameMap, setNameMap] = useState<Record<string, string>>({});
+
+  async function resolveNames(ids: string[]) {
+    if (!apiToken) return;
+    const unknown = ids.filter((id) => id && !nameMap[id]);
+    if (unknown.length === 0) return;
+    const res = await resolveDiscordNames(apiToken, [...new Set(unknown)]);
+    if (res.success && res.data) {
+      setNameMap((prev) => ({ ...prev, ...res.data }));
+    }
+  }
+
+  function displayName(id: string | null): string {
+    if (!id) return "--";
+    return nameMap[id] || id;
+  }
+
   useEffect(() => {
     if (!apiToken) return;
 
     if (tab === "tickets" && tickets.length === 0) {
       getTickets(apiToken).then((res) => {
-        if (res.success && res.data) setTicketsState(res.data);
-        else setError(res.error || "Failed to load tickets");
+        if (res.success && res.data) {
+          setTicketsState(res.data);
+          const ids = res.data.flatMap((t) => [t.userId, t.closedBy].filter(Boolean) as string[]);
+          resolveNames(ids);
+        } else setError(res.error || "Failed to load tickets");
       });
     }
     if (tab === "prospects" && prospects.length === 0) {
       getProspects(apiToken).then((res) => {
-        if (res.success && res.data) setProspects(res.data);
-        else setError(res.error || "Failed to load prospects");
+        if (res.success && res.data) {
+          setProspects(res.data);
+          const ids = res.data.flatMap((p) => [p.userId, p.closedBy, p.mentorId].filter(Boolean) as string[]);
+          resolveNames(ids);
+        } else setError(res.error || "Failed to load prospects");
       });
     }
   }, [apiToken, tab]);
@@ -622,6 +671,8 @@ export default function TicketsPage() {
       const res = await getTicket(apiToken, id);
       if (res.success && res.data) {
         setTicketDetails((prev) => ({ ...prev, [id]: res.data! }));
+        const ids = (res.data.events || []).map((e) => e.actorId).filter(Boolean);
+        resolveNames(ids);
       }
     }
   }
@@ -636,6 +687,11 @@ export default function TicketsPage() {
       const res = await getProspect(apiToken, id);
       if (res.success && res.data) {
         setProspectDetails((prev) => ({ ...prev, [id]: res.data! }));
+        const ids = [
+          ...(res.data.events || []).map((e) => e.actorId),
+          ...(res.data.votes || []).map((v) => v.voterId),
+        ].filter(Boolean);
+        resolveNames(ids);
       }
     }
   }
@@ -756,6 +812,7 @@ export default function TicketsPage() {
                 expanded={expandedTicket === t.id}
                 detail={ticketDetails[t.id] || null}
                 onExpand={() => handleExpandTicket(t.id)}
+                displayName={displayName}
               />
             ))
           )}
@@ -776,6 +833,7 @@ export default function TicketsPage() {
                 expanded={expandedProspect === p.id}
                 detail={prospectDetails[p.id] || null}
                 onExpand={() => handleExpandProspect(p.id)}
+                displayName={displayName}
               />
             ))
           )}

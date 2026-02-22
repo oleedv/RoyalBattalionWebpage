@@ -225,6 +225,17 @@ export function deleteUser(
   });
 }
 
+export function resolveDiscordNames(
+  token: string,
+  discordIds: string[]
+): Promise<ApiResponse<Record<string, string>>> {
+  return request<Record<string, string>>("/users/resolve-ids", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ discordIds }),
+  });
+}
+
 export function linkSteam(
   token: string,
   steamId: string

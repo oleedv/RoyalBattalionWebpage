@@ -131,6 +131,29 @@ users.put("/:id", authMiddleware, requirePermission("manage:members"), zValidato
   }
 });
 
+const resolveIdsSchema = z.object({
+  discordIds: z.array(z.string()).min(1).max(200),
+});
+
+users.post("/resolve-ids", authMiddleware, zValidator("json", resolveIdsSchema), async (c) => {
+  const { discordIds } = c.req.valid("json");
+
+  const found = await prisma.user.findMany({
+    where: { discordId: { in: discordIds } },
+    select: { discordId: true, discordName: true },
+  });
+
+  const nameMap: Record<string, string> = {};
+  for (const u of found) {
+    nameMap[u.discordId] = u.discordName;
+  }
+
+  return c.json<ApiResponse<Record<string, string>>>({
+    success: true,
+    data: nameMap,
+  });
+});
+
 users.delete("/:id", authMiddleware, requirePermission("manage:members"), async (c) => {
   const id = c.req.param("id");
 

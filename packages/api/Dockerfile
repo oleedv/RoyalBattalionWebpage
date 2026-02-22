@@ -7,6 +7,7 @@ COPY package.json bun.lock ./
 COPY packages/api/package.json ./packages/api/
 COPY packages/shared/package.json ./packages/shared/
 COPY prisma/ ./prisma/
+COPY prisma.config.ts ./
 RUN bun install
 
 FROM base AS runtime

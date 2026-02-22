@@ -19,27 +19,72 @@ const SERVER_META: Record<string, { label: string; connectUrl: string }> = {
   },
 };
 
-function Sparkline({ data, color, height = 40 }: { data: number[]; color: string; height?: number }) {
-  if (data.length < 2) return null;
-  const width = 120;
-  const max = Math.max(...data, 1);
-  const min = Math.min(...data, 0);
+/* ── Sparkline (multi-line) ─────────────────────────────────────────── */
+
+interface SparklineLine {
+  data: number[];
+  color: string;
+  label: string;
+}
+
+function Sparkline({ lines, height = 64 }: { lines: SparklineLine[]; height?: number }) {
+  const width = 200;
+  const hasData = lines.some((l) => l.data.length >= 2);
+  if (!hasData) return null;
+
+  const allValues = lines.flatMap((l) => l.data);
+  const max = Math.max(...allValues, 1);
+  const min = Math.min(...allValues, 0);
   const range = max - min || 1;
-  const coords = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * width;
-    const y = height - ((v - min) / range) * (height - 4) - 2;
-    return { x, y };
-  });
-  const linePoints = coords.map((c) => `${c.x},${c.y}`).join(" ");
-  const areaPoints = `${linePoints} ${width},${height} 0,${height}`;
+
+  function toCoords(data: number[]) {
+    return data.map((v, i) => {
+      const x = (i / (data.length - 1)) * width;
+      const y = height - ((v - min) / range) * (height - 6) - 3;
+      return { x, y };
+    });
+  }
 
   return (
-    <svg width={width} height={height} className="h-full w-full" preserveAspectRatio="none" viewBox={`0 0 ${width} ${height}`}>
-      <polygon fill={color} fillOpacity="0.15" points={areaPoints} />
-      <polyline fill="none" stroke={color} strokeWidth="1.5" points={linePoints} />
-    </svg>
+    <div>
+      <svg
+        width={width}
+        height={height}
+        className="w-full"
+        preserveAspectRatio="none"
+        viewBox={`0 0 ${width} ${height}`}
+      >
+        {lines.map((line) => {
+          if (line.data.length < 2) return null;
+          const coords = toCoords(line.data);
+          const linePoints = coords.map((c) => `${c.x},${c.y}`).join(" ");
+          const areaPoints = `${linePoints} ${width},${height} 0,${height}`;
+          return (
+            <g key={line.label}>
+              <polygon fill={line.color} fillOpacity="0.2" points={areaPoints} />
+              <polyline fill="none" stroke={line.color} strokeWidth="2" points={linePoints} />
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-1.5 flex items-center gap-4">
+        {lines.map((line) => {
+          const current = line.data.length > 0 ? line.data[line.data.length - 1] : 0;
+          return (
+            <div key={line.label} className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: line.color }} />
+              <span className="text-[10px] text-text-muted">
+                {line.label}: <span className="text-text-secondary">{current}</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
+
+/* ── Server Card ────────────────────────────────────────────────────── */
 
 function ServerStatusCard({ server, metrics }: { server: ServerStatus; metrics?: MetricSample[] }) {
   const isOnline = server.status === "online";
@@ -52,7 +97,7 @@ function ServerStatusCard({ server, metrics }: { server: ServerStatus; metrics?:
 
   return (
     <div className="facet-border group rounded-sm bg-bg-card transition-colors hover:bg-bg-card-hover">
-      <div className="p-5 pb-0">
+      <div className="p-5">
         <div className="mb-3 flex items-center justify-between">
           <div className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
             {meta.label}
@@ -83,9 +128,7 @@ function ServerStatusCard({ server, metrics }: { server: ServerStatus; metrics?:
         <div className="mb-3 h-1 w-full overflow-hidden rounded-full bg-bg-tertiary">
           <div
             className="h-full rounded-full bg-accent transition-all duration-500"
-            style={{
-              width: `${(server.players / server.maxPlayers) * 100}%`,
-            }}
+            style={{ width: `${(server.players / server.maxPlayers) * 100}%` }}
           />
         </div>
 
@@ -100,26 +143,21 @@ function ServerStatusCard({ server, metrics }: { server: ServerStatus; metrics?:
         </div>
       </div>
 
-      {/* Stacked sparkline graphs */}
       {(playerData.length >= 2 || queueData.length >= 2) && (
-        <div className="mt-3 border-t border-border/30 px-2 pt-2 pb-2">
-          <div className="flex items-center gap-4 mb-1">
-            <span className="text-[9px] font-medium uppercase tracking-widest text-text-muted">Players</span>
-            <span className="text-[9px] font-medium uppercase tracking-widest text-text-muted">Queue</span>
-          </div>
-          <div className="flex gap-2">
-            <div className="flex-1 h-10 rounded-sm overflow-hidden bg-bg-tertiary/30">
-              <Sparkline data={playerData} color="var(--color-accent)" height={40} />
-            </div>
-            <div className="flex-1 h-10 rounded-sm overflow-hidden bg-bg-tertiary/30">
-              <Sparkline data={queueData} color="var(--color-warning)" height={40} />
-            </div>
-          </div>
+        <div className="border-t border-border/30 px-4 pt-3 pb-3">
+          <Sparkline
+            lines={[
+              { data: playerData, color: "#c8a84e", label: "Players" },
+              { data: queueData, color: "#f59e0b", label: "Queue" },
+            ]}
+          />
         </div>
       )}
     </div>
   );
 }
+
+/* ── Stat Card ──────────────────────────────────────────────────────── */
 
 function StatCard({
   label,
@@ -151,11 +189,11 @@ function StatCard({
     </div>
   );
 
-  if (href) {
-    return <Link href={href}>{inner}</Link>;
-  }
+  if (href) return <Link href={href}>{inner}</Link>;
   return inner;
 }
+
+/* ── Match result badge ─────────────────────────────────────────────── */
 
 function resultBadgeBg(result: string): string {
   switch (result.toLowerCase()) {
@@ -169,6 +207,8 @@ function resultBadgeBg(result: string): string {
       return "bg-bg-tertiary border-border text-text-secondary";
   }
 }
+
+/* ── Dashboard Page ─────────────────────────────────────────────────── */
 
 export default function DashboardPage() {
   const { data: session } = useSession();
@@ -269,21 +309,103 @@ export default function DashboardPage() {
     });
   }
 
-
   return (
-    <div>
-      <h1 className="font-display mb-6 text-2xl font-bold tracking-wide sm:mb-8 sm:text-3xl">
-        Dashboard
-      </h1>
+    <div className="space-y-6">
+      {/* ── Profile Header ─────────────────────────────────────────── */}
+      <div className="facet-border rounded-sm bg-bg-card p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          {/* Avatar + name */}
+          <div className="flex items-center gap-3 sm:min-w-0 sm:shrink-0">
+            {session?.user?.image ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={session.user.image}
+                alt="Avatar"
+                className="h-10 w-10 rounded-full ring-2 ring-accent/20"
+              />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/20 text-sm font-bold text-accent">
+                {(session?.user?.name || "?").charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-text-primary">
+                {session?.user?.name || "Unknown"}
+              </div>
+              <div className="truncate text-xs text-text-muted">
+                {session?.user?.email || ""}
+              </div>
+            </div>
+          </div>
 
-      {/* Server Status Row */}
+          {/* IDs */}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs sm:ml-auto">
+            {displayUser?.discordId && (
+              <div>
+                <span className="text-text-muted">Discord </span>
+                <code className="text-accent">{displayUser.discordId}</code>
+              </div>
+            )}
+            {displayUser?.steamId ? (
+              <div>
+                <span className="text-text-muted">Steam </span>
+                <code className="text-accent">{displayUser.steamId}</code>
+              </div>
+            ) : (
+              <div className="text-text-muted">Steam: not linked</div>
+            )}
+            {displayUser?.eosId && (
+              <div>
+                <span className="text-text-muted">EOS </span>
+                <code className="text-accent">{displayUser.eosId}</code>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Roles */}
+        {displayUser?.roles && displayUser.roles.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border/30 pt-3">
+            {displayUser.roles.map((role) => (
+              <span
+                key={role.id}
+                className="rounded-sm border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs text-accent"
+              >
+                {role.name}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Inline Steam link form (only if not linked) */}
+        {!displayUser?.steamId && (
+          <div className="mt-3 border-t border-border/30 pt-3">
+            <form onSubmit={handleLinkSteam} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={steamId}
+                onChange={(e) => setSteamId(e.target.value)}
+                placeholder="Enter Steam64 ID to link"
+                className="min-w-0 flex-1 rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="shrink-0 rounded-sm bg-accent px-4 py-1.5 text-xs font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted"
+              >
+                Link
+              </button>
+            </form>
+            {linkError && <p className="mt-1.5 text-xs text-danger">{linkError}</p>}
+            {linkSuccess && <p className="mt-1.5 text-xs text-success">Steam ID linked.</p>}
+          </div>
+        )}
+      </div>
+
+      {/* ── Server Status ──────────────────────────────────────────── */}
       {statsLoading ? (
-        <div className="mb-6 grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           {[0, 1].map((i) => (
-            <div
-              key={i}
-              className="facet-border animate-pulse rounded-sm bg-bg-card p-5"
-            >
+            <div key={i} className="facet-border animate-pulse rounded-sm bg-bg-card p-5">
               <div className="mb-3 h-3 w-24 rounded bg-bg-tertiary" />
               <div className="mb-3 h-8 w-16 rounded bg-bg-tertiary" />
               <div className="h-1 w-full rounded-full bg-bg-tertiary" />
@@ -291,9 +413,8 @@ export default function DashboardPage() {
           ))}
         </div>
       ) : stats?.servers && stats.servers.length > 0 ? (
-        <div className="mb-6 grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           {stats.servers.map((server) => {
-            // Match SquadJS metrics by server name substring
             const metricsEntry = stats.serverMetrics
               ? Object.values(stats.serverMetrics).find((m) =>
                   server.name.toLowerCase().includes(m.serverName.toLowerCase().split(" ")[0].toLowerCase()) ||
@@ -311,10 +432,10 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      {/* Quick Stats Row */}
+      {/* ── Quick Stats ────────────────────────────────────────────── */}
       {statCards.length > 0 && (
         <div
-          className={`mb-6 grid gap-4 ${
+          className={`grid gap-4 ${
             statCards.length >= 4
               ? "grid-cols-2 lg:grid-cols-4"
               : statCards.length === 3
@@ -330,11 +451,11 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Recent Matches */}
+      {/* ── Recent Matches ─────────────────────────────────────────── */}
       {canManageMatches &&
         stats?.recentMatches &&
         stats.recentMatches.length > 0 && (
-          <div className="facet-border mb-6 rounded-sm bg-bg-card">
+          <div className="facet-border rounded-sm bg-bg-card">
             <div className="flex items-center justify-between border-b border-border/50 px-5 py-4">
               <h2 className="font-display text-sm font-semibold tracking-wide">
                 Recent Matches
@@ -377,141 +498,6 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
-
-      {/* Existing cards */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* User Info Card */}
-        <div className="facet-border rounded-sm bg-bg-card p-6">
-          <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">
-            Your Profile
-          </h2>
-          <div className="flex items-start gap-4">
-            {session?.user?.image && (
-              <img
-                src={session.user.image}
-                alt="Avatar"
-                className="h-16 w-16 rounded-full border-2 border-accent/20"
-              />
-            )}
-            <div className="min-w-0 flex-1 space-y-3">
-              <div>
-                <div className="text-lg font-medium text-text-primary">
-                  {session?.user?.name || "Unknown"}
-                </div>
-                <div className="mt-0.5 text-sm text-text-secondary">
-                  {session?.user?.email || "No email"}
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <span className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                    Discord ID
-                  </span>
-                  <div className="mt-0.5 text-sm">
-                    {displayUser?.discordId ? (
-                      <code className="text-accent">
-                        {displayUser.discordId}
-                      </code>
-                    ) : (
-                      <span className="text-text-muted">--</span>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                    Steam ID
-                  </span>
-                  <div className="mt-0.5 text-sm">
-                    {displayUser?.steamId ? (
-                      <code className="text-accent">
-                        {displayUser.steamId}
-                      </code>
-                    ) : (
-                      <span className="text-text-muted">Not linked</span>
-                    )}
-                  </div>
-                </div>
-                <div className="sm:col-span-2">
-                  <span className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                    EOS ID
-                  </span>
-                  <div className="mt-0.5 text-sm">
-                    {displayUser?.eosId ? (
-                      <code className="text-accent">{displayUser.eosId}</code>
-                    ) : (
-                      <span className="text-text-muted">Not set</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Roles Card */}
-        <div className="facet-border rounded-sm bg-bg-card p-6">
-          <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">
-            Your Roles
-          </h2>
-          {displayUser?.roles && displayUser.roles.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {displayUser.roles.map((role) => (
-                <span
-                  key={role.id}
-                  className="rounded-sm border border-accent/30 bg-accent/10 px-3 py-1 text-sm text-accent"
-                >
-                  {role.name}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-text-muted">
-              No system roles assigned. Roles are managed in the Roles
-              dashboard.
-            </p>
-          )}
-        </div>
-
-        {/* Link Steam Card */}
-        <div className="facet-border rounded-sm bg-bg-card p-6 lg:col-span-2">
-          <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">
-            Link Steam Account
-          </h2>
-          <p className="mb-4 text-sm text-text-secondary">
-            Enter your Steam64 ID to link your Steam account. This is required
-            for server whitelist access.
-          </p>
-
-          <form
-            onSubmit={handleLinkSteam}
-            className="flex flex-col gap-3 sm:flex-row"
-          >
-            <input
-              type="text"
-              value={steamId}
-              onChange={(e) => setSteamId(e.target.value)}
-              placeholder="Enter Steam64 ID (e.g. 76561198012345678)"
-              className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-            />
-            <button
-              type="submit"
-              className="rounded-sm bg-accent px-6 py-2.5 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted"
-            >
-              Link Steam
-            </button>
-          </form>
-
-          {linkError && (
-            <p className="mt-3 text-sm text-danger">{linkError}</p>
-          )}
-          {linkSuccess && (
-            <p className="mt-3 text-sm text-success">
-              Steam ID linked successfully.
-            </p>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

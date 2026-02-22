@@ -6,7 +6,7 @@ import Link from "next/link";
 import { linkSteam, getDashboardStats } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import type { UserWithRoles } from "shared";
-import type { DashboardStats, ServerStatus } from "@/lib/api-client";
+import type { DashboardStats, ServerStatus, MetricSample } from "@/lib/api-client";
 
 const SERVER_META: Record<string, { label: string; connectUrl: string }> = {
   "Main Server": {
@@ -19,59 +19,104 @@ const SERVER_META: Record<string, { label: string; connectUrl: string }> = {
   },
 };
 
-function ServerStatusCard({ server }: { server: ServerStatus }) {
+function Sparkline({ data, color, height = 40 }: { data: number[]; color: string; height?: number }) {
+  if (data.length < 2) return null;
+  const width = 120;
+  const max = Math.max(...data, 1);
+  const min = Math.min(...data, 0);
+  const range = max - min || 1;
+  const coords = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = height - ((v - min) / range) * (height - 4) - 2;
+    return { x, y };
+  });
+  const linePoints = coords.map((c) => `${c.x},${c.y}`).join(" ");
+  const areaPoints = `${linePoints} ${width},${height} 0,${height}`;
+
+  return (
+    <svg width={width} height={height} className="h-full w-full" preserveAspectRatio="none" viewBox={`0 0 ${width} ${height}`}>
+      <polygon fill={color} fillOpacity="0.15" points={areaPoints} />
+      <polyline fill="none" stroke={color} strokeWidth="1.5" points={linePoints} />
+    </svg>
+  );
+}
+
+function ServerStatusCard({ server, metrics }: { server: ServerStatus; metrics?: MetricSample[] }) {
   const isOnline = server.status === "online";
   const meta = Object.values(SERVER_META).find((m) =>
     server.name.toLowerCase().includes(m.label.toLowerCase().split(" ")[0].toLowerCase())
   ) || { label: server.name, connectUrl: "#" };
 
+  const playerData = metrics?.map((s) => s.playerCount) || [];
+  const queueData = metrics?.map((s) => s.publicQueue + s.reserveQueue) || [];
+
   return (
-    <div className="facet-border group rounded-sm bg-bg-card p-5 transition-colors hover:bg-bg-card-hover">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-          {meta.label}
+    <div className="facet-border group rounded-sm bg-bg-card transition-colors hover:bg-bg-card-hover">
+      <div className="p-5 pb-0">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
+            {meta.label}
+          </div>
+          <div className="flex items-center gap-2">
+            <div
+              className={`h-2 w-2 rounded-full ${
+                isOnline ? "bg-success animate-pulse" : "bg-text-muted"
+              }`}
+            />
+            <span
+              className={`text-xs font-medium ${
+                isOnline ? "text-success" : "text-text-muted"
+              }`}
+            >
+              {isOnline ? "Online" : "Offline"}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div
-            className={`h-2 w-2 rounded-full ${
-              isOnline ? "bg-success animate-pulse" : "bg-text-muted"
-            }`}
-          />
-          <span
-            className={`text-xs font-medium ${
-              isOnline ? "text-success" : "text-text-muted"
-            }`}
-          >
-            {isOnline ? "Online" : "Offline"}
+
+        <div className="mb-3 flex items-baseline gap-1">
+          <span className="font-display text-3xl font-bold tracking-wide text-text-primary">
+            {server.players}
           </span>
+          <span className="text-sm text-text-muted">/ {server.maxPlayers}</span>
+        </div>
+
+        <div className="mb-3 h-1 w-full overflow-hidden rounded-full bg-bg-tertiary">
+          <div
+            className="h-full rounded-full bg-accent transition-all duration-500"
+            style={{
+              width: `${(server.players / server.maxPlayers) * 100}%`,
+            }}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-text-secondary">{server.map}</span>
+          <a
+            href={meta.connectUrl}
+            className="text-xs font-medium text-accent opacity-0 transition-opacity group-hover:opacity-100"
+          >
+            Connect
+          </a>
         </div>
       </div>
 
-      <div className="mb-3 flex items-baseline gap-1">
-        <span className="font-display text-3xl font-bold tracking-wide text-text-primary">
-          {server.players}
-        </span>
-        <span className="text-sm text-text-muted">/ {server.maxPlayers}</span>
-      </div>
-
-      <div className="mb-3 h-1 w-full overflow-hidden rounded-full bg-bg-tertiary">
-        <div
-          className="h-full rounded-full bg-accent transition-all duration-500"
-          style={{
-            width: `${(server.players / server.maxPlayers) * 100}%`,
-          }}
-        />
-      </div>
-
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-text-secondary">{server.map}</span>
-        <a
-          href={meta.connectUrl}
-          className="text-xs font-medium text-accent opacity-0 transition-opacity group-hover:opacity-100"
-        >
-          Connect
-        </a>
-      </div>
+      {/* Stacked sparkline graphs */}
+      {(playerData.length >= 2 || queueData.length >= 2) && (
+        <div className="mt-3 border-t border-border/30 px-2 pt-2 pb-2">
+          <div className="flex items-center gap-4 mb-1">
+            <span className="text-[9px] font-medium uppercase tracking-widest text-text-muted">Players</span>
+            <span className="text-[9px] font-medium uppercase tracking-widest text-text-muted">Queue</span>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex-1 h-10 rounded-sm overflow-hidden bg-bg-tertiary/30">
+              <Sparkline data={playerData} color="var(--color-accent)" height={40} />
+            </div>
+            <div className="flex-1 h-10 rounded-sm overflow-hidden bg-bg-tertiary/30">
+              <Sparkline data={queueData} color="var(--color-warning)" height={40} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -247,9 +292,22 @@ export default function DashboardPage() {
         </div>
       ) : stats?.servers && stats.servers.length > 0 ? (
         <div className="mb-6 grid gap-4 sm:grid-cols-2">
-          {stats.servers.map((server) => (
-            <ServerStatusCard key={server.id} server={server} />
-          ))}
+          {stats.servers.map((server) => {
+            // Match SquadJS metrics by server name substring
+            const metricsEntry = stats.serverMetrics
+              ? Object.values(stats.serverMetrics).find((m) =>
+                  server.name.toLowerCase().includes(m.serverName.toLowerCase().split(" ")[0].toLowerCase()) ||
+                  m.serverName.toLowerCase().includes(server.name.toLowerCase().split(" ")[0].toLowerCase())
+                )
+              : undefined;
+            return (
+              <ServerStatusCard
+                key={server.id}
+                server={server}
+                metrics={metricsEntry?.metricHistory}
+              />
+            );
+          })}
         </div>
       ) : null}
 

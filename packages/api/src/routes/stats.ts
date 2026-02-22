@@ -4,6 +4,7 @@ import prisma from "../lib/db";
 import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
 import { fetchAllServers } from "./servers";
+import { squadjsSocket } from "../lib/squadjs-socket";
 
 const stats = new Hono();
 
@@ -19,6 +20,19 @@ stats.get("/summary", async (c) => {
   const serversPromise = fetchAllServers().then((data) => {
     result.servers = data;
   });
+
+  // SquadJS metric history - keyed by server name for frontend matching
+  const serverMetrics: Record<string, { serverName: string; metricHistory: unknown[] }> = {};
+  for (const key of squadjsSocket.getServerKeys()) {
+    const snapshot = squadjsSocket.getSnapshot(key);
+    if (snapshot) {
+      serverMetrics[key] = {
+        serverName: snapshot.serverInfo?.serverName || key,
+        metricHistory: snapshot.metricHistory,
+      };
+    }
+  }
+  result.serverMetrics = serverMetrics;
 
   const promises: Promise<void>[] = [serversPromise];
 

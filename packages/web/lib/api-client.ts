@@ -345,8 +345,17 @@ export function updateMatch(
 }
 
 // Dashboard Stats
+export interface MetricSample {
+  time: number;
+  tickRate: number | null;
+  playerCount: number;
+  publicQueue: number;
+  reserveQueue: number;
+}
+
 export interface DashboardStats {
   servers?: ServerStatus[];
+  serverMetrics?: Record<string, { serverName: string; metricHistory: MetricSample[] }>;
   tickets?: { open: number; closed: number };
   prospects?: { open: number; accepted: number; denied: number };
   members?: { total: number; withSteam: number };

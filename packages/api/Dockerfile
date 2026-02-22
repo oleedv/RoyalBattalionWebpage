@@ -18,4 +18,4 @@ RUN DATABASE_URL="mysql://build:build@localhost:3306/build" bunx prisma generate
 
 ENV NODE_ENV=production
 EXPOSE 3001
-CMD ["sh", "-c", "bunx prisma generate && bunx prisma db push && bun run packages/api/src/index.ts"]
+CMD ["sh", "-c", "bunx prisma db push && bun run packages/api/src/index.ts"]

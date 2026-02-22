@@ -195,6 +195,11 @@ export default function LiveServerPage() {
       case "SNAPSHOT_SERVER_INFO":
         if (data) setServerInfo(data as ServerInfo);
         break;
+      case "CONNECTION_STATUS":
+        if (data && typeof data === "object" && "connected" in data) {
+          setSquadjsConnected((data as { connected: boolean }).connected);
+        }
+        break;
       case "UPDATED_A2S_INFORMATION":
         if (data && typeof data === "object") {
           const a2s = data as Record<string, unknown>;

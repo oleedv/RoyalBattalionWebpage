@@ -113,6 +113,8 @@ class SquadJSSocketManager {
       return;
     }
 
+    console.log(`[squadjs-socket] Connecting to ${configs.length} server(s): ${configs.map((c) => `${c.key} -> ${c.url}`).join(", ")}`);
+
     for (const cfg of configs) {
       this.connectServer(cfg.key, cfg.url, cfg.token);
     }
@@ -121,9 +123,12 @@ class SquadJSSocketManager {
   private connectServer(key: string, url: string, token: string) {
     const socket = io(url, {
       auth: { token },
+      transports: ["websocket"],
       reconnection: true,
       reconnectionDelay: 5000,
+      reconnectionDelayMax: 30000,
       reconnectionAttempts: Infinity,
+      timeout: 10000,
     });
 
     const state: ServerState = {
@@ -145,16 +150,18 @@ class SquadJSSocketManager {
     socket.on("connect", () => {
       console.log(`[squadjs-socket] Connected to ${key}`);
       state.connected = true;
+      this.broadcast(key, "CONNECTION_STATUS", { connected: true });
       this.requestInitialState(key, state);
     });
 
     socket.on("disconnect", (reason) => {
       console.log(`[squadjs-socket] ${key} disconnected: ${reason}`);
       state.connected = false;
+      this.broadcast(key, "CONNECTION_STATUS", { connected: false });
     });
 
     socket.on("connect_error", (err) => {
-      console.error(`[squadjs-socket] ${key} error: ${err.message}`);
+      console.error(`[squadjs-socket] ${key} connect_error: ${err.message}`, (err as any).data || "", (err as any).description || "");
     });
 
     for (const event of EVENTS_TO_RELAY) {
@@ -182,16 +189,32 @@ class SquadJSSocketManager {
 
     const info: Partial<SquadJSServerInfo> = {};
     let received = 0;
+    let infoPublished = false;
+
+    const publishInfo = () => {
+      if (infoPublished) return;
+      infoPublished = true;
+      state.serverInfo = info as SquadJSServerInfo;
+      this.broadcast(key, "SNAPSHOT_SERVER_INFO", state.serverInfo);
+      this.sampleMetric(state);
+      this.startMetricSampling(state);
+    };
+
+    // Fallback: publish partial info after 10s if not all acks arrive
+    const infoTimeout = setTimeout(() => {
+      if (!infoPublished && received > 0) {
+        console.warn(`[squadjs-socket] ${key}: only ${received}/${infoKeys.length} info acks received, publishing partial data`);
+        publishInfo();
+      }
+    }, 10_000);
 
     for (const infoKey of infoKeys) {
       state.socket.emit(infoKey, (value: unknown) => {
         (info as Record<string, unknown>)[infoKey] = value;
         received++;
         if (received === infoKeys.length) {
-          state.serverInfo = info as SquadJSServerInfo;
-          this.broadcast(key, "SNAPSHOT_SERVER_INFO", state.serverInfo);
-          this.sampleMetric(state);
-          this.startMetricSampling(state);
+          clearTimeout(infoTimeout);
+          publishInfo();
         }
       });
     }

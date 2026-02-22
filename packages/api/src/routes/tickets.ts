@@ -170,7 +170,7 @@ tickets.get("/by-uuid/:uuid", async (c) => {
 });
 
 // GET /tickets - list all tickets
-tickets.get("/", requirePermission("admin"), async (c) => {
+tickets.get("/", requirePermission("view:tickets", "manage:tickets"), async (c) => {
   const rows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by
      FROM tickets
@@ -193,7 +193,7 @@ tickets.get("/", requirePermission("admin"), async (c) => {
 });
 
 // GET /tickets/:id - get ticket with events and messages
-tickets.get("/:id", requirePermission("admin"), async (c) => {
+tickets.get("/:id", requirePermission("view:tickets", "manage:tickets"), async (c) => {
   const id = Number(c.req.param("id"));
 
   const ticketRows: any[] = await getSecretaryDb().$queryRawUnsafe(
@@ -254,7 +254,7 @@ tickets.get("/:id", requirePermission("admin"), async (c) => {
 });
 
 // GET /tickets/prospects/list - list all prospects
-tickets.get("/prospects/list", requirePermission("admin"), async (c) => {
+tickets.get("/prospects/list", requirePermission("view:tickets", "manage:tickets"), async (c) => {
   const rows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
             squad_hours, preferred_roles, prev_clan, why_rb, active_hours, competitive,
@@ -289,7 +289,7 @@ tickets.get("/prospects/list", requirePermission("admin"), async (c) => {
 });
 
 // GET /tickets/prospects/:id - get prospect with events, messages, votes
-tickets.get("/prospects/:id", requirePermission("admin"), async (c) => {
+tickets.get("/prospects/:id", requirePermission("view:tickets", "manage:tickets"), async (c) => {
   const id = Number(c.req.param("id"));
 
   const prospectRows: any[] = await getSecretaryDb().$queryRawUnsafe(

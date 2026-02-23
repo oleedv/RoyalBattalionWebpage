@@ -9,6 +9,31 @@ const WS_BASE =
     "ws"
   );
 
+const FACTION_META: Record<string, { name: string; flag: string }> = {
+  USA:    { name: "United States Army",       flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_USA.png" },
+  USMC:   { name: "US Marine Corps",          flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_USMC.png" },
+  RUS:    { name: "Russian Ground Forces",    flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_RUS.png" },
+  GB:     { name: "British Army",             flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_GB.png" },
+  CAF:    { name: "Canadian Armed Forces",    flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_CAF.png" },
+  AUS:    { name: "Australian Defence Force", flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_AUS.png" },
+  MEA:    { name: "Middle Eastern Alliance",  flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_MEA.png" },
+  INS:    { name: "Insurgents",               flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_INS.png" },
+  MIL:    { name: "Irregular Militia",        flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_MIL.png" },
+  PLA:    { name: "People's Liberation Army", flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_PLA.png" },
+  PLANMC: { name: "PLA Naval Marine Corps",   flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_PLANMC.png" },
+  VDV:    { name: "Russian Airborne",         flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_VDV.png" },
+  TLF:    { name: "Turkish Land Forces",      flag: "" },
+};
+
+function getFaction(players: Player[]): { name: string; flag: string } | null {
+  for (const p of players) {
+    if (!p.role || typeof p.role !== "string") continue;
+    const prefix = p.role.split("_")[0];
+    if (prefix && FACTION_META[prefix]) return FACTION_META[prefix];
+  }
+  return null;
+}
+
 interface Player {
   playerID: string;
   eosID: string;
@@ -630,6 +655,7 @@ export default function LiveServerPage() {
                   showActions={canManage}
                   searchValue={team1Search}
                   onSearchChange={setTeam1Search}
+                  faction={getFaction(team1All)}
                   onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
                   onSwitchTeam={handleSwitchTeam}
@@ -646,6 +672,7 @@ export default function LiveServerPage() {
                   showActions={canManage}
                   searchValue={team2Search}
                   onSearchChange={setTeam2Search}
+                  faction={getFaction(team2All)}
                   onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
                   onSwitchTeam={handleSwitchTeam}
@@ -1039,6 +1066,7 @@ function TeamColumn({
   showActions = false,
   searchValue,
   onSearchChange,
+  faction,
   onWarn,
   onKick,
   onSwitchTeam,
@@ -1054,6 +1082,7 @@ function TeamColumn({
   showActions?: boolean;
   searchValue?: string;
   onSearchChange?: (v: string) => void;
+  faction?: { name: string; flag: string } | null;
   onWarn: (p: Player) => void;
   onKick: (p: Player) => void;
   onSwitchTeam: (p: Player) => void;
@@ -1084,9 +1113,19 @@ function TeamColumn({
   return (
     <div className={className}>
       <div className="flex items-center justify-between border-b border-border/50 px-4 py-2">
-        <span className="text-xs font-medium tracking-wide text-text-muted uppercase">
-          {label} ({totalCount})
-        </span>
+        <div className="flex items-center gap-2">
+          {faction?.flag && (
+            <img src={faction.flag} alt={faction.name} className="h-4 w-4 object-contain" />
+          )}
+          <div className="flex flex-col">
+            <span className="text-xs font-medium tracking-wide text-text-muted uppercase">
+              {label} ({totalCount})
+            </span>
+            {faction && (
+              <span className="text-[10px] text-text-muted/70">{faction.name}</span>
+            )}
+          </div>
+        </div>
         {onSearchChange && (
           <div className="relative">
             <input

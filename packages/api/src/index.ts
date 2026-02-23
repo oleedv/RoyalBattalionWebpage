@@ -338,7 +338,7 @@ export default {
 
 async function handleAdminAction(
   ws: ServerWebSocket<WSData>,
-  msg: { action: string; server?: string; steamId?: string; eosId?: string; message?: string; reason?: string; teamID?: string; squadID?: string }
+  msg: { action: string; server?: string; steamId?: string; eosId?: string; message?: string; reason?: string; teamID?: string; squadID?: string; players?: { steamId?: string; eosId?: string }[] }
 ) {
   const serverKey = ws.data.serverKey;
   console.log(`[live-server] RCON ${msg.action} from user ${ws.data.userId} on ${serverKey}`);
@@ -388,6 +388,26 @@ async function handleAdminAction(
         await squadjsSocket.executeRcon(serverKey, "forceTeamChange", playerId);
         auditDirect(ws.data.userId, ws.data.userName, "rcon.switchteam", "LiveServer", serverKey, { playerId });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchteam" }));
+        break;
+      }
+
+      case "switchsquad": {
+        if (!msg.players?.length) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing players list" }));
+          return;
+        }
+        let switched = 0;
+        for (const p of msg.players) {
+          const pid = p.steamId || p.eosId;
+          if (!pid) continue;
+          await squadjsSocket.executeRcon(serverKey, "forceTeamChange", pid);
+          switched++;
+          if (switched < msg.players.length) {
+            await new Promise((r) => setTimeout(r, 100));
+          }
+        }
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchsquad", "LiveServer", serverKey, { count: switched });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchsquad" }));
         break;
       }
 

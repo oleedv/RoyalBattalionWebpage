@@ -391,12 +391,14 @@ export default function LiveServerPage() {
     };
   }, [apiToken, canView, connectWs]);
 
-  // Auto-scroll chat & console
+  // Auto-scroll chat & console (use container scrollTo to avoid pulling the page)
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = chatEndRef.current?.parentElement;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [chatLog]);
   useEffect(() => {
-    consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = consoleEndRef.current?.parentElement;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [consoleLog]);
 
   function switchServer(key: string) {
@@ -466,13 +468,13 @@ export default function LiveServerPage() {
 
   function handleSwitchSquad() {
     if (!switchSquadTarget) return;
-    for (const p of switchSquadTarget.players) {
-      sendAction({
-        action: "switchteam",
+    sendAction({
+      action: "switchsquad",
+      players: switchSquadTarget.players.map((p) => ({
         steamId: p.steamID,
         eosId: p.eosID,
-      });
-    }
+      })),
+    });
     setSwitchSquadTarget(null);
   }
 
@@ -658,7 +660,7 @@ export default function LiveServerPage() {
               </div>
             ) : (
               <>
-              <div className="grid flex-1 gap-0 md:grid-cols-2">
+              <div className="grid gap-0 md:grid-cols-2 overflow-y-auto" style={{ maxHeight: "calc(100vh - 300px)" }}>
                 <TeamColumn
                   label="Team 1"
                   players={team1}

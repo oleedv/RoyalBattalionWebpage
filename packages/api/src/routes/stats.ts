@@ -19,6 +19,9 @@ stats.get("/summary", async (c) => {
   // Servers - always included (public data)
   const serversPromise = fetchAllServers().then((data) => {
     result.servers = data;
+  }).catch((err) => {
+    console.error("[stats] Failed to fetch servers:", err);
+    result.servers = [];
   });
 
   // SquadJS metric history + current counts - keyed by server key for frontend matching
@@ -49,41 +52,53 @@ stats.get("/summary", async (c) => {
 
   // Tickets & Prospects - requires admin
   if (isAdmin) {
-    promises.push(
-      getSecretaryDb()
-        .$queryRawUnsafe<{ status: string; count: number }[]>(
-          `SELECT status, COUNT(*) as count FROM tickets GROUP BY status`
-        )
-        .then((rows: any[]) => {
-          let open = 0;
-          let closed = 0;
-          for (const r of rows) {
-            if (r.status === "closed") closed += Number(r.count);
-            else open += Number(r.count);
-          }
-          result.tickets = { open, closed };
-        })
-    );
+    try {
+      const secretaryDb = getSecretaryDb();
 
-    promises.push(
-      getSecretaryDb()
-        .$queryRawUnsafe<{ status: string; count: number }[]>(
-          `SELECT status, COUNT(*) as count FROM prospects GROUP BY status`
-        )
-        .then((rows: any[]) => {
-          let open = 0;
-          let accepted = 0;
-          let denied = 0;
-          for (const r of rows) {
-            const status = r.status;
-            const count = Number(r.count);
-            if (status === "accepted") accepted += count;
-            else if (status === "denied") denied += count;
-            else open += count;
-          }
-          result.prospects = { open, accepted, denied };
-        })
-    );
+      promises.push(
+        secretaryDb
+          .$queryRawUnsafe<{ status: string; count: number }[]>(
+            `SELECT status, COUNT(*) as count FROM tickets GROUP BY status`
+          )
+          .then((rows: any[]) => {
+            let open = 0;
+            let closed = 0;
+            for (const r of rows) {
+              if (r.status === "closed") closed += Number(r.count);
+              else open += Number(r.count);
+            }
+            result.tickets = { open, closed };
+          })
+          .catch((err: unknown) => {
+            console.error("[stats] Failed to fetch tickets:", err);
+          })
+      );
+
+      promises.push(
+        secretaryDb
+          .$queryRawUnsafe<{ status: string; count: number }[]>(
+            `SELECT status, COUNT(*) as count FROM prospects GROUP BY status`
+          )
+          .then((rows: any[]) => {
+            let open = 0;
+            let accepted = 0;
+            let denied = 0;
+            for (const r of rows) {
+              const status = r.status;
+              const count = Number(r.count);
+              if (status === "accepted") accepted += count;
+              else if (status === "denied") denied += count;
+              else open += count;
+            }
+            result.prospects = { open, accepted, denied };
+          })
+          .catch((err: unknown) => {
+            console.error("[stats] Failed to fetch prospects:", err);
+          })
+      );
+    } catch (err) {
+      console.error("[stats] Secretary DB not available:", err);
+    }
   }
 
   // Members - requires view:members
@@ -94,6 +109,8 @@ stats.get("/summary", async (c) => {
         prisma.user.count({ where: { steamId: { not: null } } }),
       ]).then(([total, withSteam]) => {
         result.members = { total, withSteam };
+      }).catch((err) => {
+        console.error("[stats] Failed to fetch members:", err);
       })
     );
   }
@@ -103,6 +120,8 @@ stats.get("/summary", async (c) => {
     promises.push(
       prisma.whitelistEntry.count().then((total) => {
         result.whitelist = { total };
+      }).catch((err) => {
+        console.error("[stats] Failed to fetch whitelist:", err);
       })
     );
   }
@@ -136,6 +155,8 @@ stats.get("/summary", async (c) => {
           updatedAt: e.updatedAt.toISOString(),
         }));
         result.recentMatches = recent;
+      }).catch((err) => {
+        console.error("[stats] Failed to fetch matches:", err);
       })
     );
   }

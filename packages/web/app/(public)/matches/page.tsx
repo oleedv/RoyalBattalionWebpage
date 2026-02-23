@@ -10,6 +10,30 @@ import type { Match, MatchDetail, MatchPlayer } from "shared";
 const THUMBNAILS_BASE =
   "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/maps/thumbnails";
 
+const FLAG_BASE = "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons";
+const FACTION_FLAGS: Record<string, string> = {
+  USA:    `${FLAG_BASE}/flag_USA.png`,
+  USMC:   `${FLAG_BASE}/flag_USMC.png`,
+  RUS:    `${FLAG_BASE}/flag_RUS.png`,
+  VDV:    `${FLAG_BASE}/flag_VDV.png`,
+  GB:     `${FLAG_BASE}/flag_GB.png`,
+  BAF:    `${FLAG_BASE}/flag_GB.png`,
+  CAF:    `${FLAG_BASE}/flag_CAF.png`,
+  AUS:    `${FLAG_BASE}/flag_AUS.png`,
+  ADF:    `${FLAG_BASE}/flag_AUS.png`,
+  MEA:    `${FLAG_BASE}/flag_MEA.png`,
+  INS:    `${FLAG_BASE}/flag_INS.png`,
+  MIL:    `${FLAG_BASE}/flag_MIL.png`,
+  PLA:    `${FLAG_BASE}/flag_PLA.png`,
+  PLANMC: `${FLAG_BASE}/flag_PLANMC.png`,
+};
+
+function FactionFlag({ code, className = "h-4 w-4" }: { code: string; className?: string }) {
+  const src = FACTION_FLAGS[code];
+  if (!src) return null;
+  return <img src={src} alt={code} className={`${className} object-contain`} />;
+}
+
 function getMapThumbnailUrls(layer: string): string[] {
   // Strip SquadJS prefixes like "SEC_26_" and normalize spaces to underscores
   const cleaned = layer
@@ -227,8 +251,9 @@ function MatchRow({ match }: { match: Match }) {
             {detail ? (
               <>
                 <div className="text-right">
-                  <div className="mb-0.5 text-xs font-medium tracking-[0.15em] text-text-secondary uppercase">
+                  <div className="mb-0.5 flex items-center justify-end gap-1.5 text-xs font-medium tracking-[0.15em] text-text-secondary uppercase">
                     {detail.team1.faction}
+                    <FactionFlag code={detail.team1.faction} className="h-3.5 w-3.5" />
                   </div>
                   <span className={`rounded-sm px-2 py-0.5 text-xs font-semibold ${resultBadge(detail.team1.result)}`}>
                     {detail.team1.result}
@@ -238,7 +263,8 @@ function MatchRow({ match }: { match: Match }) {
                   vs
                 </div>
                 <div className="text-left">
-                  <div className="mb-0.5 text-xs font-medium tracking-[0.15em] text-text-secondary uppercase">
+                  <div className="mb-0.5 flex items-center gap-1.5 text-xs font-medium tracking-[0.15em] text-text-secondary uppercase">
+                    <FactionFlag code={detail.team2.faction} className="h-3.5 w-3.5" />
                     {detail.team2.faction}
                   </div>
                   <span className={`rounded-sm px-2 py-0.5 text-xs font-semibold ${resultBadge(detail.team2.result)}`}>
@@ -296,21 +322,23 @@ function MatchRow({ match }: { match: Match }) {
             {/* Team comparison */}
             <div className="mb-6 rounded-sm border border-border/50 bg-bg-primary/70 p-4 backdrop-blur-sm">
               <div className="mb-3 flex items-center justify-between">
-                <div>
+                <div className="flex items-center gap-2">
+                  <FactionFlag code={detail.team1.faction} />
                   <span className="font-display text-sm font-semibold tracking-wide text-text-primary">
                     {detail.team1.factionFull || detail.team1.faction}
                   </span>
-                  <span className={`ml-2 rounded-sm px-2 py-0.5 text-xs font-semibold ${resultBadge(detail.team1.result)}`}>
+                  <span className={`ml-1 rounded-sm px-2 py-0.5 text-xs font-semibold ${resultBadge(detail.team1.result)}`}>
                     {detail.team1.result}
                   </span>
                 </div>
-                <div>
-                  <span className={`mr-2 rounded-sm px-2 py-0.5 text-xs font-semibold ${resultBadge(detail.team2.result)}`}>
+                <div className="flex items-center gap-2">
+                  <span className={`mr-1 rounded-sm px-2 py-0.5 text-xs font-semibold ${resultBadge(detail.team2.result)}`}>
                     {detail.team2.result}
                   </span>
                   <span className="font-display text-sm font-semibold tracking-wide text-text-primary">
                     {detail.team2.factionFull || detail.team2.faction}
                   </span>
+                  <FactionFlag code={detail.team2.faction} />
                 </div>
               </div>
 
@@ -334,6 +362,7 @@ function MatchRow({ match }: { match: Match }) {
               <div>
                 <div className="mb-3 flex items-center gap-2">
                   <div className="h-3 w-1 rounded-full bg-[#4a90d9]" />
+                  <FactionFlag code={detail.team1.faction} />
                   <h3 className="font-display text-sm font-semibold tracking-wide text-text-primary">
                     {detail.team1.factionFull || detail.team1.faction}
                   </h3>
@@ -345,6 +374,7 @@ function MatchRow({ match }: { match: Match }) {
               <div>
                 <div className="mb-3 flex items-center gap-2">
                   <div className="h-3 w-1 rounded-full bg-[#d94a4a]" />
+                  <FactionFlag code={detail.team2.faction} />
                   <h3 className="font-display text-sm font-semibold tracking-wide text-text-primary">
                     {detail.team2.factionFull || detail.team2.faction}
                   </h3>

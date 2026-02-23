@@ -25,7 +25,7 @@ tickets.get("/by-uuid/prospect/:uuid", async (c) => {
   const prospectRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
             squad_hours, preferred_roles, prev_clan, why_rb, active_hours, competitive,
-            steam_id, mentor_id, created_at, closed_at, closed_by
+            steam_id, mentor_id, paused_at, extra_days, created_at, closed_at, closed_by
      FROM prospects WHERE uuid = ?`,
     uuid
   );
@@ -72,6 +72,8 @@ tickets.get("/by-uuid/prospect/:uuid", async (c) => {
     competitive: r.competitive,
     steamId: r.steam_id,
     mentorId: r.mentor_id,
+    pausedAt: r.paused_at ? new Date(r.paused_at).toISOString() : null,
+    extraDays: Number(r.extra_days) || 0,
     createdAt: new Date(r.created_at).toISOString(),
     closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
     closedBy: r.closed_by,
@@ -258,7 +260,7 @@ tickets.get("/prospects/list", requirePermission("view:tickets", "manage:tickets
   const rows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
             squad_hours, preferred_roles, prev_clan, why_rb, active_hours, competitive,
-            steam_id, mentor_id, created_at, closed_at, closed_by
+            steam_id, mentor_id, paused_at, extra_days, created_at, closed_at, closed_by
      FROM prospects
      ORDER BY created_at DESC`
   );
@@ -280,6 +282,8 @@ tickets.get("/prospects/list", requirePermission("view:tickets", "manage:tickets
     competitive: r.competitive,
     steamId: r.steam_id,
     mentorId: r.mentor_id,
+    pausedAt: r.paused_at ? new Date(r.paused_at).toISOString() : null,
+    extraDays: Number(r.extra_days) || 0,
     createdAt: new Date(r.created_at).toISOString(),
     closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
     closedBy: r.closed_by,
@@ -295,7 +299,7 @@ tickets.get("/prospects/:id", requirePermission("view:tickets", "manage:tickets"
   const prospectRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
             squad_hours, preferred_roles, prev_clan, why_rb, active_hours, competitive,
-            steam_id, mentor_id, created_at, closed_at, closed_by
+            steam_id, mentor_id, paused_at, extra_days, created_at, closed_at, closed_by
      FROM prospects WHERE id = ?`,
     id
   );
@@ -341,6 +345,8 @@ tickets.get("/prospects/:id", requirePermission("view:tickets", "manage:tickets"
     competitive: r.competitive,
     steamId: r.steam_id,
     mentorId: r.mentor_id,
+    pausedAt: r.paused_at ? new Date(r.paused_at).toISOString() : null,
+    extraDays: Number(r.extra_days) || 0,
     createdAt: new Date(r.created_at).toISOString(),
     closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
     closedBy: r.closed_by,

@@ -12,6 +12,8 @@ export const PERMISSIONS = [
   "view:live-server",
   "manage:live-server",
   "manage:whitelist-sync",
+  "view:discord-bot",
+  "manage:discord-bot",
   "admin",
 ] as const;
 

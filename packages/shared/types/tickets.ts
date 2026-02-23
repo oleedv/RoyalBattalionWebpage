@@ -49,6 +49,8 @@ export interface Prospect {
   competitive: string;
   steamId: string;
   mentorId: string | null;
+  pausedAt: string | null;
+  extraDays: number;
   createdAt: string;
   closedAt: string | null;
   closedBy: string | null;

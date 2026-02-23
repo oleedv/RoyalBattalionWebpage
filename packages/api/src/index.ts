@@ -12,6 +12,7 @@ import stats from "./routes/stats";
 import adminGroups from "./routes/admin-groups";
 import squadjsConfig from "./routes/squadjs-config";
 import serverConfig from "./routes/server-config";
+import discordBot from "./routes/discord-bot";
 import { syncMatches } from "./lib/match-sync";
 import { generateAdminsCfg } from "./lib/cfg-generator";
 import { squadjsSocket } from "./lib/squadjs-socket";
@@ -47,6 +48,7 @@ app.route("/servers", servers);
 app.route("/stats", stats);
 app.route("/squadjs-config", squadjsConfig);
 app.route("/server-config", serverConfig);
+app.route("/discord-bot", discordBot);
 
 // Public cfg endpoint (no auth) -- separate from /whitelist to avoid auth middleware
 app.get("/admins.cfg", async (c) => {

@@ -34,6 +34,11 @@ const NAV_ITEMS: NavItem[] = [
     requiredPermissions: ["view:tickets", "manage:tickets"],
   },
   {
+    label: "Discord Bot",
+    href: "/discord-bot",
+    requiredPermissions: ["view:discord-bot", "manage:discord-bot"],
+  },
+  {
     label: "Matches",
     href: "/match-manager",
     requiredPermissions: ["manage:matches"],

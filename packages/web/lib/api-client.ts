@@ -13,6 +13,9 @@ import type {
   Permission,
   Match,
   SquadJSPlugin,
+  DiscordBotOverview,
+  SeedingConfig,
+  SeedingSession,
 } from "shared";
 
 const BASE_URL =
@@ -476,4 +479,74 @@ export function getSquadJSDescriptions(
     "/squadjs-config/descriptions",
     { headers: authHeaders(token) }
   );
+}
+
+// Discord Bot
+export function getDiscordBotOverview(
+  token: string
+): Promise<ApiResponse<DiscordBotOverview>> {
+  return request<DiscordBotOverview>("/discord-bot/overview", {
+    headers: authHeaders(token),
+  });
+}
+
+export function getSeedingConfig(
+  token: string
+): Promise<ApiResponse<SeedingConfig>> {
+  return request<SeedingConfig>("/discord-bot/seeding/config", {
+    headers: authHeaders(token),
+  });
+}
+
+export function updateSeedingConfig(
+  token: string,
+  data: Partial<SeedingConfig>
+): Promise<ApiResponse<{ updated: true }>> {
+  return request<{ updated: true }>("/discord-bot/seeding/config", {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function getSeedingSessions(
+  token: string,
+  limit?: number
+): Promise<ApiResponse<SeedingSession[]>> {
+  const qs = limit ? `?limit=${limit}` : "";
+  return request<SeedingSession[]>(`/discord-bot/seeding/sessions${qs}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function pauseProspect(
+  token: string,
+  id: number
+): Promise<ApiResponse<{ updated: true }>> {
+  return request<{ updated: true }>(`/discord-bot/prospects/${id}/pause`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export function unpauseProspect(
+  token: string,
+  id: number
+): Promise<ApiResponse<{ updated: true }>> {
+  return request<{ updated: true }>(`/discord-bot/prospects/${id}/unpause`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export function extendProspect(
+  token: string,
+  id: number,
+  days: number
+): Promise<ApiResponse<{ updated: true }>> {
+  return request<{ updated: true }>(`/discord-bot/prospects/${id}/extend`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ days }),
+  });
 }

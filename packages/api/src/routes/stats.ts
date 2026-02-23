@@ -163,18 +163,23 @@ stats.get("/summary", async (c) => {
 
   await Promise.all(promises);
 
-  // Merge SquadJS metrics into server objects by index (1st BM server = 1st SquadJS key, etc.)
-  const sqKeys = squadjsSocket.getServerKeys();
+  // Merge SquadJS metrics into server objects by matching server names
   const servers = result.servers as ServerStatus[] | undefined;
-  if (servers && sqKeys.length > 0) {
-    for (let i = 0; i < servers.length && i < sqKeys.length; i++) {
-      const metrics = serverMetrics[sqKeys[i]];
-      if (metrics) {
-        servers[i].players = metrics.playerCount;
-        servers[i].maxPlayers = metrics.maxPlayers || servers[i].maxPlayers;
-        servers[i].publicQueue = metrics.publicQueue;
-        servers[i].reserveQueue = metrics.reserveQueue;
-        servers[i].metricHistory = metrics.metricHistory as ServerStatus["metricHistory"];
+  const metricsEntries = Object.values(serverMetrics);
+  if (servers && metricsEntries.length > 0) {
+    for (const server of servers) {
+      const bmName = server.name.toLowerCase();
+      const match = metricsEntries.find((m) => {
+        const sqName = m.serverName.toLowerCase();
+        // Exact match or one contains the other
+        return bmName === sqName || bmName.includes(sqName) || sqName.includes(bmName);
+      });
+      if (match) {
+        server.players = match.playerCount;
+        server.maxPlayers = match.maxPlayers || server.maxPlayers;
+        server.publicQueue = match.publicQueue;
+        server.reserveQueue = match.reserveQueue;
+        server.metricHistory = match.metricHistory as ServerStatus["metricHistory"];
       }
     }
   }

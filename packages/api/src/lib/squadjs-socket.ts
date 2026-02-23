@@ -23,6 +23,8 @@ export interface SquadJSServerInfo {
   reserveQueue: number;
   currentLayer: string | null;
   nextLayer: string | null;
+  team1Faction?: string;
+  team2Faction?: string;
 }
 
 export interface SquadJSChatMessage {
@@ -194,6 +196,20 @@ class SquadJSSocketManager {
     const publishInfo = () => {
       if (infoPublished) return;
       infoPublished = true;
+      // Extract faction info from currentLayer if it's an object
+      const layer = info.currentLayer as unknown;
+      if (layer && typeof layer === "object") {
+        const layerObj = layer as Record<string, unknown>;
+        // SquadJS layer objects may have teams[0].faction / teams[1].faction
+        if (Array.isArray(layerObj.teams) && layerObj.teams.length >= 2) {
+          const t1 = layerObj.teams[0] as Record<string, unknown>;
+          const t2 = layerObj.teams[1] as Record<string, unknown>;
+          if (t1?.faction) info.team1Faction = String(t1.faction);
+          if (t2?.faction) info.team2Faction = String(t2.faction);
+        }
+        // Normalize currentLayer to string for downstream
+        if (layerObj.name) info.currentLayer = String(layerObj.name);
+      }
       state.serverInfo = info as SquadJSServerInfo;
       this.broadcast(key, "SNAPSHOT_SERVER_INFO", state.serverInfo);
       this.sampleMetric(state);
@@ -270,12 +286,32 @@ class SquadJSSocketManager {
           const a2s = data as Record<string, unknown>;
           if (state.serverInfo) {
             state.serverInfo.playerCount = (a2s.a2sPlayerCount as number) ?? state.serverInfo.playerCount;
-            state.serverInfo.currentLayer = (a2s.currentLayer as string) ?? state.serverInfo.currentLayer;
+            // currentLayer can be string or object with teams/faction data
+            if (a2s.currentLayer != null) {
+              const cl = a2s.currentLayer;
+              if (typeof cl === "object") {
+                const obj = cl as Record<string, unknown>;
+                if (obj.name) state.serverInfo.currentLayer = String(obj.name);
+                if (Array.isArray(obj.teams) && obj.teams.length >= 2) {
+                  const t1 = obj.teams[0] as Record<string, unknown>;
+                  const t2 = obj.teams[1] as Record<string, unknown>;
+                  if (t1?.faction) state.serverInfo.team1Faction = String(t1.faction);
+                  if (t2?.faction) state.serverInfo.team2Faction = String(t2.faction);
+                }
+              } else {
+                state.serverInfo.currentLayer = String(cl);
+              }
+            }
             if (a2s.nextLayer !== undefined) {
-              state.serverInfo.nextLayer = (a2s.nextLayer as string) ?? state.serverInfo.nextLayer;
+              state.serverInfo.nextLayer = (typeof a2s.nextLayer === "object" && a2s.nextLayer !== null && "name" in (a2s.nextLayer as object))
+                ? String((a2s.nextLayer as Record<string, unknown>).name)
+                : (a2s.nextLayer as string) ?? state.serverInfo.nextLayer;
             }
             if (typeof a2s.publicQueue === "number") state.serverInfo.publicQueue = a2s.publicQueue;
             if (typeof a2s.reserveQueue === "number") state.serverInfo.reserveQueue = a2s.reserveQueue;
+            // A2S rules may also have TeamOne_s / TeamTwo_s
+            if (a2s.TeamOne_s) state.serverInfo.team1Faction = String(a2s.TeamOne_s);
+            if (a2s.TeamTwo_s) state.serverInfo.team2Faction = String(a2s.TeamTwo_s);
           }
         }
         break;

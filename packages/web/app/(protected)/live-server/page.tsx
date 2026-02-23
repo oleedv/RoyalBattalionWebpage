@@ -25,7 +25,16 @@ const FACTION_META: Record<string, { name: string; flag: string }> = {
   TLF:    { name: "Turkish Land Forces",      flag: "" },
 };
 
-function getFaction(players: Player[]): { name: string; flag: string } | null {
+function getFaction(players: Player[], serverFaction?: string): { name: string; flag: string } | null {
+  // Primary: use faction from A2S server info
+  if (serverFaction) {
+    // A2S TeamOne_s/TeamTwo_s can be full layer strings like "Gorodok_RAAS_v12_USA" or just "USA"
+    // Try matching the last segment or the full string against known factions
+    for (const key of Object.keys(FACTION_META)) {
+      if (serverFaction === key || serverFaction.endsWith(`_${key}`)) return FACTION_META[key];
+    }
+  }
+  // Fallback: extract from first player's role prefix
   for (const p of players) {
     if (!p.role || typeof p.role !== "string") continue;
     const prefix = p.role.split("_")[0];
@@ -57,6 +66,8 @@ interface ServerInfo {
   reserveQueue: number;
   currentLayer: string | { name: string; [key: string]: unknown } | null;
   nextLayer: string | { name: string; [key: string]: unknown } | null;
+  team1Faction?: string;
+  team2Faction?: string;
 }
 
 interface ChatMessage {
@@ -655,7 +666,7 @@ export default function LiveServerPage() {
                   showActions={canManage}
                   searchValue={team1Search}
                   onSearchChange={setTeam1Search}
-                  faction={getFaction(team1All)}
+                  faction={getFaction(team1All, serverInfo?.team1Faction)}
                   onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
                   onSwitchTeam={handleSwitchTeam}
@@ -672,7 +683,7 @@ export default function LiveServerPage() {
                   showActions={canManage}
                   searchValue={team2Search}
                   onSearchChange={setTeam2Search}
-                  faction={getFaction(team2All)}
+                  faction={getFaction(team2All, serverInfo?.team2Faction)}
                   onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
                   onKick={(p) => { setKickTarget(p); setKickReason(""); }}
                   onSwitchTeam={handleSwitchTeam}

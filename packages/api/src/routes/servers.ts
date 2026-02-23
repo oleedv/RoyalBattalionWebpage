@@ -3,7 +3,7 @@ import type { ApiResponse } from "shared";
 
 const servers = new Hono();
 
-interface ServerStatus {
+export interface ServerStatus {
   id: string;
   name: string;
   ip: string;
@@ -13,6 +13,9 @@ interface ServerStatus {
   map: string;
   status: "online" | "offline";
   playerList: { name: string; duration: number }[];
+  publicQueue: number;
+  reserveQueue: number;
+  metricHistory: { time: number; tickRate: number | null; playerCount: number; publicQueue: number; reserveQueue: number }[];
 }
 
 const CACHE_TTL_MS = 30_000;
@@ -61,6 +64,9 @@ async function fetchServerStatus(serverId: string): Promise<ServerStatus | null>
       map: attrs.details?.map || "Unknown",
       status: attrs.status === "online" ? "online" : "offline",
       playerList: players,
+      publicQueue: 0,
+      reserveQueue: 0,
+      metricHistory: [],
     };
   } catch {
     return null;

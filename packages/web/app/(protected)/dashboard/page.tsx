@@ -6,7 +6,7 @@ import Link from "next/link";
 import { linkSteam, getDashboardStats } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import type { UserWithRoles } from "shared";
-import type { DashboardStats, ServerStatus, MetricSample } from "@/lib/api-client";
+import type { DashboardStats, ServerStatus } from "@/lib/api-client";
 
 const CONNECT_URLS: Record<string, string> = {
   "37.153.157.204:27050": "steam://connect/37.153.157.204:27050",
@@ -80,25 +80,16 @@ function Sparkline({ lines, height = 64, fixedMax }: { lines: SparklineLine[]; h
 
 /* ── Server Card ────────────────────────────────────────────────────── */
 
-interface SquadJSMetrics {
-  metricHistory: MetricSample[];
-  playerCount: number;
-  publicQueue: number;
-  reserveQueue: number;
-  maxPlayers: number;
-}
-
-function ServerStatusCard({ server, sqMetrics }: { server: ServerStatus; sqMetrics?: SquadJSMetrics }) {
+function ServerStatusCard({ server }: { server: ServerStatus }) {
   const isOnline = server.status === "online";
   const connectUrl = CONNECT_URLS[`${server.ip}:${server.port}`] ?? "#";
 
-  // Prefer SquadJS data when available (more real-time)
-  const players = sqMetrics ? sqMetrics.playerCount : server.players;
-  const maxPlayers = sqMetrics?.maxPlayers || server.maxPlayers;
-  const queue = sqMetrics ? sqMetrics.publicQueue + sqMetrics.reserveQueue : 0;
+  const players = server.players;
+  const maxPlayers = server.maxPlayers;
+  const queue = server.publicQueue + server.reserveQueue;
 
-  const playerData = sqMetrics?.metricHistory.map((s) => s.playerCount) || [];
-  const queueData = sqMetrics?.metricHistory.map((s) => s.publicQueue + s.reserveQueue) || [];
+  const playerData = server.metricHistory?.map((s) => s.playerCount) || [];
+  const queueData = server.metricHistory?.map((s) => s.publicQueue + s.reserveQueue) || [];
 
   return (
     <div className="facet-border group rounded-sm bg-bg-card transition-colors hover:bg-bg-card-hover">
@@ -427,34 +418,9 @@ export default function DashboardPage() {
         </div>
       ) : stats?.servers && stats.servers.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2">
-          {stats.servers.map((server) => {
-            // Match SquadJS metrics to BattleMetrics servers using multi-word fuzzy matching
-            const metricsEntry = stats.serverMetrics
-              ? Object.entries(stats.serverMetrics).find(([key, m]) => {
-                  const bmWords = server.name.toLowerCase().split(/[\s|_-]+/).filter((w) => w.length > 2);
-                  const sqWords = m.serverName.toLowerCase().split(/[\s|_-]+/).filter((w) => w.length > 2);
-                  // Match if any significant word appears in both names, or the key matches
-                  return bmWords.some((w) => sqWords.some((sw) => sw.includes(w) || w.includes(sw)))
-                    || server.name.toLowerCase().includes(key.toLowerCase());
-                })?.[1]
-              : undefined;
-            const sqMetrics: SquadJSMetrics | undefined = metricsEntry
-              ? {
-                  metricHistory: metricsEntry.metricHistory as MetricSample[],
-                  playerCount: (metricsEntry as any).playerCount ?? 0,
-                  publicQueue: (metricsEntry as any).publicQueue ?? 0,
-                  reserveQueue: (metricsEntry as any).reserveQueue ?? 0,
-                  maxPlayers: (metricsEntry as any).maxPlayers ?? 0,
-                }
-              : undefined;
-            return (
-              <ServerStatusCard
-                key={server.id}
-                server={server}
-                sqMetrics={sqMetrics}
-              />
-            );
-          })}
+          {stats.servers.map((server) => (
+            <ServerStatusCard key={server.id} server={server} />
+          ))}
         </div>
       ) : null}
 

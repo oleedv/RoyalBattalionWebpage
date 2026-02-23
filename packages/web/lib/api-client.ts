@@ -372,7 +372,7 @@ export interface MetricSample {
 
 export interface DashboardStats {
   servers?: ServerStatus[];
-  serverMetrics?: Record<string, { serverName: string; metricHistory: MetricSample[] }>;
+  serverMetrics?: Record<string, { serverName: string; metricHistory: MetricSample[]; playerCount: number; publicQueue: number; reserveQueue: number; maxPlayers: number }>;
   tickets?: { open: number; closed: number };
   prospects?: { open: number; accepted: number; denied: number };
   members?: { total: number; withSteam: number };
@@ -400,6 +400,9 @@ export interface ServerStatus {
   map: string;
   status: "online" | "offline";
   playerList: { name: string; duration: number }[];
+  publicQueue: number;
+  reserveQueue: number;
+  metricHistory: MetricSample[];
 }
 
 export function getServerStatus(): Promise<ApiResponse<ServerStatus[]>> {

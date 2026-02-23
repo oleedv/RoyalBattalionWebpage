@@ -3,7 +3,7 @@ import type { ApiResponse, Permission, Match } from "shared";
 import prisma from "../lib/db";
 import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
-import { fetchAllServers } from "./servers";
+import { fetchAllServers, type ServerStatus } from "./servers";
 import { squadjsSocket } from "../lib/squadjs-socket";
 
 const stats = new Hono();
@@ -162,6 +162,22 @@ stats.get("/summary", async (c) => {
   }
 
   await Promise.all(promises);
+
+  // Merge SquadJS metrics into server objects by index (1st BM server = 1st SquadJS key, etc.)
+  const sqKeys = squadjsSocket.getServerKeys();
+  const servers = result.servers as ServerStatus[] | undefined;
+  if (servers && sqKeys.length > 0) {
+    for (let i = 0; i < servers.length && i < sqKeys.length; i++) {
+      const metrics = serverMetrics[sqKeys[i]];
+      if (metrics) {
+        servers[i].players = metrics.playerCount;
+        servers[i].maxPlayers = metrics.maxPlayers || servers[i].maxPlayers;
+        servers[i].publicQueue = metrics.publicQueue;
+        servers[i].reserveQueue = metrics.reserveQueue;
+        servers[i].metricHistory = metrics.metricHistory as ServerStatus["metricHistory"];
+      }
+    }
+  }
 
   return c.json<ApiResponse<typeof result>>({ success: true, data: result });
 });

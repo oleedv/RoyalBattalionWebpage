@@ -330,7 +330,6 @@ class SquadJSSocketManager {
         }
         break;
       case "NEW_GAME":
-        state.chatLog = [];
         this.addConsoleEntry(state, "newgame", `New game started${(data as { layerClassname?: string })?.layerClassname ? `: ${(data as { layerClassname: string }).layerClassname}` : ""}`);
         break;
       case "PLAYER_CONNECTED": {

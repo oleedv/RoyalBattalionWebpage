@@ -267,10 +267,16 @@ export default function LiveServerPage() {
           setTickRate((data as { tickRate: number }).tickRate);
         }
         break;
-      case "NEW_GAME":
-        setChatLog([]);
-        addConsoleEntry("newgame", `New game started${(data as { layerClassname?: string })?.layerClassname ? `: ${(data as { layerClassname: string }).layerClassname}` : ""}`);
+      case "NEW_GAME": {
+        const layer = (data as { layerClassname?: string })?.layerClassname || "Unknown";
+        setChatLog((prev) => {
+          const divider: ChatMessage = { chat: "__DIVIDER__", steamID: "", eosID: "", name: "", message: layer, time: new Date().toISOString() };
+          const next = [...prev, divider];
+          return next.length > 100 ? next.slice(-100) : next;
+        });
+        addConsoleEntry("newgame", `New game started${layer !== "Unknown" ? `: ${layer}` : ""}`);
         break;
+      }
       case "PLAYER_CONNECTED": {
         const pc = data as { player?: { name?: string } };
         if (pc?.player?.name) addConsoleEntry("connect", `${pc.player.name} connected`);
@@ -538,7 +544,7 @@ export default function LiveServerPage() {
   const filteredChat =
     chatFilter === "All"
       ? chatLog
-      : chatLog.filter((m) => m.chat === chatFilter);
+      : chatLog.filter((m) => m.chat === chatFilter || m.chat === "__DIVIDER__");
 
   return (
     <div>
@@ -775,6 +781,15 @@ export default function LiveServerPage() {
                 </div>
               ) : (
                 filteredChat.map((msg, i) => {
+                  if (msg.chat === "__DIVIDER__") {
+                    return (
+                      <div key={i} className="my-2 flex items-center gap-2">
+                        <div className="flex-1 border-t border-border" />
+                        <span className="whitespace-nowrap text-[10px] text-text-muted">New Game: {msg.message}</span>
+                        <div className="flex-1 border-t border-border" />
+                      </div>
+                    );
+                  }
                   const player = players.find((p) => p.steamID === msg.steamID || p.eosID === msg.eosID);
                   const teamColor = String(player?.teamID) === "1"
                     ? "text-blue-400"

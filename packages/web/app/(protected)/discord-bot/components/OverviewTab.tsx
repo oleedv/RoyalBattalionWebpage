@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { getDiscordBotOverview } from "@/lib/api-client";
-import type { DiscordBotOverview, SeedingSession } from "shared";
+import type { DiscordBotOverview, SeedingSession, BotStatus } from "shared";
 
 function StatCard({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
@@ -12,6 +12,64 @@ function StatCard({ label, value, color }: { label: string; value: number; color
       </div>
       <div className={`mt-1 font-display text-2xl font-bold ${color || "text-text-primary"}`}>
         {value}
+      </div>
+    </div>
+  );
+}
+
+function formatUptime(seconds: number): string {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const parts: string[] = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0) parts.push(`${h}h`);
+  parts.push(`${m}m`);
+  return parts.join(" ");
+}
+
+function ConnectionDot({ connected, label }: { connected: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={`h-2 w-2 rounded-full ${connected ? "bg-success" : "bg-danger"}`} />
+      <span className="text-xs text-text-secondary">{label}</span>
+    </div>
+  );
+}
+
+function BotStatusBanner({ status }: { status: BotStatus }) {
+  const heartbeatAge = Date.now() - new Date(status.lastHeartbeat).getTime();
+  const isStale = heartbeatAge > 2 * 60 * 1000;
+  const effectiveStatus = isStale ? "offline" : status.status;
+
+  const statusColors: Record<string, string> = {
+    online: "bg-success/15 text-success border-success/30",
+    offline: "bg-danger/15 text-danger border-danger/30",
+    starting: "bg-accent/15 text-accent border-accent/30",
+  };
+
+  return (
+    <div className="facet-border rounded-sm bg-bg-card p-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <span className={`inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold uppercase ${statusColors[effectiveStatus] || statusColors.offline}`}>
+          <span className={`h-2 w-2 rounded-full ${effectiveStatus === "online" ? "bg-success" : effectiveStatus === "starting" ? "bg-accent" : "bg-danger"}`} />
+          {effectiveStatus}
+          {isStale && effectiveStatus === "offline" && " (stale)"}
+        </span>
+
+        <div className="flex items-center gap-4 text-xs text-text-secondary">
+          <span>Uptime: {formatUptime(status.uptimeSeconds)}</span>
+          <span>Latency: {status.latencyMs}ms</span>
+          <span>Guilds: {status.guildCount}</span>
+          <span>Members: {status.memberCount}</span>
+        </div>
+
+        <div className="ml-auto flex items-center gap-4">
+          <ConnectionDot connected={status.dbConnected} label="DB" />
+          <ConnectionDot connected={status.squadjsConnected} label="SquadJS" />
+          <ConnectionDot connected={status.seedingSchedulerActive} label="Seeding" />
+          <ConnectionDot connected={status.prospectSchedulerActive} label="Prospects" />
+        </div>
       </div>
     </div>
   );
@@ -50,6 +108,9 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
 
   return (
     <div className="space-y-8">
+      {/* Bot Status */}
+      {data.botStatus && <BotStatusBanner status={data.botStatus} />}
+
       {/* Tickets */}
       <section>
         <h2 className="mb-3 text-xs font-semibold tracking-[0.15em] text-text-muted uppercase">

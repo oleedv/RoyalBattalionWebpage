@@ -16,6 +16,10 @@ import type {
   DiscordBotOverview,
   SeedingConfig,
   SeedingSession,
+  BotMessage,
+  BotLog,
+  BotStatus,
+  Paginated,
 } from "shared";
 
 const BASE_URL =
@@ -548,5 +552,50 @@ export function extendProspect(
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ days }),
+  });
+}
+
+export function getBotStatus(
+  token: string
+): Promise<ApiResponse<BotStatus | null>> {
+  return request<BotStatus | null>("/discord-bot/status", {
+    headers: authHeaders(token),
+  });
+}
+
+export function getBotMessages(
+  token: string,
+  params: { limit?: number; offset?: number; author?: string; channel?: string; dm?: boolean; search?: string; from?: string; to?: string } = {}
+): Promise<ApiResponse<Paginated<BotMessage>>> {
+  const qs = new URLSearchParams();
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.offset) qs.set("offset", String(params.offset));
+  if (params.author) qs.set("author", params.author);
+  if (params.channel) qs.set("channel", params.channel);
+  if (params.dm) qs.set("dm", "1");
+  if (params.search) qs.set("search", params.search);
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
+  const q = qs.toString();
+  return request<Paginated<BotMessage>>(`/discord-bot/messages${q ? `?${q}` : ""}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function getBotLogs(
+  token: string,
+  params: { limit?: number; offset?: number; level?: number; module?: string; search?: string; from?: string; to?: string } = {}
+): Promise<ApiResponse<Paginated<BotLog>>> {
+  const qs = new URLSearchParams();
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.offset) qs.set("offset", String(params.offset));
+  if (params.level) qs.set("level", String(params.level));
+  if (params.module) qs.set("module", params.module);
+  if (params.search) qs.set("search", params.search);
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
+  const q = qs.toString();
+  return request<Paginated<BotLog>>(`/discord-bot/logs${q ? `?${q}` : ""}`, {
+    headers: authHeaders(token),
   });
 }

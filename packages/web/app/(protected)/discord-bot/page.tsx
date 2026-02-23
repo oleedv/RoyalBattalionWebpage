@@ -6,14 +6,18 @@ import OverviewTab from "./components/OverviewTab";
 import TicketsTab from "./components/TicketsTab";
 import ProspectsTab from "./components/ProspectsTab";
 import SeedingTab from "./components/SeedingTab";
+import MessagesTab from "./components/MessagesTab";
+import LogsTab from "./components/LogsTab";
 
-type Tab = "overview" | "tickets" | "prospects" | "seeding";
+type Tab = "overview" | "tickets" | "prospects" | "seeding" | "messages" | "logs";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "tickets", label: "Tickets" },
   { key: "prospects", label: "Prospects" },
   { key: "seeding", label: "Seeding" },
+  { key: "messages", label: "Messages" },
+  { key: "logs", label: "Logs" },
 ];
 
 export default function DiscordBotPage() {
@@ -37,12 +41,12 @@ export default function DiscordBotPage() {
         </h1>
       </div>
 
-      <div className="mb-6 flex gap-1 rounded-sm border border-border bg-bg-tertiary/50 p-1">
+      <div className="mb-6 flex flex-wrap gap-1 rounded-sm border border-border bg-bg-tertiary/50 p-1">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 rounded-sm px-4 py-2 text-sm font-medium tracking-wide transition-colors ${
+            className={`flex-1 rounded-sm px-3 py-2 text-sm font-medium tracking-wide transition-colors ${
               tab === t.key
                 ? "bg-bg-card text-accent"
                 : "text-text-muted hover:text-text-secondary"
@@ -57,6 +61,8 @@ export default function DiscordBotPage() {
       {tab === "tickets" && <TicketsTab apiToken={apiToken} />}
       {tab === "prospects" && <ProspectsTab apiToken={apiToken} canManage={canManage} />}
       {tab === "seeding" && <SeedingTab apiToken={apiToken} canManage={canManage} />}
+      {tab === "messages" && <MessagesTab apiToken={apiToken} />}
+      {tab === "logs" && <LogsTab apiToken={apiToken} />}
     </div>
   );
 }

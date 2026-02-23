@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { ApiResponse, DiscordBotOverview, SeedingConfig, SeedingSession } from "shared";
+import type { ApiResponse, DiscordBotOverview, SeedingConfig, SeedingSession, BotMessage, BotLog, BotStatus, Paginated } from "shared";
 import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
@@ -7,6 +7,63 @@ import { requirePermission } from "../middleware/permissions";
 const discordBot = new Hono();
 
 discordBot.use("*", authMiddleware);
+
+function mapBotStatus(r: any): BotStatus {
+  return {
+    status: r.status,
+    uptimeSeconds: Number(r.uptime_seconds) || 0,
+    guildCount: Number(r.guild_count) || 0,
+    memberCount: Number(r.member_count) || 0,
+    latencyMs: Number(r.latency_ms) || 0,
+    dbConnected: Boolean(r.db_connected),
+    squadjsConnected: Boolean(r.squadjs_connected),
+    seedingSchedulerActive: Boolean(r.seeding_scheduler_active),
+    prospectSchedulerActive: Boolean(r.prospect_scheduler_active),
+    lastHeartbeat: r.last_heartbeat ? new Date(r.last_heartbeat).toISOString() : new Date().toISOString(),
+    startedAt: r.started_at ? new Date(r.started_at).toISOString() : null,
+  };
+}
+
+function mapBotMessage(r: any): BotMessage {
+  let attachments: unknown[] | null = null;
+  if (r.attachments) {
+    try {
+      attachments = typeof r.attachments === "string" ? JSON.parse(r.attachments) : r.attachments;
+    } catch { /* ignore */ }
+  }
+  return {
+    id: Number(r.id),
+    messageId: r.message_id,
+    channelId: r.channel_id,
+    channelName: r.channel_name,
+    guildId: r.guild_id,
+    authorId: r.author_id,
+    authorTag: r.author_tag,
+    content: r.content,
+    attachments,
+    isDm: Boolean(r.is_dm),
+    direction: r.direction || "incoming",
+    createdAt: new Date(r.created_at).toISOString(),
+  };
+}
+
+function mapBotLog(r: any): BotLog {
+  let data: unknown | null = null;
+  if (r.data) {
+    try {
+      data = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+    } catch { /* ignore */ }
+  }
+  return {
+    id: Number(r.id),
+    level: Number(r.level),
+    levelLabel: r.level_label,
+    module: r.module,
+    message: r.message,
+    data,
+    createdAt: new Date(r.created_at).toISOString(),
+  };
+}
 
 function mapSession(r: any): SeedingSession {
   return {
@@ -40,6 +97,7 @@ discordBot.get(
       activeSessionRows,
       recentSessionRows,
       seedingConfigRows,
+      botStatusRows,
     ] = await Promise.all([
       db.$queryRawUnsafe<any[]>(
         `SELECT tier, COUNT(*) as count FROM tickets WHERE status = 'open' GROUP BY tier`
@@ -61,6 +119,9 @@ discordBot.get(
       ).catch(() => [] as any[]),
       db.$queryRawUnsafe<any[]>(
         `SELECT enabled, seed_threshold FROM seeding_config WHERE id = 1`
+      ).catch(() => [] as any[]),
+      db.$queryRawUnsafe<any[]>(
+        `SELECT * FROM bot_status WHERE id = 1`
       ).catch(() => [] as any[]),
     ]);
 
@@ -99,10 +160,13 @@ discordBot.get(
       ? { enabled: Boolean(seedingConfigRows[0].enabled), seedThreshold: Number(seedingConfigRows[0].seed_threshold) }
       : null;
 
+    const botStatus: BotStatus | null = botStatusRows.length > 0 ? mapBotStatus(botStatusRows[0]) : null;
+
     const overview: DiscordBotOverview = {
       tickets: { openByTier, recentlyClosed },
       prospects: { open: prospectOpen, accepted: prospectAccepted, denied: prospectDenied, recentActivity },
       seeding: { activeSession, recentSessions, config: seedingCfg },
+      botStatus,
     };
 
     return c.json<ApiResponse<DiscordBotOverview>>({ success: true, data: overview });
@@ -255,6 +319,108 @@ discordBot.post(
     );
 
     return c.json<ApiResponse<{ updated: true }>>({ success: true, data: { updated: true } });
+  }
+);
+
+// GET /discord-bot/status
+discordBot.get(
+  "/status",
+  requirePermission("view:discord-bot", "manage:discord-bot"),
+  async (c) => {
+    const rows: any[] = await getSecretaryDb().$queryRawUnsafe(
+      `SELECT * FROM bot_status WHERE id = 1`
+    ).catch(() => [] as any[]);
+
+    if (rows.length === 0) {
+      return c.json<ApiResponse<null>>({ success: true, data: null });
+    }
+
+    return c.json<ApiResponse<BotStatus>>({ success: true, data: mapBotStatus(rows[0]) });
+  }
+);
+
+// GET /discord-bot/messages
+discordBot.get(
+  "/messages",
+  requirePermission("view:discord-bot", "manage:discord-bot"),
+  async (c) => {
+    const limit = Math.min(Number(c.req.query("limit") || "50"), 200);
+    const offset = Math.max(Number(c.req.query("offset") || "0"), 0);
+    const author = c.req.query("author");
+    const channel = c.req.query("channel");
+    const dm = c.req.query("dm");
+    const search = c.req.query("search");
+    const from = c.req.query("from");
+    const to = c.req.query("to");
+
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (author) { conditions.push("author_id = ?"); params.push(author); }
+    if (channel) { conditions.push("channel_id = ?"); params.push(channel); }
+    if (dm === "1") { conditions.push("is_dm = 1"); }
+    if (search) { conditions.push("content LIKE ?"); params.push(`%${search}%`); }
+    if (from) { conditions.push("created_at >= ?"); params.push(from); }
+    if (to) { conditions.push("created_at <= ?"); params.push(to); }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const db = getSecretaryDb();
+
+    const [countRows, rows] = await Promise.all([
+      db.$queryRawUnsafe<any[]>(`SELECT COUNT(*) as total FROM bot_messages ${where}`, ...params),
+      db.$queryRawUnsafe<any[]>(
+        `SELECT id, message_id, channel_id, channel_name, guild_id, author_id, author_tag,
+                content, attachments, is_dm, direction, created_at
+         FROM bot_messages ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        ...params, limit, offset
+      ),
+    ]);
+
+    const total = Number(countRows[0]?.total || 0);
+    const items: BotMessage[] = rows.map(mapBotMessage);
+
+    return c.json<ApiResponse<Paginated<BotMessage>>>({ success: true, data: { items, total } });
+  }
+);
+
+// GET /discord-bot/logs
+discordBot.get(
+  "/logs",
+  requirePermission("view:discord-bot", "manage:discord-bot"),
+  async (c) => {
+    const limit = Math.min(Number(c.req.query("limit") || "100"), 500);
+    const offset = Math.max(Number(c.req.query("offset") || "0"), 0);
+    const level = c.req.query("level");
+    const module = c.req.query("module");
+    const search = c.req.query("search");
+    const from = c.req.query("from");
+    const to = c.req.query("to");
+
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (level) { conditions.push("level = ?"); params.push(Number(level)); }
+    if (module) { conditions.push("module = ?"); params.push(module); }
+    if (search) { conditions.push("message LIKE ?"); params.push(`%${search}%`); }
+    if (from) { conditions.push("created_at >= ?"); params.push(from); }
+    if (to) { conditions.push("created_at <= ?"); params.push(to); }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const db = getSecretaryDb();
+
+    const [countRows, rows] = await Promise.all([
+      db.$queryRawUnsafe<any[]>(`SELECT COUNT(*) as total FROM bot_logs ${where}`, ...params),
+      db.$queryRawUnsafe<any[]>(
+        `SELECT id, level, level_label, module, message, data, created_at
+         FROM bot_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        ...params, limit, offset
+      ),
+    ]);
+
+    const total = Number(countRows[0]?.total || 0);
+    const items: BotLog[] = rows.map(mapBotLog);
+
+    return c.json<ApiResponse<Paginated<BotLog>>>({ success: true, data: { items, total } });
   }
 );
 

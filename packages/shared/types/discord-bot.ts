@@ -25,6 +25,50 @@ export interface SeedingSession {
   completionMessageId: string | null;
 }
 
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+}
+
+export interface BotMessage {
+  id: number;
+  messageId: string;
+  channelId: string;
+  channelName: string | null;
+  guildId: string | null;
+  authorId: string;
+  authorTag: string;
+  content: string | null;
+  attachments: unknown[] | null;
+  isDm: boolean;
+  direction: "incoming" | "outgoing";
+  createdAt: string;
+}
+
+export interface BotLog {
+  id: number;
+  level: number;
+  levelLabel: string;
+  module: string | null;
+  message: string;
+  data: unknown | null;
+  createdAt: string;
+}
+
+export interface BotStatus {
+  status: "online" | "offline" | "starting";
+  uptimeSeconds: number;
+  guildCount: number;
+  memberCount: number;
+  latencyMs: number;
+  dbConnected: boolean;
+  squadjsConnected: boolean;
+  seedingSchedulerActive: boolean;
+  prospectSchedulerActive: boolean;
+  lastHeartbeat: string;
+  startedAt: string | null;
+}
+
 export interface DiscordBotOverview {
   tickets: {
     openByTier: { normal: number; community_officer: number; admin_officer: number };
@@ -41,4 +85,5 @@ export interface DiscordBotOverview {
     recentSessions: SeedingSession[];
     config: { enabled: boolean; seedThreshold: number } | null;
   };
+  botStatus: BotStatus | null;
 }

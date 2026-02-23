@@ -92,6 +92,24 @@ function parseRoleName(classname: string): string {
   return raw.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
+function parseScoreboardRole(role: string): string {
+  if (!role) return "Rifleman";
+
+  // If it looks like a classname, delegate to the classname parser
+  if (role.startsWith("BP_") || role.includes("_Soldier_")) {
+    return parseRoleName(role);
+  }
+
+  // Check if the role matches a known role directly
+  const lower = role.toLowerCase();
+  for (const [key, label] of Object.entries(ROLE_MAP)) {
+    if (lower === key || lower === label.toLowerCase()) return label;
+  }
+
+  // Already a clean name - return as-is
+  return role;
+}
+
 // --- Duration formatter ---
 
 function formatDuration(startTime: Date, endTime: Date): string {
@@ -141,23 +159,56 @@ export async function assembleMatchDetail(
     new Date(match.endTime).getTime() - new Date(match.startTime).getTime();
   if (durationMs < 5 * 60_000) return null;
 
-  // 2. Squad creations -> faction per teamID
-  const [squadRows] = await pool.query(
-    "SELECT DISTINCT sc.team_name AS teamName FROM squadjs_squad_creations sc WHERE sc.match_id = ?",
+  // 2. Scoreboard snapshot (authoritative end-of-round data)
+  const [scoreboardRows] = await pool.query(
+    `SELECT sb.team_id AS teamId, sb.team_name AS teamName,
+            sb.squad_id AS squadId, sb.squad_name AS squadName,
+            sb.is_leader AS isLeader, sb.role AS role,
+            p.eos_id AS eosID, p.steam_id AS steamID, p.name AS playerName
+     FROM squadjs_scoreboard sb
+     JOIN squadjs_players p ON sb.player_id = p.id
+     WHERE sb.match_id = ?`,
     [matchId]
   );
-  const factions = (squadRows as any[]).map((r: any) => r.teamName as string);
+  const scoreboard = scoreboardRows as any[];
+  const hasScoreboard = scoreboard.length > 0;
 
-  // Also get squad assignments per player
-  const [squadDetailRows] = await pool.query(
-    `SELECT sc.squad_name AS squadName, sc.team_name AS teamName, p.eos_id AS playerEOSID
-     FROM squadjs_squad_creations sc
-     JOIN squadjs_players p ON sc.player_id = p.id
-     WHERE sc.match_id = ?`,
-    [matchId]
-  );
+  // 3. Legacy queries -- only needed when scoreboard is not available
+  let factions: string[] = [];
+  let squadDetailRows: any[] = [];
+  let spawns: any[] = [];
 
-  // 3. Deaths
+  if (!hasScoreboard) {
+    // Squad creations -> faction per teamID
+    const [squadRows] = await pool.query(
+      "SELECT DISTINCT sc.team_name AS teamName FROM squadjs_squad_creations sc WHERE sc.match_id = ?",
+      [matchId]
+    );
+    factions = (squadRows as any[]).map((r: any) => r.teamName as string);
+
+    const [sqDetailRows] = await pool.query(
+      `SELECT sc.squad_name AS squadName, sc.team_name AS teamName, p.eos_id AS playerEOSID
+       FROM squadjs_squad_creations sc
+       JOIN squadjs_players p ON sc.player_id = p.id
+       WHERE sc.match_id = ?`,
+      [matchId]
+    );
+    squadDetailRows = sqDetailRows as any[];
+
+    // Spawns (for role info)
+    const [spawnRows] = await pool.query(
+      `SELECT p.eos_id AS eosID, p.name AS playerName,
+              s.player_classname AS playerClassname, s.time,
+              s.spawn_point AS spawnPointInstance
+       FROM squadjs_spawns s
+       JOIN squadjs_players p ON s.player_id = p.id
+       WHERE s.match_id = ? ORDER BY s.time ASC`,
+      [matchId]
+    );
+    spawns = spawnRows as any[];
+  }
+
+  // 4. Deaths (always needed for K/D/TK stats)
   const [deathRows] = await pool.query(
     `SELECT ce.attacker_team_id AS attackerTeamID,
             ce.victim_team_id AS victimTeamID,
@@ -172,7 +223,7 @@ export async function assembleMatchDetail(
   );
   const deaths = deathRows as any[];
 
-  // 4. Revives
+  // 5. Revives (always needed)
   const [reviveRows] = await pool.query(
     `SELECT rp.steam_id AS reviver, rp.eos_id AS reviverEosID, rp.name AS reviverName,
             ce.reviver_team_id AS reviverTeamID
@@ -182,18 +233,6 @@ export async function assembleMatchDetail(
     [matchId]
   );
   const revives = reviveRows as any[];
-
-  // 5. Spawns (for role info)
-  const [spawnRows] = await pool.query(
-    `SELECT p.eos_id AS eosID, p.name AS playerName,
-            s.player_classname AS playerClassname, s.time,
-            s.spawn_point AS spawnPointInstance
-     FROM squadjs_spawns s
-     JOIN squadjs_players p ON s.player_id = p.id
-     WHERE s.match_id = ? ORDER BY s.time ASC`,
-    [matchId]
-  );
-  const spawns = spawnRows as any[];
 
   // 6. Peak player count
   const [pcRows] = await pool.query(
@@ -218,50 +257,54 @@ export async function assembleMatchDetail(
   }
 
   // --- Build team faction mapping ---
-  // Use SquadCreations to figure out which factions map to which teamID
-  // Deaths have attackerTeamID / victimTeamID, so cross-reference
   const teamFactions = new Map<number, string>(); // teamID -> faction name
 
-  // From squad creations, correlate with spawns/deaths teamIDs
-  for (const sq of squadDetailRows as any[]) {
-    const eosID = sq.playerEOSID;
-    const faction = sq.teamName;
-
-    // Find this player's teamID from deaths
-    const asAttacker = deaths.find(
-      (d: any) => d.attacker === steamByEos.get(eosID) || d.attacker === eosID || d.attackerEosID === eosID
-    );
-    const asVictim = deaths.find(
-      (d: any) => d.victim === steamByEos.get(eosID) || d.victim === eosID || d.victimEosID === eosID
-    );
-
-    if (asAttacker && !teamFactions.has(asAttacker.attackerTeamID)) {
-      teamFactions.set(asAttacker.attackerTeamID, faction);
-    }
-    if (asVictim && !teamFactions.has(asVictim.victimTeamID)) {
-      teamFactions.set(asVictim.victimTeamID, faction);
-    }
-
-    // Also check spawns for teamID context
-    const spawn = spawns.find((s: any) => s.eosID === eosID);
-    if (spawn) {
-      // Spawns don't have teamID directly, but spawnPointInstance has Team1/Team2
-      const spawnPoint = spawn.spawnPointInstance || "";
-      if (spawnPoint.includes("Team1") && !teamFactions.has(1)) {
-        teamFactions.set(1, faction);
-      } else if (spawnPoint.includes("Team2") && !teamFactions.has(2)) {
-        teamFactions.set(2, faction);
+  if (hasScoreboard) {
+    // Scoreboard gives us team_id -> team_name directly
+    for (const row of scoreboard) {
+      if (row.teamId && row.teamName && !teamFactions.has(row.teamId)) {
+        teamFactions.set(row.teamId, row.teamName);
       }
     }
-  }
+  } else {
+    // Legacy: cross-reference squad creations with deaths/spawns to map factions to team IDs
+    for (const sq of squadDetailRows) {
+      const eosID = sq.playerEOSID;
+      const faction = sq.teamName;
 
-  // Fallback: if we still don't have both teams, assign factions by order
-  if (factions.length >= 2) {
-    if (!teamFactions.has(1)) teamFactions.set(1, factions[0]);
-    if (!teamFactions.has(2)) teamFactions.set(2, factions[1]);
-  } else if (factions.length === 1) {
-    if (!teamFactions.has(1)) teamFactions.set(1, factions[0]);
-    if (!teamFactions.has(2)) teamFactions.set(2, "Unknown");
+      const asAttacker = deaths.find(
+        (d: any) => d.attacker === steamByEos.get(eosID) || d.attacker === eosID || d.attackerEosID === eosID
+      );
+      const asVictim = deaths.find(
+        (d: any) => d.victim === steamByEos.get(eosID) || d.victim === eosID || d.victimEosID === eosID
+      );
+
+      if (asAttacker && !teamFactions.has(asAttacker.attackerTeamID)) {
+        teamFactions.set(asAttacker.attackerTeamID, faction);
+      }
+      if (asVictim && !teamFactions.has(asVictim.victimTeamID)) {
+        teamFactions.set(asVictim.victimTeamID, faction);
+      }
+
+      const spawn = spawns.find((s: any) => s.eosID === eosID);
+      if (spawn) {
+        const spawnPoint = spawn.spawnPointInstance || "";
+        if (spawnPoint.includes("Team1") && !teamFactions.has(1)) {
+          teamFactions.set(1, faction);
+        } else if (spawnPoint.includes("Team2") && !teamFactions.has(2)) {
+          teamFactions.set(2, faction);
+        }
+      }
+    }
+
+    // Fallback: assign factions by order
+    if (factions.length >= 2) {
+      if (!teamFactions.has(1)) teamFactions.set(1, factions[0]);
+      if (!teamFactions.has(2)) teamFactions.set(2, factions[1]);
+    } else if (factions.length === 1) {
+      if (!teamFactions.has(1)) teamFactions.set(1, factions[0]);
+      if (!teamFactions.has(2)) teamFactions.set(2, "Unknown");
+    }
   }
 
   const team1Faction = teamFactions.get(1) || "Unknown";
@@ -338,7 +381,7 @@ export async function assembleMatchDetail(
     return p;
   }
 
-  // Process deaths for kills/deaths/TKs
+  // Process deaths for kills/deaths/TKs (always runs)
   for (const d of deaths) {
     const attackerSteam = d.attacker || d.attackerEosID;
     const victimSteam = d.victim || d.victimEosID;
@@ -355,7 +398,7 @@ export async function assembleMatchDetail(
     }
   }
 
-  // Process revives
+  // Process revives (always runs)
   for (const r of revives) {
     const reviverSteam = r.reviver || r.reviverEosID;
     if (reviverSteam) {
@@ -364,43 +407,56 @@ export async function assembleMatchDetail(
     }
   }
 
-  // Process spawns for roles (last spawn wins)
-  for (const s of spawns) {
-    const steamId = steamByEos.get(s.eosID) || s.eosID;
-    const name = s.playerName || nameByEos.get(s.eosID) || "Unknown";
+  // Populate team/squad/role from scoreboard or legacy sources
+  if (hasScoreboard) {
+    for (const sb of scoreboard) {
+      const steamId = sb.steamID || steamByEos.get(sb.eosID) || sb.eosID;
+      const name = sb.playerName || nameByEos.get(sb.eosID) || "Unknown";
+      const p = getOrCreate(steamId, name, sb.teamId);
 
-    // Determine teamID from spawn point
-    let teamId = 0;
-    const sp = s.spawnPointInstance || "";
-    if (sp.includes("Team1")) teamId = 1;
-    else if (sp.includes("Team2")) teamId = 2;
+      // Scoreboard data is authoritative -- overwrite any prior values
+      p.teamId = sb.teamId;
+      p.squad = sb.squadName || "";
+      p.isSquadLeader = !!sb.isLeader;
+      p.role = parseScoreboardRole(sb.role);
+    }
+  } else {
+    // Legacy: use spawns for roles
+    for (const s of spawns) {
+      const steamId = steamByEos.get(s.eosID) || s.eosID;
+      const name = s.playerName || nameByEos.get(s.eosID) || "Unknown";
 
-    const p = getOrCreate(steamId, name, teamId);
-    p.role = parseRoleName(s.playerClassname);
-    p.isSquadLeader = p.role === "Squad Leader" || p.role === "SL Crewman";
-  }
+      let teamId = 0;
+      const sp = s.spawnPointInstance || "";
+      if (sp.includes("Team1")) teamId = 1;
+      else if (sp.includes("Team2")) teamId = 2;
 
-  // Add squad creators to playerMap + assign squad names
-  for (const sq of squadDetailRows as any[]) {
-    const eosID = sq.playerEOSID;
-    const steamId = steamByEos.get(eosID) || eosID;
-    const name = nameByEos.get(eosID) || "Unknown";
-
-    // Determine teamId from faction
-    let teamId = 0;
-    for (const [tid, faction] of teamFactions.entries()) {
-      if (faction === sq.teamName) {
-        teamId = tid;
-        break;
-      }
+      const p = getOrCreate(steamId, name, teamId);
+      p.role = parseRoleName(s.playerClassname);
+      p.isSquadLeader = p.role === "Squad Leader" || p.role === "SL Crewman";
     }
 
-    const p = getOrCreate(steamId, name, teamId);
-    p.squad = sq.squadName;
-    p.isSquadLeader = true;
+    // Legacy: use squad creations for squad names
+    for (const sq of squadDetailRows) {
+      const eosID = sq.playerEOSID;
+      const steamId = steamByEos.get(eosID) || eosID;
+      const name = nameByEos.get(eosID) || "Unknown";
+
+      let teamId = 0;
+      for (const [tid, faction] of teamFactions.entries()) {
+        if (faction === sq.teamName) {
+          teamId = tid;
+          break;
+        }
+      }
+
+      const p = getOrCreate(steamId, name, teamId);
+      p.squad = sq.squadName;
+      p.isSquadLeader = true;
+    }
   }
 
-  // Resolve remaining teamId=0 players from deaths data
+  // Resolve remaining teamId=0 players from deaths data (always runs)
   for (const [steamId, p] of playerMap) {
     if (p.teamId !== 0) continue;
 

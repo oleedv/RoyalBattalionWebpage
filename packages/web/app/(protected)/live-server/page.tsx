@@ -575,10 +575,10 @@ export default function LiveServerPage() {
       {serverInfo && (
         <div className="facet-border mb-6 grid grid-cols-2 gap-3 rounded-sm bg-bg-card p-3 sm:grid-cols-3 lg:grid-cols-6">
           <InfoCell label="Players" value={`${serverInfo.playerCount} / ${serverInfo.maxPlayers}`}>
-            <Sparkline data={metricHistory.map((s) => s.playerCount)} color="var(--color-accent)" />
+            <Sparkline data={metricHistory.map((s) => s.playerCount)} color="var(--color-accent)" fixedMax={serverInfo.maxPlayers || 100} />
           </InfoCell>
           <InfoCell label="Queue" value={`${serverInfo.publicQueue + serverInfo.reserveQueue}`}>
-            <Sparkline data={metricHistory.map((s) => s.publicQueue + s.reserveQueue)} color="var(--color-warning)" />
+            <Sparkline data={metricHistory.map((s) => s.publicQueue + s.reserveQueue)} color="var(--color-warning)" fixedMax={25} />
           </InfoCell>
           <InfoCell label="Layer" value={layerName(serverInfo.currentLayer)}>
             {layerName(serverInfo.currentLayer) !== "--" && (
@@ -1008,11 +1008,11 @@ function InfoCell({ label, value, children }: { label: string; value: string; ch
   );
 }
 
-function Sparkline({ data, color, height = 48 }: { data: number[]; color: string; height?: number }) {
+function Sparkline({ data, color, height = 48, fixedMax }: { data: number[]; color: string; height?: number; fixedMax?: number }) {
   if (data.length < 2) return null;
   const width = 120;
-  const max = Math.max(...data, 1);
-  const min = Math.min(...data, 0);
+  const max = fixedMax ?? Math.max(...data, 1);
+  const min = 0;
   const range = max - min || 1;
   const coords = data.map((v, i) => {
     const x = (i / (data.length - 1)) * width;

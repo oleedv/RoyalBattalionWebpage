@@ -27,14 +27,14 @@ interface SparklineLine {
   label: string;
 }
 
-function Sparkline({ lines, height = 64 }: { lines: SparklineLine[]; height?: number }) {
+function Sparkline({ lines, height = 64, fixedMax }: { lines: SparklineLine[]; height?: number; fixedMax?: number }) {
   const width = 200;
   const hasData = lines.some((l) => l.data.length >= 2);
   if (!hasData) return null;
 
   const allValues = lines.flatMap((l) => l.data);
-  const max = Math.max(...allValues, 1);
-  const min = Math.min(...allValues, 0);
+  const max = fixedMax ?? Math.max(...allValues, 1);
+  const min = 0;
   const range = max - min || 1;
 
   function toCoords(data: number[]) {
@@ -170,6 +170,7 @@ function ServerStatusCard({ server, sqMetrics }: { server: ServerStatus; sqMetri
               { data: playerData, color: "#c8a84e", label: "Players" },
               { data: queueData, color: "#f59e0b", label: "Queue" },
             ]}
+            fixedMax={maxPlayers || 100}
           />
         </div>
       )}

@@ -7,10 +7,10 @@ export async function syncMatches(): Promise<{ synced: number; total: number }> 
 
   // Get all completed matches from SquadJS (with endTime, excluding training maps)
   const [rows] = await pool.query(
-    `SELECT id FROM DBLog_Matches
-     WHERE endTime IS NOT NULL
-       AND layerClassname NOT LIKE '%Jensens%'
-       AND layerClassname NOT LIKE '%Jensen%'
+    `SELECT id FROM squadjs_matches
+     WHERE end_time IS NOT NULL
+       AND layer_classname NOT LIKE '%Jensens%'
+       AND layer_classname NOT LIKE '%Jensen%'
      ORDER BY id`
   );
   const matchIds = (rows as any[]).map((r: any) => r.id as number);

@@ -120,7 +120,13 @@ export async function assembleMatchDetail(
 } | null> {
   // 1. Match metadata
   const [matchRows] = await pool.query(
-    "SELECT m.*, s.name as serverName FROM DBLog_Matches m LEFT JOIN DBLog_Servers s ON m.server = s.id WHERE m.id = ?",
+    `SELECT m.id, m.server_id, m.dlc, m.map_classname AS mapClassname,
+            m.layer_classname AS layerClassname, m.map, m.layer,
+            m.start_time AS startTime, m.end_time AS endTime, m.winner,
+            s.name AS serverName
+     FROM squadjs_matches m
+     LEFT JOIN squadjs_servers s ON m.server_id = s.id
+     WHERE m.id = ?`,
     [matchId]
   );
   const match = (matchRows as any[])[0];
@@ -137,47 +143,69 @@ export async function assembleMatchDetail(
 
   // 2. Squad creations -> faction per teamID
   const [squadRows] = await pool.query(
-    "SELECT DISTINCT teamName FROM DBLog_SquadCreations WHERE `match` = ?",
+    "SELECT DISTINCT sc.team_name AS teamName FROM squadjs_squad_creations sc WHERE sc.match_id = ?",
     [matchId]
   );
   const factions = (squadRows as any[]).map((r: any) => r.teamName as string);
 
   // Also get squad assignments per player
   const [squadDetailRows] = await pool.query(
-    "SELECT squadName, teamName, playerEOSID FROM DBLog_SquadCreations WHERE `match` = ?",
+    `SELECT sc.squad_name AS squadName, sc.team_name AS teamName, p.eos_id AS playerEOSID
+     FROM squadjs_squad_creations sc
+     JOIN squadjs_players p ON sc.player_id = p.id
+     WHERE sc.match_id = ?`,
     [matchId]
   );
 
   // 3. Deaths
   const [deathRows] = await pool.query(
-    "SELECT * FROM DBLog_Deaths WHERE `match` = ?",
+    `SELECT ce.attacker_team_id AS attackerTeamID,
+            ce.victim_team_id AS victimTeamID,
+            ce.teamkill, ce.weapon, ce.damage,
+            ap.steam_id AS attacker, ap.eos_id AS attackerEosID, ap.name AS attackerName,
+            vp.steam_id AS victim, vp.eos_id AS victimEosID, vp.name AS victimName
+     FROM squadjs_combat_events ce
+     LEFT JOIN squadjs_players ap ON ce.attacker_id = ap.id
+     LEFT JOIN squadjs_players vp ON ce.victim_id = vp.id
+     WHERE ce.match_id = ? AND ce.event_type = 'death'`,
     [matchId]
   );
   const deaths = deathRows as any[];
 
   // 4. Revives
   const [reviveRows] = await pool.query(
-    "SELECT * FROM DBLog_Revives WHERE `match` = ?",
+    `SELECT rp.steam_id AS reviver, rp.eos_id AS reviverEosID, rp.name AS reviverName,
+            ce.reviver_team_id AS reviverTeamID
+     FROM squadjs_combat_events ce
+     LEFT JOIN squadjs_players rp ON ce.reviver_id = rp.id
+     WHERE ce.match_id = ? AND ce.event_type = 'revive'`,
     [matchId]
   );
   const revives = reviveRows as any[];
 
   // 5. Spawns (for role info)
   const [spawnRows] = await pool.query(
-    "SELECT eosID, playerName, playerClassname, time FROM DBLog_Spawns WHERE `match` = ? ORDER BY time ASC",
+    `SELECT p.eos_id AS eosID, p.name AS playerName,
+            s.player_classname AS playerClassname, s.time,
+            s.spawn_point AS spawnPointInstance
+     FROM squadjs_spawns s
+     JOIN squadjs_players p ON s.player_id = p.id
+     WHERE s.match_id = ? ORDER BY s.time ASC`,
     [matchId]
   );
   const spawns = spawnRows as any[];
 
   // 6. Peak player count
   const [pcRows] = await pool.query(
-    "SELECT MAX(players) as peak FROM DBLog_PlayerCounts WHERE `match` = ?",
+    "SELECT MAX(players) AS peak FROM squadjs_player_counts WHERE match_id = ?",
     [matchId]
   );
   const peakPlayers = (pcRows as any[])[0]?.peak || 0;
 
   // 7. Player mapping (eosID <-> steamID)
-  const [playerRows] = await pool.query("SELECT eosID, steamID, lastName FROM DBLog_Players");
+  const [playerRows] = await pool.query(
+    "SELECT eos_id AS eosID, steam_id AS steamID, name AS lastName FROM squadjs_players"
+  );
   const eosBysteam = new Map<string, string>();
   const steamByEos = new Map<string, string>();
   const nameByEos = new Map<string, string>();

@@ -57,6 +57,20 @@ app.get("/admins.cfg", async (c) => {
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 
+// Bootstrap default server configs if none exist
+(async () => {
+  const count = await prisma.serverConfig.count();
+  if (count === 0) {
+    await prisma.serverConfig.createMany({
+      data: [
+        { server: "main", label: "Main Server" },
+        { server: "battle", label: "Battle Server" },
+      ],
+    });
+    console.log("[bootstrap] Created default ServerConfig rows");
+  }
+})().catch(console.error);
+
 // Sync SquadJS matches on startup and every 15 minutes
 if (process.env.SQUADJS_DATABASE_URL) {
   syncMatches().catch(console.error);

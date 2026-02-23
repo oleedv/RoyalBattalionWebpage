@@ -82,7 +82,7 @@ serverConfig.post("/", requirePermission("admin"), zValidator("json", upsertSche
 });
 
 // Toggle sync for a server
-serverConfig.put("/:server/sync", requirePermission("admin"), async (c) => {
+serverConfig.put("/:server/sync", requirePermission("manage:whitelist-sync"), async (c) => {
   const server = c.req.param("server");
 
   const existing = await prisma.serverConfig.findUnique({ where: { server } });

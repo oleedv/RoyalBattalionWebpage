@@ -64,7 +64,7 @@ function getStoredDefaultServer(): string {
 export default function WhitelistPage() {
   const { apiToken, hasPermission } = usePermissions();
   const canManage = hasPermission("manage:whitelist");
-  const isAdmin = hasPermission("admin");
+  const canSync = hasPermission("manage:whitelist-sync");
 
   const [tab, setTab] = useState<Tab>("entries");
   const [entries, setEntries] = useState<WhitelistEntry[]>([]);
@@ -186,8 +186,8 @@ export default function WhitelistPage() {
           ))}
         </div>
 
-        {/* SFTP Sync toggle (admin only) */}
-        {isAdmin && currentConfig && (
+        {/* SFTP Sync toggle */}
+        {canSync && currentConfig && (
           <button
             onClick={handleToggleSync}
             disabled={togglingSync}

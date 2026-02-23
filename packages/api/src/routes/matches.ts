@@ -22,50 +22,6 @@ matches.get("/public", async (c) => {
   return c.json<ApiResponse<Match[]>>({ success: true, data: result });
 });
 
-// Ingest endpoint - API key auth for external services
-const createMatchSchema = z.object({
-  date: z.string().min(1),
-  map: z.string().min(1),
-  layer: z.string().min(1),
-  result: z.string().min(1),
-  server: z.string().optional(),
-  vodUrl: z.string().optional(),
-  hidden: z.boolean().optional(),
-});
-
-matches.post("/ingest", zValidator("json", createMatchSchema), async (c) => {
-  const apiKey = c.req.header("x-api-key");
-  const expectedKey = process.env.MATCH_INGEST_API_KEY;
-
-  if (!expectedKey || apiKey !== expectedKey) {
-    return c.json<ApiResponse<never>>({ success: false, error: "Invalid API key" }, 401);
-  }
-
-  const { date, map, layer, result, server, vodUrl, hidden } = c.req.valid("json");
-
-  try {
-    const entry = await prisma.match.create({
-      data: {
-        date: new Date(date),
-        map,
-        layer,
-        result,
-        server: server ?? "Main Server",
-        vodUrl: vodUrl ?? null,
-        hidden: hidden ?? false,
-        createdBy: "ingest-service",
-      },
-    });
-
-    return c.json<ApiResponse<Match>>({ success: true, data: toMatch(entry) }, 201);
-  } catch {
-    return c.json<ApiResponse<never>>({
-      success: false,
-      error: "Failed to create match",
-    }, 400);
-  }
-});
-
 // All remaining routes require user auth
 matches.use("*", authMiddleware);
 

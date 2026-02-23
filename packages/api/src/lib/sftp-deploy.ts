@@ -48,11 +48,12 @@ async function deployForServer(server: string): Promise<void> {
 
   const cfg = await generateAdminsCfg(server);
   const sftp = new SFTPClient();
+  const filePath = normalizeSftpPath(remotePath);
 
   try {
     await sftp.connect({ host, port, username, password });
-    await sftp.put(Buffer.from(cfg, "utf-8"), remotePath);
-    console.log(`[sftp-deploy] Uploaded admins.cfg for server "${server}" successfully`);
+    await sftp.put(Buffer.from(cfg, "utf-8"), filePath);
+    console.log(`[sftp-deploy] Uploaded admins.cfg for server "${server}" to ${filePath}`);
   } finally {
     await sftp.end();
   }
@@ -71,12 +72,18 @@ async function deployWithEnvVars(server?: string): Promise<void> {
 
   const cfg = await generateAdminsCfg(server);
   const sftp = new SFTPClient();
+  const filePath = normalizeSftpPath(remotePath);
 
   try {
     await sftp.connect({ host, port, username, password });
-    await sftp.put(Buffer.from(cfg, "utf-8"), remotePath);
-    console.log("[sftp-deploy] Uploaded admins.cfg successfully (env vars)");
+    await sftp.put(Buffer.from(cfg, "utf-8"), filePath);
+    console.log(`[sftp-deploy] Uploaded admins.cfg to ${filePath} (env vars)`);
   } finally {
     await sftp.end();
   }
+}
+
+function normalizeSftpPath(path: string): string {
+  if (path.endsWith("/Admins.cfg")) return path;
+  return path.replace(/\/+$/, "") + "/Admins.cfg";
 }

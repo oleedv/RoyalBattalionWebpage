@@ -11,6 +11,7 @@ export const PERMISSIONS = [
   "manage:squadjs",
   "view:live-server",
   "manage:live-server",
+  "manage:whitelist-sync",
   "admin",
 ] as const;
 

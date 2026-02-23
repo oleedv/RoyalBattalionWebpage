@@ -1088,13 +1088,25 @@ function TeamColumn({
           {label} ({totalCount})
         </span>
         {onSearchChange && (
-          <input
-            type="text"
-            value={searchValue || ""}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search..."
-            className="w-28 rounded-sm border border-border/50 bg-bg-tertiary px-2 py-0.5 text-[10px] text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-          />
+          <div className="relative">
+            <input
+              type="text"
+              value={searchValue || ""}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search..."
+              className="w-28 rounded-sm border border-border/50 bg-bg-tertiary px-2 py-0.5 pr-5 text-[10px] text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+            />
+            {searchValue && (
+              <button
+                onClick={() => onSearchChange("")}
+                className="absolute right-1 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+              >
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
         )}
       </div>
       <div className="flex-1 overflow-auto">

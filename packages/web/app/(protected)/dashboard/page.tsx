@@ -8,15 +8,9 @@ import { usePermissions } from "@/lib/permission-context";
 import type { UserWithRoles } from "shared";
 import type { DashboardStats, ServerStatus, MetricSample } from "@/lib/api-client";
 
-const SERVER_META: Record<string, { label: string; connectUrl: string }> = {
-  "Main Server": {
-    label: "Main Server",
-    connectUrl: "steam://connect/37.153.157.204:27050",
-  },
-  "Battle Server": {
-    label: "Battle Server",
-    connectUrl: "steam://connect/37.153.157.204:27060",
-  },
+const CONNECT_URLS: Record<string, string> = {
+  "37.153.157.204:27050": "steam://connect/37.153.157.204:27050",
+  "37.153.157.204:27060": "steam://connect/37.153.157.204:27060",
 };
 
 /* ── Sparkline (multi-line) ─────────────────────────────────────────── */
@@ -96,9 +90,7 @@ interface SquadJSMetrics {
 
 function ServerStatusCard({ server, sqMetrics }: { server: ServerStatus; sqMetrics?: SquadJSMetrics }) {
   const isOnline = server.status === "online";
-  const meta = Object.values(SERVER_META).find((m) =>
-    server.name.toLowerCase().includes(m.label.toLowerCase().split(" ")[0].toLowerCase())
-  ) || { label: server.name, connectUrl: "#" };
+  const connectUrl = CONNECT_URLS[`${server.ip}:${server.port}`] ?? "#";
 
   // Prefer SquadJS data when available (more real-time)
   const players = sqMetrics ? sqMetrics.playerCount : server.players;
@@ -113,7 +105,7 @@ function ServerStatusCard({ server, sqMetrics }: { server: ServerStatus; sqMetri
       <div className="p-5">
         <div className="mb-3 flex items-center justify-between">
           <div className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-            {meta.label}
+            {server.name}
           </div>
           <div className="flex items-center gap-2">
             <div
@@ -155,7 +147,7 @@ function ServerStatusCard({ server, sqMetrics }: { server: ServerStatus; sqMetri
         <div className="flex items-center justify-between">
           <span className="text-sm text-text-secondary">{server.map}</span>
           <a
-            href={meta.connectUrl}
+            href={connectUrl}
             className="text-xs font-medium text-accent opacity-0 transition-opacity group-hover:opacity-100"
           >
             Connect

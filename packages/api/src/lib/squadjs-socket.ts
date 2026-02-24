@@ -260,7 +260,7 @@ class SquadJSSocketManager {
           this.broadcast(key, "UPDATED_PLAYER_INFORMATION", data);
         }
       });
-    }, 30_000);
+    }, 10_000);
   }
 
   private addConsoleEntry(state: ServerState, type: ConsoleEntry["type"], message: string) {

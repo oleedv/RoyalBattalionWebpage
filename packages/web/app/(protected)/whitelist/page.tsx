@@ -36,7 +36,7 @@ type Tab = "entries" | "requests" | "groups" | "clans";
 interface ParsedImportRow {
   steamId: string;
   name: string;
-  clan: string;
+  clanId: string;
   role: string;
   groupId: string;
   error: boolean;
@@ -495,16 +495,47 @@ function EntriesTab({
   }
 
   function parseImportText() {
-    const lines = importText.split("\n").filter((l) => l.trim() && !l.trim().startsWith("//") && !l.trim().startsWith("Group="));
-    const parsed: ParsedImportRow[] = lines.map((line) => {
-      const match = line.match(/^(.+?)=(\d+):(.+?)\s*\/\/\s*(.+)$/);
+    const allLines = importText.split("\n");
+    const parsed: ParsedImportRow[] = [];
+    let currentClanId = "";
+
+    for (const line of allLines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("Group=")) continue;
+
+      // Detect clan section headers like "// RB" or "// No Clan"
+      if (trimmed.startsWith("//")) {
+        const sectionName = trimmed.replace(/^\/\/\s*/, "").trim();
+        if (sectionName && sectionName !== "No Clan") {
+          // Match by tag or name (case-insensitive)
+          const matchedClan = clans.find(
+            (c) => c.tag.toLowerCase() === sectionName.toLowerCase() || c.name.toLowerCase() === sectionName.toLowerCase()
+          );
+          currentClanId = matchedClan?.id || "";
+        } else {
+          currentClanId = "";
+        }
+        continue;
+      }
+
+      // Parse Admin=steamId:GroupName // PlayerName
+      const match = trimmed.match(/^(.+?)=(\d+):(.+?)\s*\/\/\s*(.+)$/);
       if (match) {
         const roleName = match[3].trim();
         const matchedGroup = groups.find((g) => g.name.toLowerCase() === roleName.toLowerCase());
-        return { clan: "", steamId: match[2].trim(), role: roleName, groupId: matchedGroup?.id || "", name: match[4].trim(), error: false };
+        parsed.push({ clanId: currentClanId, steamId: match[2].trim(), role: roleName, groupId: matchedGroup?.id || "", name: match[4].trim(), error: false });
+      } else {
+        // Try simpler format: Admin=steamId:GroupName
+        const simpleMatch = trimmed.match(/^(.+?)=(\d+):(.+)$/);
+        if (simpleMatch) {
+          const roleName = simpleMatch[3].trim();
+          const matchedGroup = groups.find((g) => g.name.toLowerCase() === roleName.toLowerCase());
+          parsed.push({ clanId: currentClanId, steamId: simpleMatch[2].trim(), role: roleName, groupId: matchedGroup?.id || "", name: "", error: false });
+        } else {
+          parsed.push({ steamId: "", name: "", clanId: "", role: "", groupId: "", error: true });
+        }
       }
-      return { steamId: "", name: "", clan: "", role: "", groupId: "", error: true };
-    });
+    }
     setImportRows(parsed);
     setImportStep("review");
   }
@@ -517,12 +548,16 @@ function EntriesTab({
     setImporting(true);
     const res = await bulkAddWhitelist(
       apiToken,
-      validRows.map((r) => ({
-        steamId: r.steamId,
-        name: r.name || undefined,
-        clan: r.clan || undefined,
-        groupId: r.groupId || undefined,
-      })),
+      validRows.map((r) => {
+        const selectedClan = clans.find((c) => c.id === r.clanId);
+        return {
+          steamId: r.steamId,
+          name: r.name || undefined,
+          clanId: r.clanId || undefined,
+          clan: selectedClan?.tag || undefined,
+          groupId: r.groupId || undefined,
+        };
+      }),
       activeServer
     );
 
@@ -777,12 +812,12 @@ function EntriesTab({
                 <div>
                   <div className="mb-3 flex items-center justify-between">
                     <p className="text-sm text-text-secondary">Review parsed entries before importing.</p>
-                    {importRows.length > 1 && importRows[0] && (importRows[0].clan || importRows[0].groupId) && (
+                    {importRows.length > 1 && importRows[0] && (importRows[0].clanId || importRows[0].groupId) && (
                       <button
                         type="button"
                         onClick={() => setImportRows((prev) => {
                           const first = prev[0];
-                          return prev.map((r, i) => i === 0 ? r : { ...r, clan: first.clan, groupId: first.groupId });
+                          return prev.map((r, i) => i === 0 ? r : { ...r, clanId: first.clanId, groupId: first.groupId });
                         })}
                         className="rounded-sm border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-accent"
                       >
@@ -806,7 +841,7 @@ function EntriesTab({
                           <tr key={i} className={`border-b border-border/50 ${row.error ? "bg-danger/10" : ""}`}>
                             <td className="px-3 py-2"><input type="text" value={row.steamId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, steamId: e.target.value, error: false } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none" /></td>
                             <td className="px-3 py-2"><input type="text" value={row.name} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, name: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" /></td>
-                            <td className="px-3 py-2"><input type="text" value={row.clan} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, clan: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" /></td>
+                            <td className="px-3 py-2"><select value={row.clanId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, clanId: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"><option value="">No Clan</option>{clans.map((c) => <option key={c.id} value={c.id}>[{c.tag}] {c.name}</option>)}</select></td>
                             <td className="px-3 py-2"><select value={row.groupId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, groupId: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"><option value="">No group</option>{groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></td>
                             <td className="px-3 py-2"><button onClick={() => setImportRows((prev) => prev.filter((_, j) => j !== i))} className="text-xs text-text-muted transition-colors hover:text-danger">x</button></td>
                           </tr>

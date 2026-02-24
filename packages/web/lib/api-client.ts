@@ -120,7 +120,7 @@ export function deleteWhitelistEntry(
 
 export function bulkAddWhitelist(
   token: string,
-  entries: { steamId: string; name?: string; clan?: string; role?: string; groupId?: string; reason?: string }[],
+  entries: { steamId: string; name?: string; clanId?: string; clan?: string; role?: string; groupId?: string; reason?: string }[],
   server?: string
 ): Promise<ApiResponse<{ created: number; skipped: number }>> {
   return request<{ created: number; skipped: number }>("/whitelist/bulk", {

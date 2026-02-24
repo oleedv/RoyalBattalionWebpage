@@ -19,6 +19,8 @@ function toEntry(e: {
   server: string;
   name: string | null;
   clan: string | null;
+  clanId: string | null;
+  clanRef?: { name: string } | null;
   role: string | null;
   groupId: string | null;
   group?: { name: string } | null;
@@ -33,6 +35,8 @@ function toEntry(e: {
     server: e.server,
     name: e.name,
     clan: e.clan,
+    clanId: e.clanId,
+    clanName: e.clanRef?.name ?? null,
     role: e.role,
     groupId: e.groupId,
     groupName: e.group?.name ?? null,
@@ -54,6 +58,7 @@ const addEntrySchema = z.object({
   server: z.string().min(1).default("main"),
   name: z.string().optional(),
   clan: z.string().optional(),
+  clanId: z.string().optional(),
   role: z.string().optional(),
   groupId: z.string().optional(),
   reason: z.string().optional(),
@@ -64,6 +69,7 @@ const updateEntrySchema = z.object({
   steamId: z.string().min(1).optional(),
   name: z.string().optional(),
   clan: z.string().optional(),
+  clanId: z.string().nullable().optional(),
   role: z.string().optional(),
   groupId: z.string().nullable().optional(),
   reason: z.string().optional(),
@@ -75,7 +81,7 @@ whitelist.get("/", requirePermission("view:whitelist"), async (c) => {
 
   const entries = await prisma.whitelistEntry.findMany({
     where: server ? { server } : {},
-    include: { group: true },
+    include: { group: true, clanRef: true },
     orderBy: { createdAt: "desc" },
   });
 
@@ -122,7 +128,7 @@ whitelist.get("/candidates", requirePermission("manage:whitelist"), async (c) =>
 
 whitelist.post("/", requirePermission("manage:whitelist"), zValidator("json", addEntrySchema), async (c) => {
   const userId = c.get("userId");
-  const { steamId, server, name, clan, role, groupId, reason, expiresAt } = c.req.valid("json");
+  const { steamId, server, name, clan, clanId, role, groupId, reason, expiresAt } = c.req.valid("json");
 
   try {
     const entry = await prisma.whitelistEntry.create({
@@ -131,13 +137,14 @@ whitelist.post("/", requirePermission("manage:whitelist"), zValidator("json", ad
         server,
         name: name ?? null,
         clan: clan ?? null,
+        clanId: clanId ?? null,
         role: role ?? null,
         groupId: groupId ?? null,
         addedBy: userId,
         reason: reason ?? null,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
       },
-      include: { group: true },
+      include: { group: true, clanRef: true },
     });
 
     deployInBackground(server);
@@ -168,6 +175,7 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
         ...(body.steamId !== undefined && { steamId: body.steamId }),
         ...(body.name !== undefined && { name: body.name || null }),
         ...(body.clan !== undefined && { clan: body.clan || null }),
+        ...(body.clanId !== undefined && { clanId: body.clanId }),
         ...(body.role !== undefined && { role: body.role || null }),
         ...(body.groupId !== undefined && { groupId: body.groupId }),
         ...(body.reason !== undefined && { reason: body.reason || null }),
@@ -175,7 +183,7 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
           expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
         }),
       },
-      include: { group: true },
+      include: { group: true, clanRef: true },
     });
 
     deployInBackground(existing.server);
@@ -196,6 +204,7 @@ const bulkAddSchema = z.object({
     steamId: z.string().min(1),
     name: z.string().optional(),
     clan: z.string().optional(),
+    clanId: z.string().optional(),
     role: z.string().optional(),
     groupId: z.string().optional(),
     reason: z.string().optional(),
@@ -217,6 +226,7 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), zValidator("json"
           server,
           name: entry.name ?? null,
           clan: entry.clan ?? null,
+          clanId: entry.clanId ?? null,
           role: entry.role ?? null,
           groupId: entry.groupId ?? null,
           addedBy: userId,

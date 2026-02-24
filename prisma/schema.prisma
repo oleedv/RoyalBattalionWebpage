@@ -56,12 +56,22 @@ model AdminGroup {
   entries     WhitelistEntry[]
 }
 
+model Clan {
+  id        String           @id @default(cuid())
+  name      String           @unique
+  tag       String           @unique
+  createdAt DateTime         @default(now())
+  entries   WhitelistEntry[]
+}
+
 model WhitelistEntry {
   id        String      @id @default(cuid())
   steamId   String
   server    String      @default("main")
   name      String?
   clan      String?
+  clanId    String?
+  clanRef   Clan?       @relation(fields: [clanId], references: [id], onDelete: SetNull)
   role      String?
   groupId   String?
   group     AdminGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)

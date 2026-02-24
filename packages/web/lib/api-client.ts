@@ -5,6 +5,7 @@ import type {
   WhitelistEntry,
   WhitelistCandidate,
   AdminGroup,
+  Clan,
   ServerConfig,
   UserWithRoles,
   Ticket,
@@ -85,7 +86,7 @@ export function getWhitelist(
 export function addWhitelistEntry(
   token: string,
   steamId: string,
-  opts?: { name?: string; clan?: string; role?: string; groupId?: string; reason?: string; expiresAt?: string; server?: string }
+  opts?: { name?: string; clan?: string; clanId?: string; role?: string; groupId?: string; reason?: string; expiresAt?: string; server?: string }
 ): Promise<ApiResponse<WhitelistEntry>> {
   return request<WhitelistEntry>("/whitelist", {
     method: "POST",
@@ -97,7 +98,7 @@ export function addWhitelistEntry(
 export function updateWhitelistEntry(
   token: string,
   id: string,
-  data: { steamId?: string; name?: string; clan?: string; role?: string; groupId?: string | null; reason?: string; expiresAt?: string | null }
+  data: { steamId?: string; name?: string; clan?: string; clanId?: string | null; role?: string; groupId?: string | null; reason?: string; expiresAt?: string | null }
 ): Promise<ApiResponse<WhitelistEntry>> {
   return request<WhitelistEntry>(`/whitelist/${id}`, {
     method: "PUT",
@@ -175,6 +176,48 @@ export function deleteAdminGroup(
   id: string
 ): Promise<ApiResponse<{ deleted: true }>> {
   return request<{ deleted: true }>(`/admin-groups/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+// Clans
+export function getClans(
+  token: string
+): Promise<ApiResponse<Clan[]>> {
+  return request<Clan[]>("/clans", {
+    headers: authHeaders(token),
+  });
+}
+
+export function createClan(
+  token: string,
+  data: { name: string; tag: string }
+): Promise<ApiResponse<Clan>> {
+  return request<Clan>("/clans", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateClan(
+  token: string,
+  id: string,
+  data: { name?: string; tag?: string }
+): Promise<ApiResponse<Clan>> {
+  return request<Clan>(`/clans/${id}`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteClan(
+  token: string,
+  id: string
+): Promise<ApiResponse<{ deleted: true }>> {
+  return request<{ deleted: true }>(`/clans/${id}`, {
     method: "DELETE",
     headers: authHeaders(token),
   });

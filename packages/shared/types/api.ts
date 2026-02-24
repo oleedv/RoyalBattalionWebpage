@@ -30,12 +30,21 @@ export interface AdminGroup {
   createdAt: string;
 }
 
+export interface Clan {
+  id: string;
+  name: string;
+  tag: string;
+  createdAt: string;
+}
+
 export interface WhitelistEntry {
   id: string;
   steamId: string;
   server: string;
   name: string | null;
   clan: string | null;
+  clanId: string | null;
+  clanName: string | null;
   role: string | null;
   groupId: string | null;
   groupName: string | null;

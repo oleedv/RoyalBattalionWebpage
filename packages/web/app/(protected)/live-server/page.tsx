@@ -97,7 +97,8 @@ interface Snapshot {
   metricHistory: MetricSample[];
 }
 
-type OnlineClanData = Record<string, { teamID: string; steamId: string; name: string }[]>;
+type OnlineClanEntry = { id: string; tag: string; members: { teamID: string; steamId: string; name: string }[] };
+type OnlineClanData = Record<string, OnlineClanEntry>;
 
 type WSMessage =
   | { type: "servers"; data: string[] }
@@ -163,8 +164,9 @@ export default function LiveServerPage() {
   const [endMatchConfirm, setEndMatchConfirm] = useState(false);
   const [nextLayerInput, setNextLayerInput] = useState("");
   const [onlineClans, setOnlineClans] = useState<OnlineClanData>({});
-  const [clanMoveConfirm, setClanMoveConfirm] = useState<{ clanTag: string; targetTeam: string; playerCount: number } | null>(null);
-  const [clanDropdownOpen, setClanDropdownOpen] = useState<"1" | "2" | null>(null);
+  const [clanMoveModalOpen, setClanMoveModalOpen] = useState(false);
+  const [clanMoveTargetTeam, setClanMoveTargetTeam] = useState<"1" | "2">("1");
+  const [clanMoveSelectedKey, setClanMoveSelectedKey] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
@@ -522,13 +524,17 @@ export default function LiveServerPage() {
     sendAction({ action: "demotecommander", steamId: player.steamID, eosId: player.eosID });
   }
 
-  function handleSwitchClan(clanTag: string, targetTeam: string) {
-    const members = onlineClans[clanTag] || [];
-    const toSwitch = members.filter((m) => m.teamID !== targetTeam);
-    if (toSwitch.length === 0) return;
-    sendAction({ action: "switchclan", clanTag, targetTeam });
-    setClanMoveConfirm(null);
-    setClanDropdownOpen(null);
+  function handleSwitchClan() {
+    if (!clanMoveSelectedKey) return;
+    const clan = onlineClans[clanMoveSelectedKey];
+    if (!clan) return;
+    if (clan.id) {
+      sendAction({ action: "switchclan", clanId: clan.id, targetTeam: clanMoveTargetTeam });
+    } else {
+      sendAction({ action: "switchclan", clanTag: clan.tag, targetTeam: clanMoveTargetTeam });
+    }
+    setClanMoveModalOpen(false);
+    setClanMoveSelectedKey(null);
   }
 
   function isCommander(player: Player): boolean {
@@ -601,12 +607,12 @@ export default function LiveServerPage() {
       ? chatLog
       : chatLog.filter((m) => m.chat === chatFilter || m.chat === "__DIVIDER__");
 
-  // Compute opposing clans for each team's "Move clan here" button
-  function getOpposingClans(targetTeam: string): { tag: string; count: number }[] {
-    const result: { tag: string; count: number }[] = [];
-    for (const [tag, members] of Object.entries(onlineClans)) {
-      const onOtherTeam = members.filter((m) => m.teamID !== targetTeam).length;
-      if (onOtherTeam > 0) result.push({ tag, count: onOtherTeam });
+  // Compute clans that can be moved to a target team
+  function getMovableClans(targetTeam: string): { key: string; tag: string; count: number }[] {
+    const result: { key: string; tag: string; count: number }[] = [];
+    for (const [key, clan] of Object.entries(onlineClans)) {
+      const toMove = clan.members.filter((m) => m.teamID !== targetTeam).length;
+      if (toMove > 0) result.push({ key, tag: clan.tag, count: toMove });
     }
     return result.sort((a, b) => b.count - a.count);
   }
@@ -775,6 +781,17 @@ export default function LiveServerPage() {
               </button>
             );
           })()}
+
+          <div className="h-6 w-px bg-border/50" />
+
+          {/* Move Clan */}
+          <button
+            onClick={() => setClanMoveModalOpen(true)}
+            disabled={Object.keys(onlineClans).length === 0}
+            className="rounded-sm border border-accent/30 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/15 disabled:opacity-40"
+          >
+            Move Clan
+          </button>
         </div>
       )}
 
@@ -793,18 +810,61 @@ export default function LiveServerPage() {
         </ActionModal>
       )}
 
-      {/* Clan move confirmation */}
-      {clanMoveConfirm && (
+      {/* Clan move modal */}
+      {clanMoveModalOpen && (
         <ActionModal
           title="Move Clan"
-          onConfirm={() => handleSwitchClan(clanMoveConfirm.clanTag, clanMoveConfirm.targetTeam)}
-          onCancel={() => setClanMoveConfirm(null)}
-          confirmLabel="Move Clan"
+          onConfirm={handleSwitchClan}
+          onCancel={() => { setClanMoveModalOpen(false); setClanMoveSelectedKey(null); }}
+          confirmLabel={clanMoveSelectedKey ? `Move ${getMovableClans(clanMoveTargetTeam).find((c) => c.key === clanMoveSelectedKey)?.count || 0} players` : "Select a clan"}
           confirmClass="bg-warning hover:bg-warning/80"
+          confirmDisabled={!clanMoveSelectedKey}
         >
-          <p className="text-sm text-text-secondary">
-            Move {clanMoveConfirm.playerCount} player{clanMoveConfirm.playerCount !== 1 ? "s" : ""} from [{clanMoveConfirm.clanTag}] to Team {clanMoveConfirm.targetTeam}?
-          </p>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium tracking-wide text-text-muted uppercase">Target Team</label>
+              <div className="flex gap-2">
+                {(["1", "2"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => { setClanMoveTargetTeam(t); setClanMoveSelectedKey(null); }}
+                    className={`flex-1 rounded-sm border px-4 py-2 text-sm font-medium transition-colors ${
+                      clanMoveTargetTeam === t
+                        ? t === "1" ? "border-blue-500/40 bg-blue-500/10 text-blue-400" : "border-red-500/40 bg-red-500/10 text-red-400"
+                        : "border-border bg-bg-tertiary text-text-muted hover:text-text-primary"
+                    }`}
+                  >
+                    Team {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium tracking-wide text-text-muted uppercase">Select Clan</label>
+              {getMovableClans(clanMoveTargetTeam).length === 0 ? (
+                <p className="text-sm text-text-muted">No clans with players to move to this team.</p>
+              ) : (
+                <div className="space-y-1">
+                  {getMovableClans(clanMoveTargetTeam).map((clan) => (
+                    <button
+                      key={clan.key}
+                      type="button"
+                      onClick={() => setClanMoveSelectedKey(clan.key)}
+                      className={`flex w-full items-center justify-between rounded-sm border px-3 py-2 text-sm transition-colors ${
+                        clanMoveSelectedKey === clan.key
+                          ? "border-accent/40 bg-accent/10 text-accent"
+                          : "border-border bg-bg-tertiary text-text-secondary hover:bg-bg-tertiary/80 hover:text-text-primary"
+                      }`}
+                    >
+                      <span>[{clan.tag}]</span>
+                      <span className="text-xs text-text-muted">{clan.count} player{clan.count !== 1 ? "s" : ""}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </ActionModal>
       )}
 
@@ -842,10 +902,6 @@ export default function LiveServerPage() {
                   onSelectPlayer={setSelectedPlayer}
                   formatPlaytime={formatPlaytime}
                   teamId="1"
-                  clanDropdownOpen={clanDropdownOpen === "1"}
-                  onClanDropdownToggle={() => setClanDropdownOpen((prev) => prev === "1" ? null : "1")}
-                  opposingClans={getOpposingClans("1")}
-                  onClanMoveRequest={(tag, count) => { setClanMoveConfirm({ clanTag: tag, targetTeam: "1", playerCount: count }); setClanDropdownOpen(null); }}
                 />
                 <TeamColumn
                   label="Team 2"
@@ -864,10 +920,6 @@ export default function LiveServerPage() {
                   onSelectPlayer={setSelectedPlayer}
                   formatPlaytime={formatPlaytime}
                   teamId="2"
-                  clanDropdownOpen={clanDropdownOpen === "2"}
-                  onClanDropdownToggle={() => setClanDropdownOpen((prev) => prev === "2" ? null : "2")}
-                  opposingClans={getOpposingClans("2")}
-                  onClanMoveRequest={(tag, count) => { setClanMoveConfirm({ clanTag: tag, targetTeam: "2", playerCount: count }); setClanDropdownOpen(null); }}
                 />
               </div>
               </>
@@ -1272,10 +1324,6 @@ function TeamColumn({
   onSelectPlayer,
   formatPlaytime,
   teamId,
-  clanDropdownOpen,
-  onClanDropdownToggle,
-  opposingClans,
-  onClanMoveRequest,
 }: {
   label: string;
   players: Player[];
@@ -1293,10 +1341,6 @@ function TeamColumn({
   onSelectPlayer: (p: Player) => void;
   formatPlaytime: (s?: number) => string;
   teamId?: string;
-  clanDropdownOpen?: boolean;
-  onClanDropdownToggle?: () => void;
-  opposingClans?: { tag: string; count: number }[];
-  onClanMoveRequest?: (clanTag: string, count: number) => void;
 }) {
   // Group by squad
   const squads = new Map<string, Player[]>();
@@ -1334,35 +1378,6 @@ function TeamColumn({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {showActions && onClanDropdownToggle && opposingClans && opposingClans.length > 0 && (
-            <div className="relative">
-              <button
-                onClick={onClanDropdownToggle}
-                className="rounded-sm border border-accent/30 bg-accent/5 px-2 py-0.5 text-[9px] font-medium text-accent transition-colors hover:bg-accent/15"
-              >
-                Move clan here
-              </button>
-              {clanDropdownOpen && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={onClanDropdownToggle} />
-                  <div className="absolute right-0 top-full z-40 mt-1 min-w-[160px] rounded-sm border border-border bg-bg-secondary p-1 shadow-lg">
-                    {opposingClans.map((clan) => (
-                      <button
-                        key={clan.tag}
-                        onClick={() => {
-                          if (onClanMoveRequest) onClanMoveRequest(clan.tag, clan.count);
-                        }}
-                        className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-                      >
-                        <span>[{clan.tag}]</span>
-                        <span className="text-[10px] text-text-muted">{clan.count} player{clan.count !== 1 ? "s" : ""}</span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
           {onSearchChange && (
             <div className="relative">
               <input

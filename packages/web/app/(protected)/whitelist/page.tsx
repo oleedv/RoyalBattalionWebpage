@@ -12,11 +12,15 @@ import {
   createAdminGroup,
   updateAdminGroup,
   deleteAdminGroup,
+  getClans,
+  createClan,
+  updateClan,
+  deleteClan,
   getServerConfigs,
   toggleServerSync,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
-import type { WhitelistEntry, WhitelistCandidate, AdminGroup, ServerConfig } from "shared";
+import type { WhitelistEntry, WhitelistCandidate, AdminGroup, Clan, ServerConfig } from "shared";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -26,7 +30,7 @@ const SQUAD_PERMISSIONS = [
   "clientdemos", "cheat", "featuretest",
 ];
 
-type Tab = "entries" | "requests" | "groups";
+type Tab = "entries" | "requests" | "groups" | "clans";
 
 // --- Import modal types ---
 interface ParsedImportRow {
@@ -71,6 +75,7 @@ export default function WhitelistPage() {
   const [entries, setEntries] = useState<WhitelistEntry[]>([]);
   const [candidates, setCandidates] = useState<WhitelistCandidate[]>([]);
   const [groups, setGroups] = useState<AdminGroup[]>([]);
+  const [clans, setClans] = useState<Clan[]>([]);
   const [serverConfigs, setServerConfigs] = useState<ServerConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,9 +112,13 @@ export default function WhitelistPage() {
           setActiveServer(initial);
         }
 
-        // Fetch groups (shared across servers)
-        const grpRes = await getAdminGroups(apiToken);
+        // Fetch groups and clans (shared across servers)
+        const [grpRes, clanRes] = await Promise.all([
+          getAdminGroups(apiToken),
+          getClans(apiToken),
+        ]);
         if (grpRes.success && grpRes.data) setGroups(grpRes.data);
+        if (clanRes.success && clanRes.data) setClans(clanRes.data);
       } catch {
         setError("Failed to initialize");
       } finally {
@@ -206,7 +215,7 @@ export default function WhitelistPage() {
 
       {/* Tabs */}
       <div className="mb-6 flex gap-1 border-b border-border">
-        {(["entries", "requests", "groups"] as Tab[]).map((t) => (
+        {(["entries", "requests", "groups", "clans"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -234,6 +243,7 @@ export default function WhitelistPage() {
           entries={entries}
           setEntries={setEntries}
           groups={groups}
+          clans={clans}
           apiToken={apiToken}
           canManage={canManage}
           activeServer={activeServer}
@@ -260,6 +270,14 @@ export default function WhitelistPage() {
           canManage={canManage}
         />
       )}
+      {tab === "clans" && (
+        <ClansTab
+          clans={clans}
+          setClans={setClans}
+          apiToken={apiToken}
+          canManage={canManage}
+        />
+      )}
     </div>
   );
 }
@@ -272,6 +290,7 @@ function EntriesTab({
   entries,
   setEntries,
   groups,
+  clans,
   apiToken,
   canManage,
   activeServer,
@@ -279,6 +298,7 @@ function EntriesTab({
   entries: WhitelistEntry[];
   setEntries: React.Dispatch<React.SetStateAction<WhitelistEntry[]>>;
   groups: AdminGroup[];
+  clans: Clan[];
   apiToken: string | null;
   canManage: boolean;
   activeServer: string;
@@ -288,7 +308,7 @@ function EntriesTab({
   // Add form
   const [newSteamId, setNewSteamId] = useState("");
   const [newName, setNewName] = useState("");
-  const [newClan, setNewClan] = useState("");
+  const [newClanId, setNewClanId] = useState("");
   const [newGroupId, setNewGroupId] = useState("");
   const [newExpiresAt, setNewExpiresAt] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
@@ -298,7 +318,7 @@ function EntriesTab({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editSteamId, setEditSteamId] = useState("");
   const [editName, setEditName] = useState("");
-  const [editClan, setEditClan] = useState("");
+  const [editClanId, setEditClanId] = useState("");
   const [editGroupId, setEditGroupId] = useState("");
   const [editReason, setEditReason] = useState("");
   const [editExpiresAt, setEditExpiresAt] = useState("");
@@ -323,9 +343,11 @@ function EntriesTab({
     setAddError(null);
     setAdding(true);
 
+    const selectedClan = clans.find((c) => c.id === newClanId);
     const res = await addWhitelistEntry(apiToken, newSteamId.trim(), {
       name: newName.trim() || undefined,
-      clan: newClan.trim() || undefined,
+      clanId: newClanId || undefined,
+      clan: selectedClan?.tag || undefined,
       groupId: newGroupId || undefined,
       expiresAt: newExpiresAt || undefined,
       server: activeServer,
@@ -335,7 +357,7 @@ function EntriesTab({
       setEntries((prev) => [res.data!, ...prev]);
       setNewSteamId("");
       setNewName("");
-      setNewClan("");
+      setNewClanId("");
       setNewGroupId("");
       setNewExpiresAt("");
     } else {
@@ -348,7 +370,7 @@ function EntriesTab({
     setEditingId(entry.id);
     setEditSteamId(entry.steamId);
     setEditName(entry.name || "");
-    setEditClan(entry.clan || "");
+    setEditClanId(entry.clanId || "");
     setEditGroupId(entry.groupId || "");
     setEditReason(entry.reason || "");
     setEditExpiresAt(entry.expiresAt ? entry.expiresAt.slice(0, 16) : "");
@@ -359,10 +381,12 @@ function EntriesTab({
     if (!apiToken) return;
     setEditError(null);
 
+    const selectedClan = clans.find((c) => c.id === editClanId);
     const res = await updateWhitelistEntry(apiToken, id, {
       steamId: editSteamId.trim(),
       name: editName.trim() || undefined,
-      clan: editClan.trim() || undefined,
+      clanId: editClanId || null,
+      clan: selectedClan?.tag || undefined,
       groupId: editGroupId || null,
       reason: editReason.trim() || undefined,
       expiresAt: editExpiresAt ? new Date(editExpiresAt).toISOString() : null,
@@ -570,7 +594,10 @@ function EntriesTab({
         <form onSubmit={handleAdd} className="facet-border mb-6 flex flex-wrap gap-3 rounded-sm bg-bg-card p-4">
           <input type="text" value={newSteamId} onChange={(e) => setNewSteamId(e.target.value)} placeholder="Steam64 ID" className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none" required />
           <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Name" className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-36" />
-          <input type="text" value={newClan} onChange={(e) => setNewClan(e.target.value)} placeholder="Clan" className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-28" />
+          <select value={newClanId} onChange={(e) => setNewClanId(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none sm:w-32">
+            <option value="">No Clan</option>
+            {clans.map((c) => <option key={c.id} value={c.id}>[{c.tag}] {c.name}</option>)}
+          </select>
           <select value={newGroupId} onChange={(e) => setNewGroupId(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none sm:w-36">
             <option value="">No group</option>
             {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
@@ -628,9 +655,12 @@ function EntriesTab({
                       </td>
                       <td className="px-4 py-3 text-text-secondary">
                         {isEditing ? (
-                          <input type="text" value={editClan} onChange={(e) => setEditClan(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" placeholder="Clan" />
+                          <select value={editClanId} onChange={(e) => setEditClanId(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none">
+                            <option value="">No Clan</option>
+                            {clans.map((c) => <option key={c.id} value={c.id}>[{c.tag}] {c.name}</option>)}
+                          </select>
                         ) : (
-                          entry.clan || <span className="text-text-muted">--</span>
+                          entry.clanName || entry.clan || <span className="text-text-muted">--</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-text-secondary">
@@ -1099,6 +1129,142 @@ function GroupsTab({
                       ))}
                       {!g.permissions && <span className="text-xs text-text-muted">No permissions</span>}
                     </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ============================================================
+// CLANS TAB
+// ============================================================
+
+function ClansTab({
+  clans,
+  setClans,
+  apiToken,
+  canManage,
+}: {
+  clans: Clan[];
+  setClans: React.Dispatch<React.SetStateAction<Clan[]>>;
+  apiToken: string | null;
+  canManage: boolean;
+}) {
+  const [newName, setNewName] = useState("");
+  const [newTag, setNewTag] = useState("");
+  const [addError, setAddError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTag, setEditTag] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!apiToken || !newName.trim() || !newTag.trim()) return;
+    setAddError(null);
+    setAdding(true);
+
+    const res = await createClan(apiToken, { name: newName.trim(), tag: newTag.trim() });
+    if (res.success && res.data) {
+      setClans((prev) => [...prev, res.data!].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewName("");
+      setNewTag("");
+    } else {
+      setAddError(res.error || "Failed to create clan");
+    }
+    setAdding(false);
+  }
+
+  function startEdit(c: Clan) {
+    setEditingId(c.id);
+    setEditName(c.name);
+    setEditTag(c.tag);
+    setEditError(null);
+  }
+
+  async function saveEdit(id: string) {
+    if (!apiToken) return;
+    setEditError(null);
+
+    const res = await updateClan(apiToken, id, { name: editName.trim(), tag: editTag.trim() });
+    if (res.success && res.data) {
+      setClans((prev) => prev.map((c) => (c.id === id ? res.data! : c)).sort((a, b) => a.name.localeCompare(b.name)));
+      setEditingId(null);
+    } else {
+      setEditError(res.error || "Failed to update clan");
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!apiToken) return;
+    const res = await deleteClan(apiToken, id);
+    if (res.success) {
+      setClans((prev) => prev.filter((c) => c.id !== id));
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <>
+      {canManage && (
+        <form onSubmit={handleAdd} className="facet-border mb-6 rounded-sm bg-bg-card p-4">
+          <div className="flex flex-wrap gap-3">
+            <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Clan name (e.g. Royal Battalion)" className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none" required />
+            <input type="text" value={newTag} onChange={(e) => setNewTag(e.target.value)} placeholder="Tag (e.g. RB)" className="w-24 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none" required />
+            <button type="submit" disabled={adding} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">
+              {adding ? "Creating..." : "Create Clan"}
+            </button>
+          </div>
+          {addError && <div className="mt-2 text-sm text-danger">{addError}</div>}
+        </form>
+      )}
+
+      {clans.length === 0 ? (
+        <div className="facet-border rounded-sm bg-bg-card px-6 py-12 text-center text-text-muted">
+          No clans defined yet. Create clans to organize whitelist entries and manage team switching.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {clans.map((c) => {
+            const isEditing = editingId === c.id;
+            return (
+              <div key={c.id} className="facet-border rounded-sm bg-bg-card p-4">
+                {isEditing ? (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" />
+                    <input type="text" value={editTag} onChange={(e) => setEditTag(e.target.value)} className="w-24 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" />
+                    <button onClick={() => saveEdit(c.id)} className="rounded-sm bg-accent px-4 py-2 text-xs font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted">Save</button>
+                    <button onClick={() => setEditingId(null)} className="text-xs text-text-muted transition-colors hover:text-text-primary">Cancel</button>
+                    {editError && <span className="text-sm text-danger">{editError}</span>}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="rounded-sm border border-accent/20 bg-accent/5 px-2 py-0.5 text-xs font-medium tracking-wide text-accent">[{c.tag}]</span>
+                      <h3 className="font-display text-base font-semibold tracking-wide text-text-primary">{c.name}</h3>
+                    </div>
+                    {canManage && (
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => startEdit(c)} className="text-xs text-text-muted transition-colors hover:text-accent">Edit</button>
+                        {deletingId === c.id ? (
+                          <>
+                            <button onClick={() => handleDelete(c.id)} className="text-xs text-danger transition-colors hover:text-danger/80">Confirm</button>
+                            <button onClick={() => setDeletingId(null)} className="text-xs text-text-muted transition-colors hover:text-text-primary">Cancel</button>
+                          </>
+                        ) : (
+                          <button onClick={() => setDeletingId(c.id)} className="text-xs text-text-muted transition-colors hover:text-danger">Delete</button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

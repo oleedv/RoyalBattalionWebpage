@@ -12,6 +12,7 @@ import matches from "./routes/matches";
 import servers from "./routes/servers";
 import stats from "./routes/stats";
 import adminGroups from "./routes/admin-groups";
+import clans from "./routes/clans";
 import squadjsConfig from "./routes/squadjs-config";
 import serverConfig from "./routes/server-config";
 import discordBot from "./routes/discord-bot";
@@ -47,6 +48,7 @@ app.route("/users", users);
 app.route("/roles", roles);
 app.route("/whitelist", whitelist);
 app.route("/admin-groups", adminGroups);
+app.route("/clans", clans);
 app.route("/tickets", tickets);
 app.route("/matches", matches);
 app.route("/servers", servers);
@@ -489,8 +491,8 @@ async function handleAdminAction(
       }
 
       case "switchclan": {
-        if (!msg.clanTag || !msg.targetTeam) {
-          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing clan tag or target team" }));
+        if ((!msg.clanTag && !msg.clanId) || !msg.targetTeam) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing clan identifier or target team" }));
           return;
         }
         const snapshot = squadjsSocket.getSnapshot(serverKey);
@@ -499,8 +501,12 @@ async function handleAdminAction(
           return;
         }
         const onlineSteamIds = snapshot.players.map((p) => p.steamID).filter(Boolean);
+        // Support both clanId (new) and clanTag (legacy)
+        const clanWhere = msg.clanId
+          ? { clanId: msg.clanId, steamId: { in: onlineSteamIds } }
+          : { clan: msg.clanTag, steamId: { in: onlineSteamIds } };
         const clanEntries = await prisma.whitelistEntry.findMany({
-          where: { clan: msg.clanTag, steamId: { in: onlineSteamIds } },
+          where: clanWhere,
           select: { steamId: true },
         });
         const clanSteamIds = new Set(clanEntries.map((e) => e.steamId));
@@ -523,7 +529,7 @@ async function handleAdminAction(
             await new Promise((r) => setTimeout(r, 100));
           }
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchclan", "LiveServer", serverKey, { clanTag: msg.clanTag, targetTeam: msg.targetTeam, count: switched });
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchclan", "LiveServer", serverKey, { clanId: msg.clanId, clanTag: msg.clanTag, targetTeam: msg.targetTeam, count: switched });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchclan" }));
         break;
       }
@@ -540,19 +546,33 @@ async function handleAdminAction(
           return;
         }
         const entries = await prisma.whitelistEntry.findMany({
-          where: { steamId: { in: steamIds }, clan: { not: null } },
-          select: { steamId: true, clan: true },
+          where: { steamId: { in: steamIds }, clanId: { not: null } },
+          select: { steamId: true, clanId: true, clanRef: { select: { id: true, name: true, tag: true } } },
         });
         const playerMap = new Map(snapshot.players.map((p) => [p.steamID, p]));
-        const clans: Record<string, { teamID: string; steamId: string; name: string }[]> = {};
+        const clanMap: Record<string, { id: string; tag: string; members: { teamID: string; steamId: string; name: string }[] }> = {};
         for (const e of entries) {
+          if (!e.clanRef) continue;
+          const player = playerMap.get(e.steamId);
+          if (!player) continue;
+          const key = e.clanRef.id;
+          if (!clanMap[key]) clanMap[key] = { id: e.clanRef.id, tag: e.clanRef.tag, members: [] };
+          clanMap[key].members.push({ teamID: player.teamID, steamId: player.steamID, name: player.name });
+        }
+        // Also include legacy clan string entries that haven't been migrated yet
+        const legacyEntries = await prisma.whitelistEntry.findMany({
+          where: { steamId: { in: steamIds }, clan: { not: null }, clanId: null },
+          select: { steamId: true, clan: true },
+        });
+        for (const e of legacyEntries) {
           if (!e.clan) continue;
           const player = playerMap.get(e.steamId);
           if (!player) continue;
-          if (!clans[e.clan]) clans[e.clan] = [];
-          clans[e.clan].push({ teamID: player.teamID, steamId: player.steamID, name: player.name });
+          const key = `legacy:${e.clan}`;
+          if (!clanMap[key]) clanMap[key] = { id: "", tag: e.clan, members: [] };
+          clanMap[key].members.push({ teamID: player.teamID, steamId: player.steamID, name: player.name });
         }
-        ws.send(JSON.stringify({ type: "online_clans", data: clans }));
+        ws.send(JSON.stringify({ type: "online_clans", data: clanMap }));
         break;
       }
 

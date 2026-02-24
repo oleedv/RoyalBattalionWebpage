@@ -1,8 +1,20 @@
 const DISCORD_API = "https://discord.com/api/v10";
 
+async function discordFetch(url: string, headers: Record<string, string>): Promise<Response> {
+  const res = await fetch(url, { headers });
+  if (res.status === 429) {
+    const body = (await res.json()) as { retry_after?: number };
+    const waitMs = Math.ceil((body.retry_after || 1) * 1000);
+    console.warn(`[discord] Rate limited on ${url}, retrying in ${waitMs}ms`);
+    await new Promise((r) => setTimeout(r, waitMs));
+    return fetch(url, { headers });
+  }
+  return res;
+}
+
 export async function fetchDiscordUser(accessToken: string) {
-  const res = await fetch(`${DISCORD_API}/users/@me`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+  const res = await discordFetch(`${DISCORD_API}/users/@me`, {
+    Authorization: `Bearer ${accessToken}`,
   });
 
   if (!res.ok) {
@@ -24,8 +36,8 @@ export async function fetchDiscordUser(accessToken: string) {
 
 export async function fetchGuildRoles(accessToken: string, guildId: string) {
   console.log(`[discord] Fetching guild roles for guild ${guildId}`);
-  const res = await fetch(`${DISCORD_API}/users/@me/guilds/${guildId}/member`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+  const res = await discordFetch(`${DISCORD_API}/users/@me/guilds/${guildId}/member`, {
+    Authorization: `Bearer ${accessToken}`,
   });
 
   if (!res.ok) {
@@ -55,9 +67,9 @@ export async function fetchAllGuildMembers(
 
   // Paginate through all guild members (max 1000 per request)
   while (true) {
-    const res = await fetch(
+    const res = await discordFetch(
       `${DISCORD_API}/guilds/${guildId}/members?limit=1000&after=${after}`,
-      { headers: { Authorization: `Bot ${botToken}` } }
+      { Authorization: `Bot ${botToken}` },
     );
 
     if (!res.ok) {

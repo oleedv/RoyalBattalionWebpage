@@ -16,7 +16,7 @@ const syncSchema = z.object({
 
 const getSecret = () => new TextEncoder().encode(process.env.JWT_SECRET!);
 
-const SYNC_CACHE_TTL_MS = 60 * 1000; // 1 minute
+const SYNC_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const syncCache = new Map<string, { data: ApiResponse<AuthSyncResponse>; expiry: number }>();
 
 auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
@@ -27,23 +27,24 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
     return c.json<ApiResponse<never>>({ success: false, error: "DISCORD_GUILD_ID is not configured" }, 500);
   }
 
-  // Return cached response if available and not expired
-  const cached = syncCache.get(accessToken);
+  // Prune expired entries
   const now = Date.now();
-  if (cached && cached.expiry > now) {
-    return c.json(cached.data);
-  }
-
-  // Prune expired entries periodically (every request is fine for small maps)
   for (const [key, entry] of syncCache) {
     if (entry.expiry <= now) syncCache.delete(key);
   }
 
   try {
-    const [discordUser, guildRoles] = await Promise.all([
-      fetchDiscordUser(accessToken),
-      fetchGuildRoles(accessToken, guildId),
-    ]);
+    // Fetch Discord user first to get a stable cache key (Discord user ID)
+    const discordUser = await fetchDiscordUser(accessToken);
+
+    // Check cache by Discord user ID (survives token refreshes / tab switches)
+    const cacheKey = `discord:${discordUser.id}`;
+    const cached = syncCache.get(cacheKey);
+    if (cached && cached.expiry > now) {
+      return c.json(cached.data);
+    }
+
+    const guildRoles = await fetchGuildRoles(accessToken, guildId);
 
     console.log(`[auth/sync] User ${discordUser.username}(${discordUser.id}) has ${guildRoles.length} Discord roles:`, guildRoles);
 
@@ -125,7 +126,7 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
       data: { token, user: userWithRoles, permissions },
     };
 
-    syncCache.set(accessToken, { data: response, expiry: Date.now() + SYNC_CACHE_TTL_MS });
+    syncCache.set(cacheKey, { data: response, expiry: Date.now() + SYNC_CACHE_TTL_MS });
 
     return c.json(response);
   } catch (err) {

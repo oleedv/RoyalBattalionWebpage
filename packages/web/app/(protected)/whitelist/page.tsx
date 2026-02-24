@@ -34,6 +34,7 @@ interface ParsedImportRow {
   name: string;
   clan: string;
   role: string;
+  groupId: string;
   error: boolean;
 }
 
@@ -289,7 +290,6 @@ function EntriesTab({
   const [newName, setNewName] = useState("");
   const [newClan, setNewClan] = useState("");
   const [newGroupId, setNewGroupId] = useState("");
-  const [newReason, setNewReason] = useState("");
   const [newExpiresAt, setNewExpiresAt] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -307,7 +307,6 @@ function EntriesTab({
   // Review cfg modal
   const [showCfgModal, setShowCfgModal] = useState(false);
   const [cfgContent, setCfgContent] = useState("");
-  const [cfgLoading, setCfgLoading] = useState(false);
   const [cfgCopied, setCfgCopied] = useState(false);
 
   // Import modal
@@ -328,7 +327,6 @@ function EntriesTab({
       name: newName.trim() || undefined,
       clan: newClan.trim() || undefined,
       groupId: newGroupId || undefined,
-      reason: newReason.trim() || undefined,
       expiresAt: newExpiresAt || undefined,
       server: activeServer,
     });
@@ -339,7 +337,6 @@ function EntriesTab({
       setNewName("");
       setNewClan("");
       setNewGroupId("");
-      setNewReason("");
       setNewExpiresAt("");
     } else {
       setAddError(res.error || "Failed to add entry");
@@ -387,22 +384,75 @@ function EntriesTab({
     }
   }
 
-  function handleExport() {
-    window.open(`${BASE_URL}/admins.cfg?server=${encodeURIComponent(activeServer)}`, "_blank");
+  function generateCfgContent(): string {
+    const lines: string[] = [];
+    const now = new Date();
+    const timestamp = now.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+
+    // Header
+    lines.push("// ============================================================");
+    lines.push("// Royal Battalion Whitelist");
+    lines.push(`// Generated: ${timestamp}`);
+    lines.push(`// Server: ${activeServer}`);
+    lines.push("// ============================================================");
+    lines.push("");
+
+    // Group definitions
+    const sortedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder);
+    for (const g of sortedGroups) {
+      lines.push(`Group=${g.name}:${g.permissions}`);
+    }
+    if (sortedGroups.length > 0) lines.push("");
+
+    // Entries grouped by clan
+    const activeEntries = entries.filter((e) => {
+      if (!e.expiresAt) return true;
+      return new Date(e.expiresAt) > now;
+    });
+
+    const byClan = new Map<string, WhitelistEntry[]>();
+    for (const e of activeEntries) {
+      const clan = e.clan || "No Clan";
+      if (!byClan.has(clan)) byClan.set(clan, []);
+      byClan.get(clan)!.push(e);
+    }
+
+    const sortedClans = [...byClan.keys()].sort((a, b) => {
+      if (a === "No Clan") return 1;
+      if (b === "No Clan") return -1;
+      return a.localeCompare(b);
+    });
+
+    for (const clan of sortedClans) {
+      lines.push(`// ${clan}`);
+      for (const e of byClan.get(clan)!) {
+        const groupName = e.groupName || e.role || "Whitelist";
+        const playerName = e.name || e.steamId;
+        lines.push(`Admin=${e.steamId}:${groupName} // ${playerName}`);
+      }
+      lines.push("");
+    }
+
+    return lines.join("\n");
   }
 
-  async function handleReviewCfg() {
-    setShowCfgModal(true);
-    setCfgLoading(true);
+  function handleExport() {
+    const content = generateCfgContent();
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "admins.cfg";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleReviewCfg() {
     setCfgCopied(false);
-    try {
-      const res = await fetch(`${BASE_URL}/admins.cfg?server=${encodeURIComponent(activeServer)}`);
-      setCfgContent(await res.text());
-    } catch {
-      setCfgContent("Failed to load admins.cfg");
-    } finally {
-      setCfgLoading(false);
-    }
+    setCfgContent(generateCfgContent());
+    setShowCfgModal(true);
   }
 
   function handleCopyCfg() {
@@ -421,13 +471,15 @@ function EntriesTab({
   }
 
   function parseImportText() {
-    const lines = importText.split("\n").filter((l) => l.trim());
+    const lines = importText.split("\n").filter((l) => l.trim() && !l.trim().startsWith("//") && !l.trim().startsWith("Group="));
     const parsed: ParsedImportRow[] = lines.map((line) => {
       const match = line.match(/^(.+?)=(\d+):(.+?)\s*\/\/\s*(.+)$/);
       if (match) {
-        return { clan: match[1].trim(), steamId: match[2].trim(), role: match[3].trim(), name: match[4].trim(), error: false };
+        const roleName = match[3].trim();
+        const matchedGroup = groups.find((g) => g.name.toLowerCase() === roleName.toLowerCase());
+        return { clan: "", steamId: match[2].trim(), role: roleName, groupId: matchedGroup?.id || "", name: match[4].trim(), error: false };
       }
-      return { steamId: "", name: "", clan: "", role: "", error: true };
+      return { steamId: "", name: "", clan: "", role: "", groupId: "", error: true };
     });
     setImportRows(parsed);
     setImportStep("review");
@@ -445,7 +497,7 @@ function EntriesTab({
         steamId: r.steamId,
         name: r.name || undefined,
         clan: r.clan || undefined,
-        role: r.role || undefined,
+        groupId: r.groupId || undefined,
       })),
       activeServer
     );
@@ -523,7 +575,6 @@ function EntriesTab({
             <option value="">No group</option>
             {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
-          <input type="text" value={newReason} onChange={(e) => setNewReason(e.target.value)} placeholder="Reason" className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none sm:w-40" />
           <input type="datetime-local" value={newExpiresAt} onChange={(e) => setNewExpiresAt(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none sm:w-48" title="Expiry (optional)" />
           <button type="submit" disabled={adding} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">
             {adding ? "Adding..." : "Add Entry"}
@@ -646,8 +697,7 @@ function EntriesTab({
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleCopyCfg}
-                    disabled={cfgLoading}
-                    className="rounded-sm border border-border px-4 py-1.5 text-xs font-medium tracking-wide text-text-secondary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-40"
+                    className="rounded-sm border border-border px-4 py-1.5 text-xs font-medium tracking-wide text-text-secondary transition-colors hover:border-accent/40 hover:text-accent"
                   >
                     {cfgCopied ? "Copied!" : "Copy"}
                   </button>
@@ -655,11 +705,7 @@ function EntriesTab({
                 </div>
               </div>
               <div className="flex-1 overflow-auto p-6">
-                {cfgLoading ? (
-                  <div className="text-text-muted">Loading...</div>
-                ) : (
-                  <pre className="whitespace-pre font-mono text-xs leading-relaxed text-text-secondary">{cfgContent}</pre>
-                )}
+                <pre className="whitespace-pre font-mono text-xs leading-relaxed text-text-secondary">{cfgContent}</pre>
               </div>
             </div>
           </div>
@@ -681,7 +727,7 @@ function EntriesTab({
                 <div>
                   <p className="mb-3 text-sm text-text-secondary">Paste entries in the format:</p>
                   <code className="mb-3 block rounded-sm bg-bg-tertiary px-3 py-2 text-xs text-text-secondary">
-                    Admin=76561198310486875:SuperAdmin // Spud
+                    Admin=76561197960957079:SuperAdmin // Ole
                   </code>
                   <textarea
                     value={importText}
@@ -699,7 +745,21 @@ function EntriesTab({
 
               {importStep === "review" && (
                 <div>
-                  <p className="mb-3 text-sm text-text-secondary">Review parsed entries before importing.</p>
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm text-text-secondary">Review parsed entries before importing.</p>
+                    {importRows.length > 1 && importRows[0] && (importRows[0].clan || importRows[0].groupId) && (
+                      <button
+                        type="button"
+                        onClick={() => setImportRows((prev) => {
+                          const first = prev[0];
+                          return prev.map((r, i) => i === 0 ? r : { ...r, clan: first.clan, groupId: first.groupId });
+                        })}
+                        className="rounded-sm border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-accent"
+                      >
+                        Apply first row to all
+                      </button>
+                    )}
+                  </div>
                   <div className="mb-4 max-h-96 overflow-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -707,7 +767,7 @@ function EntriesTab({
                           <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Steam ID</th>
                           <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Name</th>
                           <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Clan</th>
-                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Role</th>
+                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Group</th>
                           <th className="w-10 px-3 py-2"></th>
                         </tr>
                       </thead>
@@ -717,7 +777,7 @@ function EntriesTab({
                             <td className="px-3 py-2"><input type="text" value={row.steamId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, steamId: e.target.value, error: false } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none" /></td>
                             <td className="px-3 py-2"><input type="text" value={row.name} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, name: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" /></td>
                             <td className="px-3 py-2"><input type="text" value={row.clan} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, clan: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" /></td>
-                            <td className="px-3 py-2"><input type="text" value={row.role} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, role: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" /></td>
+                            <td className="px-3 py-2"><select value={row.groupId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, groupId: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"><option value="">No group</option>{groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></td>
                             <td className="px-3 py-2"><button onClick={() => setImportRows((prev) => prev.filter((_, j) => j !== i))} className="text-xs text-text-muted transition-colors hover:text-danger">x</button></td>
                           </tr>
                         ))}

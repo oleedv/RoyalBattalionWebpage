@@ -5,6 +5,12 @@ interface RateLimitEntry {
   resetAt: number;
 }
 
+interface RateLimitResult {
+  limited: boolean;
+  count: number;
+  resetAt: number;
+}
+
 const buckets = new Map<string, RateLimitEntry>();
 
 // Clean up expired entries every 5 minutes
@@ -21,17 +27,18 @@ function getClientIp(c: { req: { header: (name: string) => string | undefined } 
     || "unknown";
 }
 
-function isRateLimited(key: string, maxRequests: number, windowMs: number): boolean {
+function checkRateLimit(key: string, maxRequests: number, windowMs: number): RateLimitResult {
   const now = Date.now();
   const entry = buckets.get(key);
 
   if (!entry || entry.resetAt <= now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    return false;
+    const newEntry = { count: 1, resetAt: now + windowMs };
+    buckets.set(key, newEntry);
+    return { limited: false, count: 1, resetAt: newEntry.resetAt };
   }
 
   entry.count++;
-  return entry.count > maxRequests;
+  return { limited: entry.count > maxRequests, count: entry.count, resetAt: entry.resetAt };
 }
 
 /**
@@ -42,9 +49,18 @@ export function rateLimit(maxRequests: number, windowMs: number = 60_000) {
     const ip = getClientIp(c);
     const path = c.req.path;
     const key = `${ip}:${path}`;
+    const result = checkRateLimit(key, maxRequests, windowMs);
 
-    if (isRateLimited(key, maxRequests, windowMs)) {
-      return c.json({ success: false, error: "Too many requests" }, 429);
+    if (result.limited) {
+      const retryAfterMs = Math.max(0, result.resetAt - Date.now());
+      const retryAfterSec = Math.ceil(retryAfterMs / 1000);
+      console.warn(`[rate-limit] BLOCKED scope=route path=${path} ip=${ip} count=${result.count}/${maxRequests} retryIn=${retryAfterSec}s`);
+      c.header("Retry-After", String(retryAfterSec));
+      return c.json({
+        success: false,
+        error: "Too many requests",
+        detail: { scope: "route", path, ip, limit: maxRequests, windowMs, retryAfterMs },
+      }, 429);
     }
 
     await next();
@@ -57,10 +73,20 @@ export function rateLimit(maxRequests: number, windowMs: number = 60_000) {
 export function globalRateLimit(maxRequests: number = 200, windowMs: number = 60_000) {
   return createMiddleware(async (c, next) => {
     const ip = getClientIp(c);
+    const path = c.req.path;
     const key = `global:${ip}`;
+    const result = checkRateLimit(key, maxRequests, windowMs);
 
-    if (isRateLimited(key, maxRequests, windowMs)) {
-      return c.json({ success: false, error: "Too many requests" }, 429);
+    if (result.limited) {
+      const retryAfterMs = Math.max(0, result.resetAt - Date.now());
+      const retryAfterSec = Math.ceil(retryAfterMs / 1000);
+      console.warn(`[rate-limit] BLOCKED scope=global path=${path} ip=${ip} count=${result.count}/${maxRequests} retryIn=${retryAfterSec}s`);
+      c.header("Retry-After", String(retryAfterSec));
+      return c.json({
+        success: false,
+        error: "Too many requests",
+        detail: { scope: "global", path, ip, limit: maxRequests, windowMs, retryAfterMs },
+      }, 429);
     }
 
     await next();

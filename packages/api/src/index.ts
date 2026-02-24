@@ -307,6 +307,9 @@ export default {
           reason?: string;
           teamID?: string;
           squadID?: string;
+          players?: { steamId?: string; eosId?: string }[];
+          clanTag?: string;
+          targetTeam?: string;
         };
 
         // Handle server switching
@@ -360,7 +363,7 @@ export default {
 
 async function handleAdminAction(
   ws: ServerWebSocket<WSData>,
-  msg: { action: string; server?: string; steamId?: string; eosId?: string; message?: string; reason?: string; teamID?: string; squadID?: string; players?: { steamId?: string; eosId?: string }[] }
+  msg: { action: string; server?: string; steamId?: string; eosId?: string; message?: string; reason?: string; teamID?: string; squadID?: string; players?: { steamId?: string; eosId?: string }[]; clanTag?: string; targetTeam?: string }
 ) {
   const serverKey = ws.data.serverKey;
   console.log(`[live-server] RCON ${msg.action} from user ${ws.data.userId} on ${serverKey}`);
@@ -448,6 +451,108 @@ async function handleAdminAction(
         await squadjsSocket.executeRcon(serverKey, "disbandSquad", msg.teamID, msg.squadID);
         auditDirect(ws.data.userId, ws.data.userName, "rcon.disband", "LiveServer", serverKey, { teamID: msg.teamID, squadID: msg.squadID });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "disband" }));
+        break;
+      }
+
+      case "endmatch": {
+        await squadjsSocket.executeRcon(serverKey, "execute", "AdminEndMatch");
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.endmatch", "LiveServer", serverKey, {});
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "endmatch" }));
+        break;
+      }
+
+      case "setnextlayer": {
+        if (!msg.message) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing layer name" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "execute", `AdminSetNextLayer ${msg.message}`);
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.setnextlayer", "LiveServer", serverKey, { layer: msg.message });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "setnextlayer" }));
+        break;
+      }
+
+      case "demotecommander": {
+        if (!msg.steamId && !msg.eosId) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing player ID" }));
+          return;
+        }
+        if (msg.steamId) {
+          await squadjsSocket.executeRcon(serverKey, "execute", `AdminDemoteCommander ${msg.steamId}`);
+        } else {
+          await squadjsSocket.executeRcon(serverKey, "execute", `AdminDemoteCommander ${msg.eosId}`);
+        }
+        const playerId = msg.steamId || msg.eosId;
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.demotecommander", "LiveServer", serverKey, { playerId });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "demotecommander" }));
+        break;
+      }
+
+      case "switchclan": {
+        if (!msg.clanTag || !msg.targetTeam) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing clan tag or target team" }));
+          return;
+        }
+        const snapshot = squadjsSocket.getSnapshot(serverKey);
+        if (!snapshot) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Server not connected" }));
+          return;
+        }
+        const onlineSteamIds = snapshot.players.map((p) => p.steamID).filter(Boolean);
+        const clanEntries = await prisma.whitelistEntry.findMany({
+          where: { clan: msg.clanTag, steamId: { in: onlineSteamIds } },
+          select: { steamId: true },
+        });
+        const clanSteamIds = new Set(clanEntries.map((e) => e.steamId));
+        const toSwitch = snapshot.players.filter(
+          (p) => clanSteamIds.has(p.steamID) && p.teamID !== msg.targetTeam
+        );
+        if (toSwitch.length === 0) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "No clan members to switch" }));
+          return;
+        }
+        let switched = 0;
+        for (const p of toSwitch) {
+          if (p.steamID) {
+            await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChange ${p.steamID}`);
+          } else if (p.eosID) {
+            await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChangeById ${p.eosID}`);
+          }
+          switched++;
+          if (switched < toSwitch.length) {
+            await new Promise((r) => setTimeout(r, 100));
+          }
+        }
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchclan", "LiveServer", serverKey, { clanTag: msg.clanTag, targetTeam: msg.targetTeam, count: switched });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchclan" }));
+        break;
+      }
+
+      case "get_online_clans": {
+        const snapshot = squadjsSocket.getSnapshot(serverKey);
+        if (!snapshot) {
+          ws.send(JSON.stringify({ type: "online_clans", data: {} }));
+          return;
+        }
+        const steamIds = snapshot.players.map((p) => p.steamID).filter(Boolean);
+        if (steamIds.length === 0) {
+          ws.send(JSON.stringify({ type: "online_clans", data: {} }));
+          return;
+        }
+        const entries = await prisma.whitelistEntry.findMany({
+          where: { steamId: { in: steamIds }, clan: { not: null } },
+          select: { steamId: true, clan: true },
+        });
+        const playerMap = new Map(snapshot.players.map((p) => [p.steamID, p]));
+        const clans: Record<string, { teamID: string; steamId: string; name: string }[]> = {};
+        for (const e of entries) {
+          if (!e.clan) continue;
+          const player = playerMap.get(e.steamId);
+          if (!player) continue;
+          if (!clans[e.clan]) clans[e.clan] = [];
+          clans[e.clan].push({ teamID: player.teamID, steamId: player.steamID, name: player.name });
+        }
+        ws.send(JSON.stringify({ type: "online_clans", data: clans }));
         break;
       }
 

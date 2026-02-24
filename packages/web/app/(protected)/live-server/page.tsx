@@ -97,11 +97,14 @@ interface Snapshot {
   metricHistory: MetricSample[];
 }
 
+type OnlineClanData = Record<string, { teamID: string; steamId: string; name: string }[]>;
+
 type WSMessage =
   | { type: "servers"; data: string[] }
   | { type: "snapshot"; data: Snapshot; server?: string }
   | { type: "event"; event: string; data: unknown; server?: string }
-  | { type: "action_result"; success: boolean; error?: string; action?: string };
+  | { type: "action_result"; success: boolean; error?: string; action?: string }
+  | { type: "online_clans"; data: OnlineClanData };
 
 interface ConsoleEntry {
   time: string;
@@ -156,6 +159,13 @@ export default function LiveServerPage() {
   const [consoleFilterOpen, setConsoleFilterOpen] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
+  // Server management actions
+  const [endMatchConfirm, setEndMatchConfirm] = useState(false);
+  const [nextLayerInput, setNextLayerInput] = useState("");
+  const [onlineClans, setOnlineClans] = useState<OnlineClanData>({});
+  const [clanMoveConfirm, setClanMoveConfirm] = useState<{ clanTag: string; targetTeam: string; playerCount: number } | null>(null);
+  const [clanDropdownOpen, setClanDropdownOpen] = useState<"1" | "2" | null>(null);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
@@ -205,6 +215,10 @@ export default function LiveServerPage() {
           if (msg.data.consoleLog?.length) setConsoleLog(msg.data.consoleLog);
           setTickRate(msg.data.tickRate);
           if (msg.data.metricHistory?.length) setMetricHistory(msg.data.metricHistory);
+          // Request clan data after snapshot
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ action: "get_online_clans" }));
+          }
           break;
         case "event":
           handleGameEvent(msg.event, msg.data);
@@ -217,6 +231,9 @@ export default function LiveServerPage() {
           }
           setTimeout(() => setActionFeedback(null), 4000);
           break;
+        case "online_clans":
+          setOnlineClans(msg.data);
+          break;
       }
     } catch (err) {
       console.error("[live-server] Failed to process WebSocket message:", err, event.data);
@@ -227,7 +244,13 @@ export default function LiveServerPage() {
     switch (event) {
       case "UPDATED_PLAYER_INFORMATION":
       case "SNAPSHOT_PLAYERS":
-        if (Array.isArray(data)) setPlayers(data);
+        if (Array.isArray(data)) {
+          setPlayers(data);
+          // Refresh clan data when players change
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ action: "get_online_clans" }));
+          }
+        }
         break;
       case "SNAPSHOT_SERVER_INFO":
         if (data) setServerInfo(data as ServerInfo);
@@ -484,6 +507,38 @@ export default function LiveServerPage() {
     setSwitchSquadTarget(null);
   }
 
+  function handleEndMatch() {
+    sendAction({ action: "endmatch" });
+    setEndMatchConfirm(false);
+  }
+
+  function handleSetNextLayer() {
+    if (!nextLayerInput.trim()) return;
+    sendAction({ action: "setnextlayer", message: nextLayerInput.trim() });
+    setNextLayerInput("");
+  }
+
+  function handleDemoteCommander(player: Player) {
+    sendAction({ action: "demotecommander", steamId: player.steamID, eosId: player.eosID });
+  }
+
+  function handleSwitchClan(clanTag: string, targetTeam: string) {
+    const members = onlineClans[clanTag] || [];
+    const toSwitch = members.filter((m) => m.teamID !== targetTeam);
+    if (toSwitch.length === 0) return;
+    sendAction({ action: "switchclan", clanTag, targetTeam });
+    setClanMoveConfirm(null);
+    setClanDropdownOpen(null);
+  }
+
+  function isCommander(player: Player): boolean {
+    return typeof player.role === "string" && player.role.includes("_Cmd_");
+  }
+
+  function getTeamCommander(teamId: string): Player | undefined {
+    return players.find((p) => String(p.teamID) === teamId && isCommander(p));
+  }
+
   function layerName(layer: string | { name: string; [key: string]: unknown } | null): string {
     if (!layer) return "--";
     if (typeof layer === "string") return layer;
@@ -545,6 +600,16 @@ export default function LiveServerPage() {
     chatFilter === "All"
       ? chatLog
       : chatLog.filter((m) => m.chat === chatFilter || m.chat === "__DIVIDER__");
+
+  // Compute opposing clans for each team's "Move clan here" button
+  function getOpposingClans(targetTeam: string): { tag: string; count: number }[] {
+    const result: { tag: string; count: number }[] = [];
+    for (const [tag, members] of Object.entries(onlineClans)) {
+      const onOtherTeam = members.filter((m) => m.teamID !== targetTeam).length;
+      if (onOtherTeam > 0) result.push({ tag, count: onOtherTeam });
+    }
+    return result.sort((a, b) => b.count - a.count);
+  }
 
   return (
     <div>
@@ -649,6 +714,100 @@ export default function LiveServerPage() {
         </div>
       )}
 
+      {/* Admin Controls */}
+      {canManage && serverInfo && connected && (
+        <div className="facet-border mb-6 flex flex-wrap items-center gap-3 rounded-sm bg-bg-card p-3">
+          {/* End Match */}
+          <button
+            onClick={() => setEndMatchConfirm(true)}
+            className="rounded-sm border border-danger/30 bg-danger/5 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/15"
+          >
+            End Match
+          </button>
+
+          {/* Set Next Layer */}
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              value={nextLayerInput}
+              onChange={(e) => setNextLayerInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSetNextLayer(); }}
+              placeholder="Layer name..."
+              className="w-48 rounded-sm border border-border/50 bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+            />
+            <button
+              onClick={handleSetNextLayer}
+              disabled={!nextLayerInput.trim()}
+              className="rounded-sm border border-accent/30 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/15 disabled:opacity-40"
+            >
+              Set Next Layer
+            </button>
+          </div>
+
+          <div className="h-6 w-px bg-border/50" />
+
+          {/* Demote Commander - Team 1 */}
+          {(() => {
+            const cmd1 = getTeamCommander("1");
+            return (
+              <button
+                onClick={() => cmd1 && handleDemoteCommander(cmd1)}
+                disabled={!cmd1}
+                className="rounded-sm border border-warning/30 bg-warning/5 px-3 py-1.5 text-xs font-medium text-warning transition-colors hover:bg-warning/15 disabled:opacity-40"
+                title={cmd1 ? `Demote ${cmd1.name}` : "No T1 commander"}
+              >
+                Demote T1 Cmd{cmd1 ? `: ${cmd1.name}` : ""}
+              </button>
+            );
+          })()}
+
+          {/* Demote Commander - Team 2 */}
+          {(() => {
+            const cmd2 = getTeamCommander("2");
+            return (
+              <button
+                onClick={() => cmd2 && handleDemoteCommander(cmd2)}
+                disabled={!cmd2}
+                className="rounded-sm border border-warning/30 bg-warning/5 px-3 py-1.5 text-xs font-medium text-warning transition-colors hover:bg-warning/15 disabled:opacity-40"
+                title={cmd2 ? `Demote ${cmd2.name}` : "No T2 commander"}
+              >
+                Demote T2 Cmd{cmd2 ? `: ${cmd2.name}` : ""}
+              </button>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* End Match confirmation */}
+      {endMatchConfirm && (
+        <ActionModal
+          title="End Match"
+          onConfirm={handleEndMatch}
+          onCancel={() => setEndMatchConfirm(false)}
+          confirmLabel="End Match"
+          confirmClass="bg-danger hover:bg-danger/80"
+        >
+          <p className="text-sm text-text-secondary">
+            Are you sure you want to end the current match? This will immediately end the game for all players.
+          </p>
+        </ActionModal>
+      )}
+
+      {/* Clan move confirmation */}
+      {clanMoveConfirm && (
+        <ActionModal
+          title="Move Clan"
+          onConfirm={() => handleSwitchClan(clanMoveConfirm.clanTag, clanMoveConfirm.targetTeam)}
+          onCancel={() => setClanMoveConfirm(null)}
+          confirmLabel="Move Clan"
+          confirmClass="bg-warning hover:bg-warning/80"
+        >
+          <p className="text-sm text-text-secondary">
+            Move {clanMoveConfirm.playerCount} player{clanMoveConfirm.playerCount !== 1 ? "s" : ""} from [{clanMoveConfirm.clanTag}] to Team {clanMoveConfirm.targetTeam}?
+          </p>
+        </ActionModal>
+      )}
+
       {/* Main grid: Players + Chat */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Player list - 2 cols */}
@@ -682,6 +841,11 @@ export default function LiveServerPage() {
                   onSwitchSquad={(name, players) => setSwitchSquadTarget({ squadName: name, players })}
                   onSelectPlayer={setSelectedPlayer}
                   formatPlaytime={formatPlaytime}
+                  teamId="1"
+                  clanDropdownOpen={clanDropdownOpen === "1"}
+                  onClanDropdownToggle={() => setClanDropdownOpen((prev) => prev === "1" ? null : "1")}
+                  opposingClans={getOpposingClans("1")}
+                  onClanMoveRequest={(tag, count) => { setClanMoveConfirm({ clanTag: tag, targetTeam: "1", playerCount: count }); setClanDropdownOpen(null); }}
                 />
                 <TeamColumn
                   label="Team 2"
@@ -699,6 +863,11 @@ export default function LiveServerPage() {
                   onSwitchSquad={(name, players) => setSwitchSquadTarget({ squadName: name, players })}
                   onSelectPlayer={setSelectedPlayer}
                   formatPlaytime={formatPlaytime}
+                  teamId="2"
+                  clanDropdownOpen={clanDropdownOpen === "2"}
+                  onClanDropdownToggle={() => setClanDropdownOpen((prev) => prev === "2" ? null : "2")}
+                  opposingClans={getOpposingClans("2")}
+                  onClanMoveRequest={(tag, count) => { setClanMoveConfirm({ clanTag: tag, targetTeam: "2", playerCount: count }); setClanDropdownOpen(null); }}
                 />
               </div>
               </>
@@ -1102,6 +1271,11 @@ function TeamColumn({
   onSwitchSquad,
   onSelectPlayer,
   formatPlaytime,
+  teamId,
+  clanDropdownOpen,
+  onClanDropdownToggle,
+  opposingClans,
+  onClanMoveRequest,
 }: {
   label: string;
   players: Player[];
@@ -1118,6 +1292,11 @@ function TeamColumn({
   onSwitchSquad: (squadName: string, players: Player[]) => void;
   onSelectPlayer: (p: Player) => void;
   formatPlaytime: (s?: number) => string;
+  teamId?: string;
+  clanDropdownOpen?: boolean;
+  onClanDropdownToggle?: () => void;
+  opposingClans?: { tag: string; count: number }[];
+  onClanMoveRequest?: (clanTag: string, count: number) => void;
 }) {
   // Group by squad
   const squads = new Map<string, Player[]>();
@@ -1154,27 +1333,58 @@ function TeamColumn({
             )}
           </div>
         </div>
-        {onSearchChange && (
-          <div className="relative">
-            <input
-              type="text"
-              value={searchValue || ""}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search..."
-              className="w-28 rounded-sm border border-border/50 bg-bg-tertiary px-2 py-0.5 pr-5 text-[10px] text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-            />
-            {searchValue && (
+        <div className="flex items-center gap-2">
+          {showActions && onClanDropdownToggle && opposingClans && opposingClans.length > 0 && (
+            <div className="relative">
               <button
-                onClick={() => onSearchChange("")}
-                className="absolute right-1 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+                onClick={onClanDropdownToggle}
+                className="rounded-sm border border-accent/30 bg-accent/5 px-2 py-0.5 text-[9px] font-medium text-accent transition-colors hover:bg-accent/15"
               >
-                <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                Move clan here
               </button>
-            )}
-          </div>
-        )}
+              {clanDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={onClanDropdownToggle} />
+                  <div className="absolute right-0 top-full z-40 mt-1 min-w-[160px] rounded-sm border border-border bg-bg-secondary p-1 shadow-lg">
+                    {opposingClans.map((clan) => (
+                      <button
+                        key={clan.tag}
+                        onClick={() => {
+                          if (onClanMoveRequest) onClanMoveRequest(clan.tag, clan.count);
+                        }}
+                        className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+                      >
+                        <span>[{clan.tag}]</span>
+                        <span className="text-[10px] text-text-muted">{clan.count} player{clan.count !== 1 ? "s" : ""}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          {onSearchChange && (
+            <div className="relative">
+              <input
+                type="text"
+                value={searchValue || ""}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search..."
+                className="w-28 rounded-sm border border-border/50 bg-bg-tertiary px-2 py-0.5 pr-5 text-[10px] text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+              />
+              {searchValue && (
+                <button
+                  onClick={() => onSearchChange("")}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+                >
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
       <div className="flex-1 overflow-auto">
         {Array.from(squads.entries()).map(([key, members]) => (
@@ -1260,11 +1470,16 @@ function PlayerRow({
       onMouseLeave={() => setHovered(false)}
     >
       <div className="flex items-center gap-2 overflow-hidden">
-        {player.isLeader && (
+        {typeof player.role === "string" && player.role.includes("_Cmd_") ? (
+          <svg className="h-3 w-3 flex-shrink-0 text-accent" fill="currentColor" viewBox="0 0 20 20">
+            <title>Commander</title>
+            <path d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
+          </svg>
+        ) : player.isLeader ? (
           <svg className="h-3 w-3 flex-shrink-0 text-warning" fill="currentColor" viewBox="0 0 20 20">
             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
           </svg>
-        )}
+        ) : null}
         <button
           onClick={() => onSelect(player)}
           className="truncate text-xs text-text-primary hover:text-accent hover:underline"
@@ -1404,11 +1619,16 @@ function PlayerCard({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-text-primary">{player.name}</span>
-                {player.isLeader && (
+                {typeof player.role === "string" && player.role.includes("_Cmd_") ? (
+                  <svg className="h-3 w-3 text-accent" fill="currentColor" viewBox="0 0 20 20">
+                    <title>Commander</title>
+                    <path d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
+                  </svg>
+                ) : player.isLeader ? (
                   <svg className="h-3 w-3 text-warning" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                   </svg>
-                )}
+                ) : null}
               </div>
               {player.role && (
                 <span className="text-[10px] text-text-muted">{formatRole(player.role)}</span>

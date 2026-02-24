@@ -58,6 +58,11 @@ const NAV_ITEMS: NavItem[] = [
     href: "/live-server",
     requiredPermissions: ["view:live-server", "manage:live-server"],
   },
+  {
+    label: "Audit Logs",
+    href: "/audit-logs",
+    requiredPermissions: ["view:audit-logs"],
+  },
 ];
 
 function canSeeNavItem(item: NavItem, permissions: Permission[]): boolean {

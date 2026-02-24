@@ -4,6 +4,7 @@ import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission, getAllowedTicketTiers } from "../middleware/permissions";
 import type { Permission } from "shared";
+import { audit } from "../lib/audit";
 
 const discordBot = new Hono();
 
@@ -240,6 +241,7 @@ discordBot.put(
       body.serverName ?? null
     );
 
+    await audit(c, "discord_bot.update_seeding_config", "discord_bot");
     return c.json<ApiResponse<{ updated: true }>>({ success: true, data: { updated: true } });
   }
 );
@@ -280,6 +282,7 @@ discordBot.post(
       id, userId
     );
 
+    await audit(c, "discord_bot.pause_prospect", "prospect", String(id));
     return c.json<ApiResponse<{ updated: true }>>({ success: true, data: { updated: true } });
   }
 );
@@ -300,6 +303,7 @@ discordBot.post(
       id, userId
     );
 
+    await audit(c, "discord_bot.unpause_prospect", "prospect", String(id));
     return c.json<ApiResponse<{ updated: true }>>({ success: true, data: { updated: true } });
   }
 );
@@ -329,6 +333,7 @@ discordBot.post(
       id, userId, `Period extended by ${days} day(s) via dashboard`
     );
 
+    await audit(c, "discord_bot.extend_prospect", "prospect", String(id), { days });
     return c.json<ApiResponse<{ updated: true }>>({ success: true, data: { updated: true } });
   }
 );

@@ -6,6 +6,7 @@ import prisma from "../lib/db";
 import { resyncAllMatches } from "../lib/match-sync";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
+import { audit } from "../lib/audit";
 
 const matches = new Hono();
 
@@ -96,6 +97,7 @@ matches.put("/:id", requirePermission("manage:matches"), zValidator("json", upda
       },
     });
 
+    await audit(c, "match.update", "match", id, { changes: body });
     return c.json<ApiResponse<Match>>({ success: true, data: toMatch(entry) });
   } catch {
     return c.json<ApiResponse<never>>({
@@ -108,6 +110,7 @@ matches.put("/:id", requirePermission("manage:matches"), zValidator("json", upda
 matches.post("/resync", requirePermission("manage:matches"), async (c) => {
   try {
     const result = await resyncAllMatches();
+    await audit(c, "match.resync", "match");
     return c.json<ApiResponse<{ resynced: number }>>({ success: true, data: result });
   } catch (err) {
     return c.json<ApiResponse<never>>({
@@ -126,6 +129,7 @@ matches.delete("/:id", requirePermission("manage:matches"), async (c) => {
   }
 
   await prisma.match.delete({ where: { id } });
+  await audit(c, "match.delete", "match", id, { map: existing.map, layer: existing.layer });
 
   return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
 });

@@ -6,6 +6,7 @@ import prisma from "../lib/db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { encrypt, isEncryptionAvailable } from "../lib/crypto";
+import { audit } from "../lib/audit";
 
 const serverConfig = new Hono();
 
@@ -87,6 +88,8 @@ serverConfig.post("/", requirePermission("admin"), zValidator("json", upsertSche
     },
   });
 
+  await audit(c, "server_config.upsert", "server_config", body.server, { label: body.label });
+
   return c.json<ApiResponse<ServerConfig>>({ success: true, data: toConfig(config) });
 });
 
@@ -104,6 +107,8 @@ serverConfig.put("/:server/sync", requirePermission("manage:whitelist-sync"), as
     data: { syncEnabled: !existing.syncEnabled },
   });
 
+  await audit(c, "server_config.toggle_sync", "server_config", server, { syncEnabled: config.syncEnabled });
+
   return c.json<ApiResponse<ServerConfig>>({ success: true, data: toConfig(config) });
 });
 
@@ -117,6 +122,7 @@ serverConfig.delete("/:server", requirePermission("admin"), async (c) => {
   }
 
   await prisma.serverConfig.delete({ where: { server } });
+  await audit(c, "server_config.delete", "server_config", server, { label: existing.label });
   return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
 });
 

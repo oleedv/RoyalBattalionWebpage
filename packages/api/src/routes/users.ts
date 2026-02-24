@@ -6,6 +6,7 @@ import prisma from "../lib/db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { syncAllUserRoles } from "../lib/role-sync";
+import { audit } from "../lib/audit";
 
 const users = new Hono();
 
@@ -63,6 +64,7 @@ users.post("/sync-roles", authMiddleware, requirePermission("manage:members"), a
 
   try {
     const updated = await syncAllUserRoles();
+    await audit(c, "member.sync_roles", "user", null, { updated });
     return c.json<ApiResponse<{ updated: number }>>({
       success: true,
       data: { updated },
@@ -119,6 +121,8 @@ users.put("/:id", authMiddleware, requirePermission("manage:members"), zValidato
       },
     });
 
+    await audit(c, "member.update", "user", id, { changes: body });
+
     return c.json<ApiResponse<UserWithRoles>>({
       success: true,
       data: mapUser(updated),
@@ -163,6 +167,7 @@ users.delete("/:id", authMiddleware, requirePermission("manage:members"), async 
   }
 
   await prisma.user.delete({ where: { id } });
+  await audit(c, "member.delete", "user", id, { discordName: existing.discordName });
 
   return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
 });

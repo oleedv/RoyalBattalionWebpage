@@ -20,6 +20,7 @@ import type {
   BotMessage,
   BotLog,
   BotStatus,
+  AuditLogEntry,
   Paginated,
 } from "shared";
 
@@ -639,6 +640,25 @@ export function getBotLogs(
   if (params.to) qs.set("to", params.to);
   const q = qs.toString();
   return request<Paginated<BotLog>>(`/discord-bot/logs${q ? `?${q}` : ""}`, {
+    headers: authHeaders(token),
+  });
+}
+
+// Audit Logs
+export function getAuditLogs(
+  token: string,
+  params: { page?: number; limit?: number; action?: string; resource?: string; userId?: string; from?: string; to?: string } = {}
+): Promise<ApiResponse<Paginated<AuditLogEntry>>> {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.action) qs.set("action", params.action);
+  if (params.resource) qs.set("resource", params.resource);
+  if (params.userId) qs.set("userId", params.userId);
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
+  const q = qs.toString();
+  return request<Paginated<AuditLogEntry>>(`/audit-logs${q ? `?${q}` : ""}`, {
     headers: authHeaders(token),
   });
 }

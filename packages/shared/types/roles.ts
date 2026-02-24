@@ -17,6 +17,7 @@ export const PERMISSIONS = [
   "view:tickets:normal",
   "view:tickets:community_officer",
   "view:tickets:admin_officer",
+  "view:audit-logs",
   "admin",
 ] as const;
 

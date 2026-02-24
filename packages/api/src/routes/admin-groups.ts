@@ -5,6 +5,7 @@ import type { ApiResponse, AdminGroup } from "shared";
 import prisma from "../lib/db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
+import { audit } from "../lib/audit";
 
 const adminGroups = new Hono();
 
@@ -57,6 +58,8 @@ adminGroups.post("/", zValidator("json", createGroupSchema), async (c) => {
       data: { name, permissions, sortOrder },
     });
 
+    await audit(c, "admin_group.create", "admin_group", group.id, { name });
+
     return c.json<ApiResponse<AdminGroup>>(
       { success: true, data: toAdminGroup(group) },
       201
@@ -88,6 +91,8 @@ adminGroups.put("/:id", zValidator("json", updateGroupSchema), async (c) => {
       },
     });
 
+    await audit(c, "admin_group.update", "admin_group", id, { changes: body });
+
     return c.json<ApiResponse<AdminGroup>>({ success: true, data: toAdminGroup(group) });
   } catch {
     return c.json<ApiResponse<never>>(
@@ -106,6 +111,7 @@ adminGroups.delete("/:id", async (c) => {
   }
 
   await prisma.adminGroup.delete({ where: { id } });
+  await audit(c, "admin_group.delete", "admin_group", id, { name: existing.name });
 
   return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
 });

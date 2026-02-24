@@ -16,6 +16,7 @@ import clans from "./routes/clans";
 import squadjsConfig from "./routes/squadjs-config";
 import serverConfig from "./routes/server-config";
 import discordBot from "./routes/discord-bot";
+import auditLogs from "./routes/audit-logs";
 import { syncMatches } from "./lib/match-sync";
 import { generateAdminsCfg } from "./lib/cfg-generator";
 import { squadjsSocket } from "./lib/squadjs-socket";
@@ -56,6 +57,7 @@ app.route("/stats", stats);
 app.route("/squadjs-config", squadjsConfig);
 app.route("/server-config", serverConfig);
 app.route("/discord-bot", discordBot);
+app.route("/audit-logs", auditLogs);
 
 // Public cfg endpoint (IP-restricted) -- separate from /whitelist to avoid auth middleware
 app.get("/admins.cfg", async (c) => {
@@ -114,6 +116,15 @@ if (process.env.DISCORD_BOT_TOKEN) {
     2 * 60 * 1000
   );
 }
+
+// Cleanup audit logs older than 30 days -- run on startup and every 24 hours
+async function cleanupOldAuditLogs() {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const { count } = await prisma.auditLog.deleteMany({ where: { createdAt: { lt: cutoff } } });
+  if (count > 0) console.log(`[audit-cleanup] Deleted ${count} entries older than 30 days`);
+}
+cleanupOldAuditLogs().catch(console.error);
+setInterval(() => cleanupOldAuditLogs().catch(console.error), 24 * 60 * 60 * 1000);
 
 // --- WebSocket for live server ---
 

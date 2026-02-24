@@ -77,6 +77,17 @@ export interface LinkSteamRequest {
   steamId: string;
 }
 
+export interface AuditLogEntry {
+  id: string;
+  userId: string;
+  userName: string;
+  action: string;
+  resource: string;
+  resourceId: string | null;
+  detail: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 // SquadJS plugin config
 export type SquadJSPluginOptionValue =
   | string

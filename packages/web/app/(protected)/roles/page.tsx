@@ -12,6 +12,230 @@ import { usePermissions } from "@/lib/permission-context";
 import type { DiscordRole, Permission } from "shared";
 import { PERMISSIONS } from "shared";
 
+// ---------------------------------------------------------------------------
+// Permission group metadata
+// ---------------------------------------------------------------------------
+
+type PermissionKey = Exclude<Permission, "admin">;
+
+interface PermEntry {
+  perm: PermissionKey;
+  label: string;
+  description: string;
+}
+
+interface PermSubGroup {
+  label: string;
+  description: string;
+  entries: PermEntry[];
+}
+
+interface PermGroup {
+  id: string;
+  label: string;
+  description: string;
+  entries: PermEntry[];
+  subGroups?: PermSubGroup[];
+}
+
+const PERMISSION_GROUPS: PermGroup[] = [
+  {
+    id: "whitelist",
+    label: "Whitelist",
+    description: "Server whitelist and SFTP sync",
+    entries: [
+      {
+        perm: "view:whitelist",
+        label: "View Whitelist",
+        description: "Read whitelist entries and pending requests",
+      },
+      {
+        perm: "manage:whitelist",
+        label: "Manage Whitelist",
+        description: "Add, edit, and remove whitelist entries",
+      },
+      {
+        perm: "manage:whitelist-sync",
+        label: "Manage Whitelist Sync",
+        description: "Toggle SFTP sync per server",
+      },
+    ],
+  },
+  {
+    id: "members",
+    label: "Members",
+    description: "Registered Discord member accounts",
+    entries: [
+      {
+        perm: "view:members",
+        label: "View Members",
+        description: "Browse member profiles and linked game IDs",
+      },
+      {
+        perm: "manage:members",
+        label: "Manage Members",
+        description: "Edit Steam/EOS IDs and sync roles",
+      },
+    ],
+  },
+  {
+    id: "tickets",
+    label: "Tickets",
+    description: "Support ticket system",
+    entries: [
+      {
+        perm: "view:tickets",
+        label: "View All Tickets",
+        description: "View tickets across all tiers",
+      },
+      {
+        perm: "manage:tickets",
+        label: "Manage Tickets",
+        description: "Close tickets and take administrative actions",
+      },
+    ],
+    subGroups: [
+      {
+        label: "Ticket Tier Access",
+        description: "Grants read access to a specific tier only",
+        entries: [
+          {
+            perm: "view:tickets:normal",
+            label: "Normal Tier",
+            description: "Standard player-submitted tickets",
+          },
+          {
+            perm: "view:tickets:community_officer",
+            label: "Community Officer Tier",
+            description: "Tickets escalated to Community Officers",
+          },
+          {
+            perm: "view:tickets:admin_officer",
+            label: "Admin Officer Tier",
+            description: "Sensitive admin-only tickets",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "roles",
+    label: "Roles",
+    description: "Discord role and permission assignment",
+    entries: [
+      {
+        perm: "manage:roles",
+        label: "Manage Roles",
+        description: "Register roles and assign permissions",
+      },
+    ],
+  },
+  {
+    id: "matches",
+    label: "Matches",
+    description: "Match history and scoreboard data",
+    entries: [
+      {
+        perm: "manage:matches",
+        label: "Manage Matches",
+        description: "Review and edit match records",
+      },
+    ],
+  },
+  {
+    id: "squadjs",
+    label: "SquadJS",
+    description: "Game server plugin configuration",
+    entries: [
+      {
+        perm: "view:squadjs",
+        label: "View SquadJS Config",
+        description: "Read plugin configuration",
+      },
+      {
+        perm: "manage:squadjs",
+        label: "Manage SquadJS Config",
+        description: "Edit and apply plugin settings",
+      },
+    ],
+  },
+  {
+    id: "live-server",
+    label: "Live Server",
+    description: "Real-time server monitor and RCON",
+    entries: [
+      {
+        perm: "view:live-server",
+        label: "View Live Server",
+        description: "Watch live player list, chat, and teams",
+      },
+      {
+        perm: "manage:live-server",
+        label: "Manage Live Server",
+        description: "Issue RCON commands (kicks, map changes, etc.)",
+      },
+    ],
+  },
+  {
+    id: "discord-bot",
+    label: "Discord Bot",
+    description: "Bot configuration and automated systems",
+    entries: [
+      {
+        perm: "view:discord-bot",
+        label: "View Discord Bot",
+        description: "View bot status, prospects, and logs",
+      },
+      {
+        perm: "manage:discord-bot",
+        label: "Manage Discord Bot",
+        description: "Configure messages, seeding, and tickets",
+      },
+    ],
+  },
+];
+
+// Compile-time coverage: ensure every assignable permission is in a group
+const _allGroupedPerms = PERMISSION_GROUPS.flatMap((g) => [
+  ...g.entries.map((e) => e.perm),
+  ...(g.subGroups?.flatMap((sg) => sg.entries.map((e) => e.perm)) ?? []),
+]);
+if (typeof window === "undefined") {
+  const assignable = PERMISSIONS.filter((p) => p !== "admin");
+  const missing = assignable.filter(
+    (p) => !_allGroupedPerms.includes(p as PermissionKey)
+  );
+  if (missing.length > 0) {
+    console.warn("[roles] Permissions missing from PERMISSION_GROUPS:", missing);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function getAllGroupPerms(group: PermGroup): PermissionKey[] {
+  return [
+    ...group.entries.map((e) => e.perm),
+    ...(group.subGroups?.flatMap((sg) => sg.entries.map((e) => e.perm)) ?? []),
+  ];
+}
+
+function getGroupActiveCount(
+  group: PermGroup,
+  effectivePerms: Permission[]
+): { active: number; total: number } {
+  const all = getAllGroupPerms(group);
+  return {
+    active: all.filter((p) => effectivePerms.includes(p)).length,
+    total: all.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function RolesPage() {
   const { apiToken, hasPermission } = usePermissions();
   const [roles, setRoles] = useState<DiscordRole[]>([]);
@@ -38,9 +262,6 @@ export default function RolesPage() {
   const [togglingWl, setTogglingWl] = useState<string | null>(null);
 
   const canManage = hasPermission("manage:roles");
-
-  // Assignable permissions (exclude "admin" from toggles)
-  const assignablePerms = PERMISSIONS.filter((p) => p !== "admin");
 
   useEffect(() => {
     async function init() {
@@ -94,6 +315,23 @@ export default function RolesPage() {
     setPendingPerms((prev) => ({ ...prev, [roleId]: updated }));
   }
 
+  function selectGroupPerms(
+    roleId: string,
+    group: PermGroup,
+    select: boolean
+  ) {
+    const role = roles.find((r) => r.id === roleId);
+    if (!role) return;
+
+    const groupPerms = getAllGroupPerms(group);
+    const current = pendingPerms[roleId] ?? role.permissions;
+    const updated = select
+      ? [...new Set([...current, ...groupPerms])]
+      : current.filter((p) => !groupPerms.includes(p as PermissionKey));
+
+    setPendingPerms((prev) => ({ ...prev, [roleId]: updated as Permission[] }));
+  }
+
   function getEffectivePerms(role: DiscordRole): Permission[] {
     return pendingPerms[role.id] ?? role.permissions;
   }
@@ -141,11 +379,17 @@ export default function RolesPage() {
   async function toggleWhitelistGrant(role: DiscordRole) {
     if (!apiToken) return;
     setTogglingWl(role.id);
-    const res = await updateRoleWhitelistGrant(apiToken, role.id, !role.grantsWhitelist);
+    const res = await updateRoleWhitelistGrant(
+      apiToken,
+      role.id,
+      !role.grantsWhitelist
+    );
     if (res.success) {
       setRoles((prev) =>
         prev.map((r) =>
-          r.id === role.id ? { ...r, grantsWhitelist: !r.grantsWhitelist } : r
+          r.id === role.id
+            ? { ...r, grantsWhitelist: !r.grantsWhitelist }
+            : r
         )
       );
     }
@@ -161,6 +405,143 @@ export default function RolesPage() {
       setDeletingId(null);
     }
   }
+
+  // -----------------------------------------------------------------------
+  // Render helpers
+  // -----------------------------------------------------------------------
+
+  function renderCheckbox(
+    roleId: string,
+    entry: PermEntry,
+    effectivePerms: Permission[]
+  ) {
+    const active = effectivePerms.includes(entry.perm);
+    return (
+      <label
+        key={entry.perm}
+        className={`flex cursor-pointer items-start gap-2.5 rounded-sm border px-3 py-2.5 text-xs transition-colors ${
+          active
+            ? "border-accent/30 bg-accent/10"
+            : "border-border bg-bg-tertiary"
+        } ${canManage ? "hover:border-accent/40" : "cursor-default"}`}
+      >
+        <input
+          type="checkbox"
+          checked={active}
+          onChange={() => canManage && togglePermission(roleId, entry.perm)}
+          disabled={!canManage}
+          className="sr-only"
+        />
+        <div
+          className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border ${
+            active ? "border-accent bg-accent" : "border-text-muted"
+          }`}
+        >
+          {active && (
+            <svg
+              className="h-2.5 w-2.5 text-bg-primary"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={3}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div
+            className={`font-medium tracking-wide ${
+              active ? "text-accent" : "text-text-secondary"
+            }`}
+          >
+            {entry.label}
+          </div>
+          <div className="mt-0.5 text-[10px] leading-tight text-text-muted">
+            {entry.description}
+          </div>
+        </div>
+      </label>
+    );
+  }
+
+  function renderGroup(
+    roleId: string,
+    group: PermGroup,
+    effectivePerms: Permission[]
+  ) {
+    const { active, total } = getGroupActiveCount(group, effectivePerms);
+    const allSelected = active === total;
+
+    return (
+      <div key={group.id} className="rounded-sm border border-border/50 bg-bg-tertiary/30">
+        {/* Group header */}
+        <div className="flex items-center justify-between px-3 py-2">
+          <div className="flex items-center gap-2">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                active > 0 ? "bg-accent" : "bg-text-muted/30"
+              }`}
+            />
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-text-muted">
+              {group.label}
+            </span>
+            <span className="text-[10px] text-text-muted/60">
+              {group.description}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] tabular-nums text-text-muted/60">
+              {active}/{total}
+            </span>
+            {canManage && total > 1 && (
+              <button
+                type="button"
+                onClick={() => selectGroupPerms(roleId, group, !allSelected)}
+                className="text-[10px] font-medium text-text-muted transition-colors hover:text-accent"
+              >
+                {allSelected ? "None" : "All"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Main entries */}
+        <div className="grid gap-1.5 px-2 pb-2 sm:grid-cols-2 lg:grid-cols-3">
+          {group.entries.map((entry) =>
+            renderCheckbox(roleId, entry, effectivePerms)
+          )}
+        </div>
+
+        {/* Sub-groups */}
+        {group.subGroups?.map((sg, i) => (
+          <div key={i} className="mx-2 mb-2 border-t border-border/40 pt-2">
+            <div className="mb-1.5 flex items-center gap-2 px-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted/60">
+                {sg.label}
+              </span>
+              <span className="text-[10px] text-text-muted/40">
+                {sg.description}
+              </span>
+            </div>
+            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              {sg.entries.map((entry) =>
+                renderCheckbox(roleId, entry, effectivePerms)
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // Main render
+  // -----------------------------------------------------------------------
 
   if (loading) {
     return <div className="text-text-secondary">Loading roles...</div>;
@@ -231,9 +612,10 @@ export default function RolesPage() {
             return (
               <div
                 key={role.id}
-                className="facet-border rounded-sm bg-bg-card p-5"
+                className="facet-border rounded-sm bg-bg-card"
               >
-                <div className="mb-4 flex items-center justify-between">
+                {/* Role header - sticky */}
+                <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-sm bg-bg-card p-5 pb-4">
                   <div>
                     <h3 className="font-display text-lg font-semibold tracking-wide text-text-primary">
                       {role.name}
@@ -248,21 +630,33 @@ export default function RolesPage() {
                       <button
                         onClick={() => toggleWhitelistGrant(role)}
                         disabled={togglingWl === role.id}
-                        className="mt-1.5 inline-flex items-center gap-2 text-[10px] font-semibold tracking-wide uppercase transition-all"
+                        className="mt-1.5 inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide transition-all"
                       >
                         <span
                           className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                            role.grantsWhitelist ? "bg-success" : "bg-text-muted/30"
+                            role.grantsWhitelist
+                              ? "bg-success"
+                              : "bg-text-muted/30"
                           }`}
                         >
                           <span
                             className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                              role.grantsWhitelist ? "translate-x-[18px]" : "translate-x-[3px]"
+                              role.grantsWhitelist
+                                ? "translate-x-[18px]"
+                                : "translate-x-[3px]"
                             }`}
                           />
                         </span>
-                        <span className={role.grantsWhitelist ? "text-success" : "text-text-muted"}>
-                          {role.grantsWhitelist ? "Grants Whitelist" : "No Whitelist"}
+                        <span
+                          className={
+                            role.grantsWhitelist
+                              ? "text-success"
+                              : "text-text-muted"
+                          }
+                        >
+                          {role.grantsWhitelist
+                            ? "Grants Whitelist"
+                            : "No Whitelist"}
                         </span>
                       </button>
                     )}
@@ -316,58 +710,20 @@ export default function RolesPage() {
                 </div>
 
                 {saveError && savingId === null && (
-                  <div className="mb-3 text-sm text-danger">{saveError}</div>
+                  <div className="mx-5 mb-3 text-sm text-danger">
+                    {saveError}
+                  </div>
                 )}
 
-                {/* Permission toggles */}
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                  {assignablePerms.map((perm) => {
-                    const active = effectivePerms.includes(perm);
-                    return (
-                      <label
-                        key={perm}
-                        className={`flex cursor-pointer items-center gap-2 rounded-sm border px-3 py-2 text-xs transition-colors ${
-                          active
-                            ? "border-accent/30 bg-accent/10 text-accent"
-                            : "border-border bg-bg-tertiary text-text-muted"
-                        } ${canManage ? "hover:border-accent/40" : "cursor-default"}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={active}
-                          onChange={() =>
-                            canManage && togglePermission(role.id, perm)
-                          }
-                          disabled={!canManage}
-                          className="sr-only"
-                        />
-                        <div
-                          className={`flex h-3.5 w-3.5 items-center justify-center rounded-sm border ${
-                            active
-                              ? "border-accent bg-accent"
-                              : "border-text-muted"
-                          }`}
-                        >
-                          {active && (
-                            <svg
-                              className="h-2.5 w-2.5 text-bg-primary"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={3}
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M5 13l4 4L19 7"
-                              />
-                            </svg>
-                          )}
-                        </div>
-                        <span className="tracking-wide">{perm}</span>
-                      </label>
-                    );
-                  })}
+                {/* Permission groups */}
+                <div
+                  className={`space-y-2 px-5 pb-5 ${
+                    !canManage ? "pointer-events-none opacity-70" : ""
+                  }`}
+                >
+                  {PERMISSION_GROUPS.map((group) =>
+                    renderGroup(role.id, group, effectivePerms)
+                  )}
                 </div>
               </div>
             );

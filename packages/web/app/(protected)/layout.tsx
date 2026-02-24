@@ -90,11 +90,15 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
     if (status === "unauthenticated") {
       router.replace("/login");
     }
-  }, [status, router]);
+    // If the Discord refresh token has expired, force a fresh login
+    if (session?.error === "RefreshTokenError") {
+      signIn("discord");
+    }
+  }, [status, session?.error, router]);
 
   useEffect(() => {
     async function init() {
-      if (!session?.accessToken) return;
+      if (!session?.accessToken || session?.error) return;
       try {
         const res = await syncAuth(session.accessToken);
         if (res.success && res.data) {
@@ -120,6 +124,24 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
     }
     init();
   }, [session, retryCount]);
+
+  // Periodically re-sync to keep the API token fresh (expires after 4h)
+  useEffect(() => {
+    if (!apiToken || !session?.accessToken || session?.error) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await syncAuth(session.accessToken!);
+        if (res.success && res.data) {
+          setApiToken(res.data.token);
+          setPermissions(res.data.permissions);
+          setUser(res.data.user);
+        }
+      } catch {
+        // Silently fail - the next navigation or tab focus will retry
+      }
+    }, 30 * 60 * 1000); // every 30 minutes
+    return () => clearInterval(interval);
+  }, [apiToken, session?.accessToken, session?.error]);
 
   // Close mobile menu on navigation
   useEffect(() => {

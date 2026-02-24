@@ -9,7 +9,7 @@ import {
   resolveDiscordNames,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
-import type { Ticket, Prospect } from "shared";
+import type { Ticket, Prospect, Permission } from "shared";
 
 type Tab = "tickets" | "prospects";
 
@@ -603,12 +603,36 @@ function ProspectRow({ prospect, onExpand, expanded, detail, displayName }: {
   );
 }
 
+const ALL_TIERS = ["normal", "community_officer", "admin_officer"] as const;
+const TIER_LABELS: Record<string, string> = {
+  normal: "Normal",
+  community_officer: "Community Officer",
+  admin_officer: "Admin Officer",
+};
+
+function getVisibleTiers(permissions: Permission[]): string[] {
+  if (
+    permissions.includes("admin") ||
+    permissions.includes("view:tickets") ||
+    permissions.includes("manage:tickets")
+  ) {
+    return [...ALL_TIERS];
+  }
+  const tiers: string[] = [];
+  if (permissions.includes("view:tickets:normal")) tiers.push("normal");
+  if (permissions.includes("view:tickets:community_officer")) tiers.push("community_officer");
+  if (permissions.includes("view:tickets:admin_officer")) tiers.push("admin_officer");
+  return tiers;
+}
+
 export default function TicketsPage() {
-  const { apiToken } = usePermissions();
+  const { apiToken, permissions } = usePermissions();
+  const visibleTiers = getVisibleTiers(permissions);
   const [tab, setTab] = useState<Tab>("tickets");
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [tierFilter, setTierFilter] = useState("all");
 
   // Tickets state
   const [tickets, setTicketsState] = useState<Ticket[]>([]);
@@ -700,6 +724,8 @@ export default function TicketsPage() {
     const q = search.toLowerCase();
     return tickets.filter((t) => {
       if (statusFilter !== "all" && t.status !== statusFilter) return false;
+      if (tierFilter !== "all" && t.tier !== tierFilter) return false;
+      if (!visibleTiers.length || !visibleTiers.includes(t.tier)) return false;
       if (!q) return true;
       return (
         String(t.id).includes(q) ||
@@ -708,7 +734,7 @@ export default function TicketsPage() {
         t.status.toLowerCase().includes(q)
       );
     });
-  }, [tickets, search, statusFilter]);
+  }, [tickets, search, statusFilter, tierFilter, visibleTiers]);
 
   const filteredProspects = useMemo(() => {
     const q = search.toLowerCase();
@@ -795,6 +821,18 @@ export default function TicketsPage() {
             </option>
           ))}
         </select>
+        {tab === "tickets" && visibleTiers.length > 1 && (
+          <select
+            value={tierFilter}
+            onChange={(e) => setTierFilter(e.target.value)}
+            className="rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+          >
+            <option value="all">All Tiers</option>
+            {visibleTiers.map((t) => (
+              <option key={t} value={t}>{TIER_LABELS[t] || t}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Content */}

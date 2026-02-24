@@ -83,6 +83,7 @@ interface ServerState {
   metricInterval: ReturnType<typeof setInterval> | null;
   pollInterval: ReturnType<typeof setInterval> | null;
   connected: boolean;
+  reconnectErrorCount: number;
   lastRcon: Map<string, number>;
 }
 
@@ -144,13 +145,19 @@ class SquadJSSocketManager {
       metricInterval: null,
       pollInterval: null,
       connected: false,
+      reconnectErrorCount: 0,
       lastRcon: new Map(),
     };
 
     this.servers.set(key, state);
 
     socket.on("connect", () => {
-      console.log(`[squadjs-socket] Connected to ${key}`);
+      if (state.reconnectErrorCount > 0) {
+        console.log(`[squadjs-socket] Reconnected to ${key} after ${state.reconnectErrorCount} failed attempt(s)`);
+      } else {
+        console.log(`[squadjs-socket] Connected to ${key}`);
+      }
+      state.reconnectErrorCount = 0;
       state.connected = true;
       this.broadcast(key, "CONNECTION_STATUS", { connected: true });
       this.requestInitialState(key, state);
@@ -159,11 +166,18 @@ class SquadJSSocketManager {
     socket.on("disconnect", (reason) => {
       console.log(`[squadjs-socket] ${key} disconnected: ${reason}`);
       state.connected = false;
+      if (state.pollInterval) { clearInterval(state.pollInterval); state.pollInterval = null; }
+      if (state.metricInterval) { clearInterval(state.metricInterval); state.metricInterval = null; }
       this.broadcast(key, "CONNECTION_STATUS", { connected: false });
     });
 
     socket.on("connect_error", (err) => {
-      console.error(`[squadjs-socket] ${key} connect_error: ${err.message}`, (err as any).data || "", (err as any).description || "");
+      state.reconnectErrorCount++;
+      if (state.reconnectErrorCount === 1) {
+        console.error(`[squadjs-socket] ${key} connect_error: ${err.message}`, (err as any).description || "");
+      } else if (state.reconnectErrorCount % 5 === 0) {
+        console.warn(`[squadjs-socket] ${key} still reconnecting (attempt ${state.reconnectErrorCount})...`);
+      }
     });
 
     for (const event of EVENTS_TO_RELAY) {

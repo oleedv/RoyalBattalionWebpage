@@ -72,7 +72,7 @@ export interface BotStatus {
 export interface DiscordBotOverview {
   tickets: {
     openByTier: { normal: number; community_officer: number; admin_officer: number };
-    recentlyClosed: { id: number; uuid: string; tier: string; closedAt: string }[];
+    recentlyClosed: { id: number; uuid: string; tier: string; closedAt: string; firstMessage: string | null }[];
   };
   prospects: {
     open: number;

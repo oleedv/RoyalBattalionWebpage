@@ -67,8 +67,6 @@ function BotStatusBanner({ status }: { status: BotStatus }) {
         <div className="ml-auto flex items-center gap-4">
           <ConnectionDot connected={status.dbConnected} label="DB" />
           <ConnectionDot connected={status.squadjsConnected} label="SquadJS" />
-          <ConnectionDot connected={status.seedingSchedulerActive} label="Seeding" />
-          <ConnectionDot connected={status.prospectSchedulerActive} label="Prospects" />
         </div>
       </div>
     </div>
@@ -132,6 +130,7 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
                   <tr className="border-b border-border/50">
                     <th className="px-4 py-2 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">ID</th>
                     <th className="px-4 py-2 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Tier</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Preview</th>
                     <th className="px-4 py-2 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Closed</th>
                   </tr>
                 </thead>
@@ -140,6 +139,7 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
                     <tr key={t.id} className="border-b border-border/30 last:border-0">
                       <td className="px-4 py-2 text-text-primary">#{t.id}</td>
                       <td className="px-4 py-2 capitalize text-text-secondary">{t.tier.replace(/_/g, " ")}</td>
+                      <td className="max-w-xs truncate px-4 py-2 text-text-secondary">{t.firstMessage || "-"}</td>
                       <td className="px-4 py-2 text-text-muted">{new Date(t.closedAt).toLocaleDateString()}</td>
                     </tr>
                   ))}

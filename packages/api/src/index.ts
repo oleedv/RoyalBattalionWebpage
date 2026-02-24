@@ -59,6 +59,12 @@ app.get("/admins.cfg", async (c) => {
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 
+// Global error handler -- return JSON instead of plain text for unhandled exceptions
+app.onError((err, c) => {
+  console.error("Unhandled API error:", err);
+  return c.json({ success: false, error: "Internal server error" }, 500);
+});
+
 // Bootstrap default server configs if none exist
 (async () => {
   const count = await prisma.serverConfig.count();

@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import type { ApiResponse, DiscordBotOverview, SeedingConfig, SeedingSession, BotMessage, BotLog, BotStatus, Paginated } from "shared";
 import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
-import { requirePermission } from "../middleware/permissions";
+import { requirePermission, getAllowedTicketTiers } from "../middleware/permissions";
+import type { Permission } from "shared";
 
 const discordBot = new Hono();
 
@@ -103,7 +104,7 @@ discordBot.get(
         `SELECT tier, COUNT(*) as count FROM tickets WHERE status = 'open' GROUP BY tier`
       ),
       db.$queryRawUnsafe<any[]>(
-        `SELECT id, uuid, tier, closed_at FROM tickets WHERE status = 'closed' ORDER BY closed_at DESC LIMIT 5`
+        `SELECT t.id, t.uuid, t.tier, t.closed_at, (SELECT content FROM ticket_messages WHERE ticket_id = t.id AND is_staff = 0 ORDER BY created_at ASC LIMIT 1) as first_message FROM tickets t WHERE t.status = 'closed' ORDER BY t.closed_at DESC LIMIT 5`
       ),
       db.$queryRawUnsafe<any[]>(
         `SELECT status, COUNT(*) as count FROM prospects GROUP BY status`
@@ -125,18 +126,28 @@ discordBot.get(
       ).catch(() => [] as any[]),
     ]);
 
+    const userPermissions = c.get("permissions") as Permission[];
+    const allowedTiers = getAllowedTicketTiers(userPermissions);
+
     const openByTier = { normal: 0, community_officer: 0, admin_officer: 0 };
     for (const r of ticketTierRows) {
       const tier = r.tier as keyof typeof openByTier;
-      if (tier in openByTier) openByTier[tier] = Number(r.count);
+      if (tier in openByTier) {
+        if (allowedTiers === null || allowedTiers.includes(tier)) {
+          openByTier[tier] = Number(r.count);
+        }
+      }
     }
 
-    const recentlyClosed = recentClosedRows.map((r: any) => ({
-      id: r.id,
-      uuid: r.uuid,
-      tier: r.tier,
-      closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : "",
-    }));
+    const recentlyClosed = recentClosedRows
+      .filter((r: any) => allowedTiers === null || allowedTiers.includes(r.tier))
+      .map((r: any) => ({
+        id: r.id,
+        uuid: r.uuid,
+        tier: r.tier,
+        closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : "",
+        firstMessage: r.first_message || null,
+      }));
 
     let prospectOpen = 0, prospectAccepted = 0, prospectDenied = 0;
     for (const r of prospectStatusRows) {
@@ -327,15 +338,20 @@ discordBot.get(
   "/status",
   requirePermission("view:discord-bot", "manage:discord-bot"),
   async (c) => {
-    const rows: any[] = await getSecretaryDb().$queryRawUnsafe(
-      `SELECT * FROM bot_status WHERE id = 1`
-    ).catch(() => [] as any[]);
+    try {
+      const rows: any[] = await getSecretaryDb().$queryRawUnsafe(
+        `SELECT * FROM bot_status WHERE id = 1`
+      ).catch(() => [] as any[]);
 
-    if (rows.length === 0) {
-      return c.json<ApiResponse<null>>({ success: true, data: null });
+      if (rows.length === 0) {
+        return c.json<ApiResponse<null>>({ success: true, data: null });
+      }
+
+      return c.json<ApiResponse<BotStatus>>({ success: true, data: mapBotStatus(rows[0]) });
+    } catch (err: any) {
+      console.error("discord-bot/status error:", err);
+      return c.json<ApiResponse<never>>({ success: false, error: "Failed to query bot status" }, 500);
     }
-
-    return c.json<ApiResponse<BotStatus>>({ success: true, data: mapBotStatus(rows[0]) });
   }
 );
 
@@ -344,42 +360,47 @@ discordBot.get(
   "/messages",
   requirePermission("view:discord-bot", "manage:discord-bot"),
   async (c) => {
-    const limit = Math.min(Number(c.req.query("limit") || "50"), 200);
-    const offset = Math.max(Number(c.req.query("offset") || "0"), 0);
-    const author = c.req.query("author");
-    const channel = c.req.query("channel");
-    const dm = c.req.query("dm");
-    const search = c.req.query("search");
-    const from = c.req.query("from");
-    const to = c.req.query("to");
+    try {
+      const limit = Math.min(Number(c.req.query("limit") || "50"), 200);
+      const offset = Math.max(Number(c.req.query("offset") || "0"), 0);
+      const author = c.req.query("author");
+      const channel = c.req.query("channel");
+      const dm = c.req.query("dm");
+      const search = c.req.query("search");
+      const from = c.req.query("from");
+      const to = c.req.query("to");
 
-    const conditions: string[] = [];
-    const params: unknown[] = [];
+      const conditions: string[] = [];
+      const params: unknown[] = [];
 
-    if (author) { conditions.push("author_id = ?"); params.push(author); }
-    if (channel) { conditions.push("channel_id = ?"); params.push(channel); }
-    if (dm === "1") { conditions.push("is_dm = 1"); }
-    if (search) { conditions.push("content LIKE ?"); params.push(`%${search}%`); }
-    if (from) { conditions.push("created_at >= ?"); params.push(from); }
-    if (to) { conditions.push("created_at <= ?"); params.push(to); }
+      if (author) { conditions.push("author_id = ?"); params.push(author); }
+      if (channel) { conditions.push("channel_id = ?"); params.push(channel); }
+      if (dm === "1") { conditions.push("is_dm = 1"); }
+      if (search) { conditions.push("content LIKE ?"); params.push(`%${search}%`); }
+      if (from) { conditions.push("created_at >= ?"); params.push(from); }
+      if (to) { conditions.push("created_at <= ?"); params.push(to); }
 
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const db = getSecretaryDb();
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const db = getSecretaryDb();
 
-    const [countRows, rows] = await Promise.all([
-      db.$queryRawUnsafe<any[]>(`SELECT COUNT(*) as total FROM bot_messages ${where}`, ...params),
-      db.$queryRawUnsafe<any[]>(
-        `SELECT id, message_id, channel_id, channel_name, guild_id, author_id, author_tag,
-                content, attachments, is_dm, direction, created_at
-         FROM bot_messages ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-        ...params, limit, offset
-      ),
-    ]);
+      const [countRows, rows] = await Promise.all([
+        db.$queryRawUnsafe<any[]>(`SELECT COUNT(*) as total FROM bot_messages ${where}`, ...params),
+        db.$queryRawUnsafe<any[]>(
+          `SELECT id, message_id, channel_id, channel_name, guild_id, author_id, author_tag,
+                  content, attachments, is_dm, direction, created_at
+           FROM bot_messages ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+          ...params, limit, offset
+        ),
+      ]);
 
-    const total = Number(countRows[0]?.total || 0);
-    const items: BotMessage[] = rows.map(mapBotMessage);
+      const total = Number(countRows[0]?.total || 0);
+      const items: BotMessage[] = rows.map(mapBotMessage);
 
-    return c.json<ApiResponse<Paginated<BotMessage>>>({ success: true, data: { items, total } });
+      return c.json<ApiResponse<Paginated<BotMessage>>>({ success: true, data: { items, total } });
+    } catch (err: any) {
+      console.error("discord-bot/messages error:", err);
+      return c.json<ApiResponse<never>>({ success: false, error: "Failed to query messages" }, 500);
+    }
   }
 );
 
@@ -388,39 +409,44 @@ discordBot.get(
   "/logs",
   requirePermission("view:discord-bot", "manage:discord-bot"),
   async (c) => {
-    const limit = Math.min(Number(c.req.query("limit") || "100"), 500);
-    const offset = Math.max(Number(c.req.query("offset") || "0"), 0);
-    const level = c.req.query("level");
-    const module = c.req.query("module");
-    const search = c.req.query("search");
-    const from = c.req.query("from");
-    const to = c.req.query("to");
+    try {
+      const limit = Math.min(Number(c.req.query("limit") || "100"), 500);
+      const offset = Math.max(Number(c.req.query("offset") || "0"), 0);
+      const level = c.req.query("level");
+      const module = c.req.query("module");
+      const search = c.req.query("search");
+      const from = c.req.query("from");
+      const to = c.req.query("to");
 
-    const conditions: string[] = [];
-    const params: unknown[] = [];
+      const conditions: string[] = [];
+      const params: unknown[] = [];
 
-    if (level) { conditions.push("level = ?"); params.push(Number(level)); }
-    if (module) { conditions.push("module = ?"); params.push(module); }
-    if (search) { conditions.push("message LIKE ?"); params.push(`%${search}%`); }
-    if (from) { conditions.push("created_at >= ?"); params.push(from); }
-    if (to) { conditions.push("created_at <= ?"); params.push(to); }
+      if (level) { conditions.push("level = ?"); params.push(Number(level)); }
+      if (module) { conditions.push("module = ?"); params.push(module); }
+      if (search) { conditions.push("message LIKE ?"); params.push(`%${search}%`); }
+      if (from) { conditions.push("created_at >= ?"); params.push(from); }
+      if (to) { conditions.push("created_at <= ?"); params.push(to); }
 
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const db = getSecretaryDb();
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const db = getSecretaryDb();
 
-    const [countRows, rows] = await Promise.all([
-      db.$queryRawUnsafe<any[]>(`SELECT COUNT(*) as total FROM bot_logs ${where}`, ...params),
-      db.$queryRawUnsafe<any[]>(
-        `SELECT id, level, level_label, module, message, data, created_at
-         FROM bot_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-        ...params, limit, offset
-      ),
-    ]);
+      const [countRows, rows] = await Promise.all([
+        db.$queryRawUnsafe<any[]>(`SELECT COUNT(*) as total FROM bot_logs ${where}`, ...params),
+        db.$queryRawUnsafe<any[]>(
+          `SELECT id, level, level_label, module, message, data, created_at
+           FROM bot_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+          ...params, limit, offset
+        ),
+      ]);
 
-    const total = Number(countRows[0]?.total || 0);
-    const items: BotLog[] = rows.map(mapBotLog);
+      const total = Number(countRows[0]?.total || 0);
+      const items: BotLog[] = rows.map(mapBotLog);
 
-    return c.json<ApiResponse<Paginated<BotLog>>>({ success: true, data: { items, total } });
+      return c.json<ApiResponse<Paginated<BotLog>>>({ success: true, data: { items, total } });
+    } catch (err: any) {
+      console.error("discord-bot/logs error:", err);
+      return c.json<ApiResponse<never>>({ success: false, error: "Failed to query logs" }, 500);
+    }
   }
 );
 

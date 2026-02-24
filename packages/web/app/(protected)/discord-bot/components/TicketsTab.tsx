@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { getTickets, getTicket, resolveDiscordNames } from "@/lib/api-client";
-import type { Ticket } from "shared";
+import { usePermissions } from "@/lib/permission-context";
+import type { Ticket, Permission } from "shared";
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleString();
@@ -90,7 +91,31 @@ function exportTicketText(ticket: Ticket) {
   return lines.join("\n");
 }
 
+const ALL_TIERS = ["normal", "community_officer", "admin_officer"] as const;
+const TIER_LABELS: Record<string, string> = {
+  normal: "Normal",
+  community_officer: "Community Officer",
+  admin_officer: "Admin Officer",
+};
+
+function getVisibleTiers(permissions: Permission[]): string[] {
+  if (
+    permissions.includes("admin") ||
+    permissions.includes("view:tickets") ||
+    permissions.includes("manage:tickets")
+  ) {
+    return [...ALL_TIERS];
+  }
+  const tiers: string[] = [];
+  if (permissions.includes("view:tickets:normal")) tiers.push("normal");
+  if (permissions.includes("view:tickets:community_officer")) tiers.push("community_officer");
+  if (permissions.includes("view:tickets:admin_officer")) tiers.push("admin_officer");
+  return tiers;
+}
+
 export default function TicketsTab({ apiToken }: { apiToken: string }) {
+  const { permissions } = usePermissions();
+  const visibleTiers = getVisibleTiers(permissions);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -185,16 +210,18 @@ export default function TicketsTab({ apiToken }: { apiToken: string }) {
           <option value="open">Open</option>
           <option value="closed">Closed</option>
         </select>
-        <select
-          value={tierFilter}
-          onChange={(e) => setTierFilter(e.target.value)}
-          className="rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
-        >
-          <option value="all">All Tiers</option>
-          <option value="normal">Normal</option>
-          <option value="community_officer">Community Officer</option>
-          <option value="admin_officer">Admin Officer</option>
-        </select>
+        {visibleTiers.length > 1 && (
+          <select
+            value={tierFilter}
+            onChange={(e) => setTierFilter(e.target.value)}
+            className="rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+          >
+            <option value="all">All Tiers</option>
+            {visibleTiers.map((t) => (
+              <option key={t} value={t}>{TIER_LABELS[t] || t}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="space-y-3">

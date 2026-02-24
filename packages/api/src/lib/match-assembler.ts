@@ -160,17 +160,22 @@ export async function assembleMatchDetail(
   if (durationMs < 5 * 60_000) return null;
 
   // 2. Scoreboard snapshot (authoritative end-of-round data)
-  const [scoreboardRows] = await pool.query(
-    `SELECT sb.team_id AS teamId, sb.team_name AS teamName,
-            sb.squad_id AS squadId, sb.squad_name AS squadName,
-            sb.is_leader AS isLeader, sb.role AS role,
-            p.eos_id AS eosID, p.steam_id AS steamID, p.name AS playerName
-     FROM squadjs_scoreboard sb
-     JOIN squadjs_players p ON sb.player_id = p.id
-     WHERE sb.match_id = ?`,
-    [matchId]
-  );
-  const scoreboard = scoreboardRows as any[];
+  let scoreboard: any[] = [];
+  try {
+    const [scoreboardRows] = await pool.query(
+      `SELECT sb.team_id AS teamId, sb.team_name AS teamName,
+              sb.squad_id AS squadId, sb.squad_name AS squadName,
+              sb.is_leader AS isLeader, sb.role AS role,
+              p.eos_id AS eosID, p.steam_id AS steamID, p.name AS playerName
+       FROM squadjs_scoreboard sb
+       JOIN squadjs_players p ON sb.player_id = p.id
+       WHERE sb.match_id = ?`,
+      [matchId]
+    );
+    scoreboard = scoreboardRows as any[];
+  } catch (err: any) {
+    if (err?.errno !== 1146) throw err;
+  }
   const hasScoreboard = scoreboard.length > 0;
 
   // 3. Legacy queries -- only needed when scoreboard is not available

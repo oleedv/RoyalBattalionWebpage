@@ -6,7 +6,8 @@ import type {
 } from "shared";
 import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
-import { requirePermission } from "../middleware/permissions";
+import { requirePermission, getAllowedTicketTiers } from "../middleware/permissions";
+import type { Permission } from "shared";
 
 const tickets = new Hono();
 
@@ -172,12 +173,25 @@ tickets.get("/by-uuid/:uuid", async (c) => {
 });
 
 // GET /tickets - list all tickets
-tickets.get("/", requirePermission("view:tickets", "manage:tickets"), async (c) => {
-  const rows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by
-     FROM tickets
-     ORDER BY created_at DESC`
-  );
+tickets.get("/", requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer"), async (c) => {
+  const userPermissions = c.get("permissions") as Permission[];
+  const allowedTiers = getAllowedTicketTiers(userPermissions);
+
+  let query = `SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by FROM tickets`;
+  const params: string[] = [];
+
+  if (allowedTiers !== null) {
+    if (allowedTiers.length === 0) {
+      return c.json<ApiResponse<Ticket[]>>({ success: true, data: [] });
+    }
+    const placeholders = allowedTiers.map(() => "?").join(", ");
+    query += ` WHERE tier IN (${placeholders})`;
+    params.push(...allowedTiers);
+  }
+
+  query += ` ORDER BY created_at DESC`;
+
+  const rows: any[] = await getSecretaryDb().$queryRawUnsafe(query, ...params);
 
   const result: Ticket[] = rows.map((r) => ({
     id: r.id,
@@ -195,7 +209,7 @@ tickets.get("/", requirePermission("view:tickets", "manage:tickets"), async (c) 
 });
 
 // GET /tickets/:id - get ticket with events and messages
-tickets.get("/:id", requirePermission("view:tickets", "manage:tickets"), async (c) => {
+tickets.get("/:id", requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer"), async (c) => {
   const id = Number(c.req.param("id"));
 
   const ticketRows: any[] = await getSecretaryDb().$queryRawUnsafe(
@@ -209,6 +223,13 @@ tickets.get("/:id", requirePermission("view:tickets", "manage:tickets"), async (
   }
 
   const r = ticketRows[0];
+
+  // Check tier-level access
+  const userPermissions = c.get("permissions") as Permission[];
+  const allowedTiers = getAllowedTicketTiers(userPermissions);
+  if (allowedTiers !== null && !allowedTiers.includes(r.tier)) {
+    return c.json<ApiResponse<never>>({ success: false, error: "Insufficient permissions" }, 403);
+  }
 
   const eventRows: any[] = await getSecretaryDb().$queryRawUnsafe(
     `SELECT id, ticket_id, event_type, actor_id, detail, created_at

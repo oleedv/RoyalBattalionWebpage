@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push:*)",
+      "Bash(git checkout:*)",
+      "WebFetch(domain:mysquadstats.com)",
+      "Bash(ls:*)",
+      "Bash(source:*)",
+      "Bash(echo:*)",
+      "Bash(bash)",
+      "Bash(bun -e \":*)"
+    ]
+  }
+}

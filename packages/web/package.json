@@ -9,10 +9,11 @@
   },
   "dependencies": {
     "next": "^15.2.1",
+    "next-auth": "^4.24.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "next-auth": "^4.24.11",
-    "shared": "workspace:*"
+    "shared": "workspace:*",
+    "swagger-ui-react": "^5.31.2"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",

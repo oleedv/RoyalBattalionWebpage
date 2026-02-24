@@ -1,0 +1,3106 @@
+openapi: 3.0.3
+info:
+  title: Royal Battalion API
+  description: |
+    REST API for the Royal Battalion gaming community management platform.
+    Handles user authentication (Discord OAuth), whitelist management,
+    ticket/prospect tracking, match history, server administration,
+    and Discord bot integration.
+
+    ## Authentication
+    Most endpoints require a JWT Bearer token obtained via the `/auth/sync` endpoint.
+    The flow is:
+    1. User authenticates with Discord OAuth on the frontend
+    2. Frontend sends the Discord access token to `POST /auth/sync`
+    3. API returns a JWT (valid 4 hours) containing userId and permissions
+    4. Include the JWT in all subsequent requests as `Authorization: Bearer <token>`
+
+    ## Permissions
+    Access is controlled by a granular RBAC system with 19 permissions.
+    Users with the `admin` permission bypass all permission checks.
+
+    ## Rate Limiting
+    - Global: 200 requests/minute per IP
+    - Per-route limits noted on individual endpoints
+
+    ## WebSocket Endpoints
+    - `ws://.../live-server/ws?token=<jwt>&server=<key>` -- Real-time server events and RCON
+    - `ws://.../presence/ws?token=<jwt>&page=<path>` -- User presence tracking
+  version: 1.0.0
+  contact:
+    name: Royal Battalion
+
+servers:
+  - url: https://api.royalbattalion.com
+    description: Production
+  - url: http://localhost:3001
+    description: Development
+
+tags:
+  - name: Auth
+    description: Authentication and session management
+  - name: Users
+    description: User account management
+  - name: Roles
+    description: Discord role-to-permission mapping
+  - name: Whitelist
+    description: Game server whitelist management
+  - name: Tickets
+    description: Support ticket and prospect management
+  - name: Matches
+    description: Match history and SquadJS sync
+  - name: Servers
+    description: BattleMetrics server status
+  - name: Stats
+    description: Dashboard statistics
+  - name: Admin Groups
+    description: Whitelist admin group management
+  - name: SquadJS Config
+    description: SquadJS plugin configuration via GitHub
+  - name: Server Config
+    description: SFTP deployment configuration per server
+  - name: Discord Bot
+    description: Discord bot management, seeding, prospects
+  - name: System
+    description: Health checks and server configuration endpoints
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ── Auth ──────────────────────────────────────────────
+  /auth/sync:
+    post:
+      tags: [Auth]
+      summary: Authenticate via Discord OAuth
+      description: |
+        Exchanges a Discord access token for a JWT. Upserts the user in the database,
+        syncs Discord roles to permissions, and returns the JWT along with user info.
+        Rate limited to 10 requests/minute per IP.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthSyncRequest"
+      responses:
+        "200":
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_AuthSyncResponse"
+        "403":
+          description: User is not a member of the Discord guild
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error or Discord API failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user info
+      description: Returns the authenticated user's profile and permissions.
+      responses:
+        "200":
+          description: User info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_AuthMeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: User not found in database
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Users ─────────────────────────────────────────────
+  /users:
+    get:
+      tags: [Users]
+      summary: List all users
+      description: Returns all users with their assigned roles.
+      security:
+        - bearerAuth: []
+      parameters: []
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_UserWithRolesArray"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - view:members
+        - manage:members
+
+  /users/link-steam:
+    post:
+      tags: [Users]
+      summary: Link Steam ID to current user
+      description: Links a Steam ID to the authenticated user's account.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [steamId]
+              properties:
+                steamId:
+                  type: string
+                  minLength: 1
+      responses:
+        "200":
+          description: Steam ID linked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      steamId:
+                        type: string
+        "400":
+          description: Steam ID already linked to another account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /users/sync-roles:
+    post:
+      tags: [Users]
+      summary: Sync Discord roles for all users
+      description: Triggers a bulk Discord role sync across all users in the database.
+      responses:
+        "200":
+          description: Sync completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      updated:
+                        type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: DISCORD_BOT_TOKEN not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:members
+
+  /users/resolve-ids:
+    post:
+      tags: [Users]
+      summary: Resolve Discord IDs to usernames
+      description: Batch lookup of Discord usernames by Discord IDs (1-200).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [discordIds]
+              properties:
+                discordIds:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 1
+                  maxItems: 200
+      responses:
+        "200":
+          description: ID-to-name mapping
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Map of Discord ID to username
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /users/{id}:
+    put:
+      tags: [Users]
+      summary: Update user
+      description: Update a user's Steam ID or EOS ID.
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                steamId:
+                  type: string
+                eosId:
+                  type: string
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_UserWithRoles"
+        "400":
+          description: Steam ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:members
+    delete:
+      tags: [Users]
+      summary: Delete user
+      description: Permanently deletes a user account.
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:members
+
+  # ── Roles ─────────────────────────────────────────────
+  /roles:
+    get:
+      tags: [Roles]
+      summary: List all roles
+      description: Returns all Discord roles with their mapped permissions.
+      responses:
+        "200":
+          description: List of roles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_DiscordRoleArray"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:roles
+    post:
+      tags: [Roles]
+      summary: Create role mapping
+      description: Maps a Discord role ID to application permissions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [discordRoleId, name]
+              properties:
+                discordRoleId:
+                  type: string
+                  minLength: 1
+                name:
+                  type: string
+                  minLength: 1
+                permissions:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Permission"
+                  default: []
+      responses:
+        "201":
+          description: Role created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_DiscordRole"
+        "400":
+          description: Discord role ID already mapped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:roles
+
+  /roles/{id}/permissions:
+    put:
+      tags: [Roles]
+      summary: Update role permissions
+      description: Replaces all permissions for a role.
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissions]
+              properties:
+                permissions:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Permission"
+      responses:
+        "200":
+          description: Updated role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_DiscordRole"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Role not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:roles
+
+  /roles/{id}/whitelist-grant:
+    put:
+      tags: [Roles]
+      summary: Toggle whitelist grant
+      description: Sets whether a role automatically grants whitelist access.
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grantsWhitelist]
+              properties:
+                grantsWhitelist:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdatedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Role not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:roles
+
+  /roles/{id}:
+    delete:
+      tags: [Roles]
+      summary: Delete role mapping
+      description: Removes a Discord role mapping and all associated permissions.
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Role deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Role not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:roles
+
+  # ── Whitelist ─────────────────────────────────────────
+  /whitelist:
+    get:
+      tags: [Whitelist]
+      summary: List whitelist entries
+      description: Returns all whitelist entries, optionally filtered by server.
+      parameters:
+        - name: server
+          in: query
+          schema:
+            type: string
+          description: Filter by server key (e.g., "main", "battle")
+      responses:
+        "200":
+          description: Whitelist entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_WhitelistEntryArray"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - view:whitelist
+    post:
+      tags: [Whitelist]
+      summary: Add whitelist entry
+      description: Adds a single whitelist entry and triggers SFTP deployment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddWhitelistEntry"
+      responses:
+        "201":
+          description: Entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_WhitelistEntry"
+        "400":
+          description: Steam ID already whitelisted on this server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:whitelist
+
+  /whitelist/candidates:
+    get:
+      tags: [Whitelist]
+      summary: Get whitelist candidates
+      description: Returns users eligible for whitelist (have a whitelist-granting role but aren't yet whitelisted).
+      parameters:
+        - name: server
+          in: query
+          schema:
+            type: string
+            default: main
+      responses:
+        "200":
+          description: Candidate list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WhitelistCandidate"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:whitelist
+
+  /whitelist/bulk:
+    post:
+      tags: [Whitelist]
+      summary: Bulk add whitelist entries
+      description: Adds multiple whitelist entries (1-500) and triggers SFTP deployment. Duplicate Steam IDs are skipped.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entries]
+              properties:
+                server:
+                  type: string
+                  default: main
+                entries:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items:
+                    type: object
+                    required: [steamId]
+                    properties:
+                      steamId:
+                        type: string
+                      name:
+                        type: string
+                      clan:
+                        type: string
+                      role:
+                        type: string
+                      groupId:
+                        type: string
+                      reason:
+                        type: string
+      responses:
+        "201":
+          description: Bulk add result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      created:
+                        type: integer
+                      skipped:
+                        type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:whitelist
+
+  /whitelist/{id}:
+    put:
+      tags: [Whitelist]
+      summary: Update whitelist entry
+      description: Updates fields on an existing whitelist entry and triggers SFTP deployment.
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                steamId:
+                  type: string
+                name:
+                  type: string
+                clan:
+                  type: string
+                role:
+                  type: string
+                groupId:
+                  type: string
+                  nullable: true
+                reason:
+                  type: string
+                expiresAt:
+                  type: string
+                  nullable: true
+                  format: date-time
+      responses:
+        "200":
+          description: Updated entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_WhitelistEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:whitelist
+    delete:
+      tags: [Whitelist]
+      summary: Delete whitelist entry
+      description: Removes a whitelist entry and triggers SFTP deployment.
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Entry deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:whitelist
+
+  # ── Tickets ───────────────────────────────────────────
+  /tickets:
+    get:
+      tags: [Tickets]
+      summary: List tickets
+      description: Returns all tickets, filtered by the caller's tier-based permissions.
+      responses:
+        "200":
+          description: Ticket list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_TicketArray"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - view:tickets
+        - manage:tickets
+        - view:tickets:normal
+        - view:tickets:community_officer
+        - view:tickets:admin_officer
+
+  /tickets/{id}:
+    get:
+      tags: [Tickets]
+      summary: Get ticket detail
+      description: Returns a ticket with its events and messages. Access is checked against ticket tier.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Ticket with events and messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Ticket"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Ticket not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tickets/by-uuid/{uuid}:
+    get:
+      tags: [Tickets]
+      summary: Public ticket lookup by UUID
+      description: |
+        Public endpoint to look up a ticket by its UUID. Returns the ticket with events and messages.
+        Rate limited to 30 requests/minute per IP.
+      security: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Ticket found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Ticket"
+        "404":
+          description: Ticket not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tickets/by-uuid/prospect/{uuid}:
+    get:
+      tags: [Tickets]
+      summary: Public prospect lookup by UUID
+      description: |
+        Public endpoint to look up a prospect by its UUID. Returns the prospect with events, messages, and votes.
+        Rate limited to 30 requests/minute per IP.
+      security: []
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Prospect found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Prospect"
+        "404":
+          description: Prospect not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tickets/prospects/list:
+    get:
+      tags: [Tickets]
+      summary: List all prospects
+      description: Returns all prospects ordered by creation date.
+      responses:
+        "200":
+          description: Prospect list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_ProspectArray"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - view:tickets
+        - manage:tickets
+
+  /tickets/prospects/{id}:
+    get:
+      tags: [Tickets]
+      summary: Get prospect detail
+      description: Returns a prospect with events, messages, and votes.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Prospect with full detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Prospect"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Prospect not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - view:tickets
+        - manage:tickets
+
+  # ── Matches ───────────────────────────────────────────
+  /matches/public:
+    get:
+      tags: [Matches]
+      summary: Get recent public matches
+      description: Returns the 10 most recent non-hidden matches. No authentication required.
+      security: []
+      responses:
+        "200":
+          description: Recent matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_MatchArray"
+
+  /matches:
+    get:
+      tags: [Matches]
+      summary: List all matches
+      description: Returns all matches including hidden ones.
+      responses:
+        "200":
+          description: All matches
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_MatchArray"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:matches
+
+  /matches/{id}:
+    put:
+      tags: [Matches]
+      summary: Update match
+      description: Update match details (date, map, layer, result, etc.).
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  format: date-time
+                map:
+                  type: string
+                layer:
+                  type: string
+                result:
+                  type: string
+                server:
+                  type: string
+                vodUrl:
+                  type: string
+                  nullable: true
+                hidden:
+                  type: boolean
+      responses:
+        "200":
+          description: Updated match
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_Match"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Match not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:matches
+    delete:
+      tags: [Matches]
+      summary: Delete match
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Match deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Match not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:matches
+
+  /matches/resync:
+    post:
+      tags: [Matches]
+      summary: Resync matches from SquadJS
+      description: Triggers a full resync of match data from the SquadJS database.
+      responses:
+        "200":
+          description: Resync result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      resynced:
+                        type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:matches
+
+  # ── Servers ───────────────────────────────────────────
+  /servers/status:
+    get:
+      tags: [Servers]
+      summary: Get server status
+      description: Fetches live server status from BattleMetrics (cached 30s). No authentication required.
+      security: []
+      responses:
+        "200":
+          description: Server statuses
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ServerStatus"
+
+  # ── Stats ─────────────────────────────────────────────
+  /stats/summary:
+    get:
+      tags: [Stats]
+      summary: Dashboard summary statistics
+      description: |
+        Returns aggregated stats for the dashboard. Fields are conditionally included
+        based on the caller's permissions:
+        - `servers` and `serverMetrics`: always included
+        - `tickets` and `prospects`: admin only
+        - `members`: admin or view:members
+        - `whitelist`: admin or view:whitelist
+        - `matches` and `recentMatches`: admin or manage:matches
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      servers:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ServerStatus"
+                      serverMetrics:
+                        type: object
+                        additionalProperties:
+                          type: object
+                          properties:
+                            serverName:
+                              type: string
+                            metricHistory:
+                              type: array
+                              items:
+                                type: object
+                            playerCount:
+                              type: integer
+                            publicQueue:
+                              type: integer
+                            reserveQueue:
+                              type: integer
+                            maxPlayers:
+                              type: integer
+                      tickets:
+                        type: object
+                        properties:
+                          open:
+                            type: integer
+                          closed:
+                            type: integer
+                      prospects:
+                        type: object
+                        properties:
+                          open:
+                            type: integer
+                          accepted:
+                            type: integer
+                          denied:
+                            type: integer
+                      members:
+                        type: object
+                        properties:
+                          total:
+                            type: integer
+                          withSteam:
+                            type: integer
+                      whitelist:
+                        type: object
+                        properties:
+                          total:
+                            type: integer
+                      matches:
+                        type: object
+                        properties:
+                          total:
+                            type: integer
+                          wins:
+                            type: integer
+                          losses:
+                            type: integer
+                          draws:
+                            type: integer
+                      recentMatches:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Match"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ── Admin Groups ──────────────────────────────────────
+  /admin-groups:
+    get:
+      tags: [Admin Groups]
+      summary: List admin groups
+      description: Returns all admin groups sorted by sortOrder.
+      responses:
+        "200":
+          description: Admin groups
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AdminGroup"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:whitelist
+    post:
+      tags: [Admin Groups]
+      summary: Create admin group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, permissions]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                permissions:
+                  type: string
+                  description: Space-separated permission flags
+                sortOrder:
+                  type: integer
+                  default: 0
+      responses:
+        "201":
+          description: Group created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/AdminGroup"
+        "400":
+          description: Name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:whitelist
+
+  /admin-groups/{id}:
+    put:
+      tags: [Admin Groups]
+      summary: Update admin group
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                permissions:
+                  type: string
+                sortOrder:
+                  type: integer
+      responses:
+        "200":
+          description: Updated group
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/AdminGroup"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Group not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:whitelist
+    delete:
+      tags: [Admin Groups]
+      summary: Delete admin group
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Group deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Group not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:whitelist
+
+  # ── SquadJS Config ────────────────────────────────────
+  /squadjs-config:
+    get:
+      tags: [SquadJS Config]
+      summary: List available environments
+      description: Returns the list of available SquadJS configuration environments.
+      responses:
+        "200":
+          description: Environment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      environments:
+                        type: array
+                        items:
+                          type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: GITHUB_CONFIG_TOKEN not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - view:squadjs
+        - manage:squadjs
+
+  /squadjs-config/descriptions:
+    get:
+      tags: [SquadJS Config]
+      summary: Get plugin descriptions
+      description: Fetches plugin and field descriptions from SquadJS source code on GitHub.
+      responses:
+        "200":
+          description: Plugin descriptions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      descriptions:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      fieldDescriptions:
+                        type: object
+                        additionalProperties:
+                          type: object
+                          additionalProperties:
+                            type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - view:squadjs
+        - manage:squadjs
+
+  /squadjs-config/{env}:
+    get:
+      tags: [SquadJS Config]
+      summary: Read environment config
+      description: Reads the SquadJS plugin configuration for a specific environment from GitHub.
+      parameters:
+        - name: env
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plugin configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      plugins:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/SquadJSPlugin"
+                      environment:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: GitHub token not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - view:squadjs
+        - manage:squadjs
+    put:
+      tags: [SquadJS Config]
+      summary: Write environment config
+      description: Writes updated plugin configuration to GitHub for a specific environment.
+      parameters:
+        - name: env
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plugins]
+              properties:
+                plugins:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/SquadJSPlugin"
+      responses:
+        "200":
+          description: Config saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      saved:
+                        type: boolean
+                        example: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          description: GitHub token not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:squadjs
+
+  # ── Server Config ─────────────────────────────────────
+  /server-config:
+    get:
+      tags: [Server Config]
+      summary: List server configs
+      description: Returns all server configurations. SFTP passwords are masked.
+      responses:
+        "200":
+          description: Server configs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ServerConfig"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - view:whitelist
+    post:
+      tags: [Server Config]
+      summary: Create or update server config
+      description: Upserts a server configuration. SFTP password is encrypted if ENCRYPTION_KEY is set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server, label]
+              properties:
+                server:
+                  type: string
+                  minLength: 1
+                label:
+                  type: string
+                  minLength: 1
+                sftpHost:
+                  type: string
+                  nullable: true
+                sftpPort:
+                  type: integer
+                  default: 22
+                sftpUser:
+                  type: string
+                  nullable: true
+                sftpPass:
+                  type: string
+                  nullable: true
+                sftpPath:
+                  type: string
+                  nullable: true
+                syncEnabled:
+                  type: boolean
+      responses:
+        "200":
+          description: Config saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/ServerConfig"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - admin
+
+  /server-config/{server}/sync:
+    put:
+      tags: [Server Config]
+      summary: Toggle SFTP sync
+      description: Toggles the SFTP sync enabled flag for a server.
+      parameters:
+        - name: server
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/ServerConfig"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Server config not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:whitelist-sync
+
+  /server-config/{server}:
+    delete:
+      tags: [Server Config]
+      summary: Delete server config
+      parameters:
+        - name: server
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Config deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Server config not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - admin
+
+  # ── Discord Bot ───────────────────────────────────────
+  /discord-bot/overview:
+    get:
+      tags: [Discord Bot]
+      summary: Bot dashboard overview
+      description: Returns tickets, prospects, seeding info, and bot status. Ticket data filtered by tier permissions.
+      responses:
+        "200":
+          description: Overview data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/DiscordBotOverview"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - view:discord-bot
+        - manage:discord-bot
+
+  /discord-bot/seeding/config:
+    get:
+      tags: [Discord Bot]
+      summary: Get seeding config
+      responses:
+        "200":
+          description: Seeding configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: "#/components/schemas/SeedingConfig"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Config not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - view:discord-bot
+        - manage:discord-bot
+    put:
+      tags: [Discord Bot]
+      summary: Update seeding config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                seedThreshold:
+                  type: integer
+                resetThreshold:
+                  type: integer
+                dailyTime:
+                  type: string
+                  nullable: true
+                timezone:
+                  type: string
+                  nullable: true
+                serverName:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: Config updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdatedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:discord-bot
+
+  /discord-bot/seeding/sessions:
+    get:
+      tags: [Discord Bot]
+      summary: Get seeding sessions
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        "200":
+          description: Seeding sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SeedingSession"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - view:discord-bot
+        - manage:discord-bot
+
+  /discord-bot/prospects/{id}/pause:
+    post:
+      tags: [Discord Bot]
+      summary: Pause prospect evaluation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Paused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdatedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:discord-bot
+
+  /discord-bot/prospects/{id}/unpause:
+    post:
+      tags: [Discord Bot]
+      summary: Unpause prospect evaluation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Unpaused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdatedResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:discord-bot
+
+  /discord-bot/prospects/{id}/extend:
+    post:
+      tags: [Discord Bot]
+      summary: Extend prospect evaluation period
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [days]
+              properties:
+                days:
+                  type: integer
+                  minimum: 1
+                  maximum: 30
+      responses:
+        "200":
+          description: Extended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdatedResponse"
+        "400":
+          description: Invalid days value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:discord-bot
+
+  /discord-bot/status:
+    get:
+      tags: [Discord Bot]
+      summary: Get bot status
+      responses:
+        "200":
+          description: Bot status (null if not available)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    oneOf:
+                      - $ref: "#/components/schemas/BotStatus"
+                      - type: "null"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - view:discord-bot
+        - manage:discord-bot
+
+  /discord-bot/messages:
+    get:
+      tags: [Discord Bot]
+      summary: Query bot messages
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: author
+          in: query
+          schema:
+            type: string
+          description: Filter by author Discord ID
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Filter by channel ID
+        - name: dm
+          in: query
+          schema:
+            type: string
+            enum: ["1"]
+          description: Filter to DMs only
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search message content (LIKE match)
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter messages after this date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter messages before this date
+      responses:
+        "200":
+          description: Paginated messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BotMessage"
+                      total:
+                        type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - view:discord-bot
+        - manage:discord-bot
+
+  /discord-bot/logs:
+    get:
+      tags: [Discord Bot]
+      summary: Query bot logs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: level
+          in: query
+          schema:
+            type: integer
+          description: Filter by log level
+        - name: module
+          in: query
+          schema:
+            type: string
+          description: Filter by module name
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search log messages (LIKE match)
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Paginated logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/BotLog"
+                      total:
+                        type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - view:discord-bot
+        - manage:discord-bot
+
+  # ── System ────────────────────────────────────────────
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /admins.cfg:
+    get:
+      tags: [System]
+      summary: Generate admins.cfg
+      description: |
+        Returns a plain-text Squad server admins.cfg file. Access is restricted
+        to IPs listed in the `CFG_ALLOWED_IPS` environment variable.
+      security: []
+      parameters:
+        - name: server
+          in: query
+          schema:
+            type: string
+          description: Server key (defaults to all servers)
+      responses:
+        "200":
+          description: Admins config file
+          content:
+            text/plain:
+              schema:
+                type: string
+        "403":
+          description: IP not in allowlist
+
+  /live-server/servers:
+    get:
+      tags: [System]
+      summary: List available SquadJS servers
+      description: Returns the list of connected SquadJS server keys.
+      security: []
+      responses:
+        "200":
+          description: Server keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT obtained from POST /auth/sync
+
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    # ── Common ──────────────────────────────────────────
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+
+    DeletedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            deleted:
+              type: boolean
+              example: true
+
+    UpdatedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            updated:
+              type: boolean
+              example: true
+
+    Permission:
+      type: string
+      enum:
+        - view:whitelist
+        - manage:whitelist
+        - view:members
+        - manage:members
+        - view:tickets
+        - manage:tickets
+        - manage:roles
+        - manage:matches
+        - view:squadjs
+        - manage:squadjs
+        - view:live-server
+        - manage:live-server
+        - manage:whitelist-sync
+        - view:discord-bot
+        - manage:discord-bot
+        - view:tickets:normal
+        - view:tickets:community_officer
+        - view:tickets:admin_officer
+        - admin
+
+    # ── Auth ────────────────────────────────────────────
+    AuthSyncRequest:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken:
+          type: string
+          minLength: 1
+          description: Discord OAuth access token
+
+    AuthSyncResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT valid for 4 hours
+        user:
+          $ref: "#/components/schemas/UserWithRoles"
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Permission"
+
+    AuthMeResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/UserWithRoles"
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Permission"
+
+    ApiResponse_AuthSyncResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/AuthSyncResponse"
+
+    ApiResponse_AuthMeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/AuthMeResponse"
+
+    # ── User ────────────────────────────────────────────
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        discordId:
+          type: string
+        discordName:
+          type: string
+        steamId:
+          type: string
+          nullable: true
+        eosId:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UserWithRoles:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          properties:
+            roles:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  discordRoleId:
+                    type: string
+                  name:
+                    type: string
+
+    ApiResponse_UserWithRoles:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/UserWithRoles"
+
+    ApiResponse_UserWithRolesArray:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserWithRoles"
+
+    # ── Roles ───────────────────────────────────────────
+    DiscordRole:
+      type: object
+      properties:
+        id:
+          type: string
+        discordRoleId:
+          type: string
+        name:
+          type: string
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Permission"
+        grantsWhitelist:
+          type: boolean
+
+    ApiResponse_DiscordRole:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/DiscordRole"
+
+    ApiResponse_DiscordRoleArray:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscordRole"
+
+    # ── Whitelist ───────────────────────────────────────
+    WhitelistEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        steamId:
+          type: string
+        server:
+          type: string
+        name:
+          type: string
+          nullable: true
+        clan:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+        groupId:
+          type: string
+          nullable: true
+        groupName:
+          type: string
+          nullable: true
+        addedBy:
+          type: string
+        reason:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AddWhitelistEntry:
+      type: object
+      required: [steamId]
+      properties:
+        steamId:
+          type: string
+          minLength: 1
+        server:
+          type: string
+          default: main
+        name:
+          type: string
+        clan:
+          type: string
+        role:
+          type: string
+        groupId:
+          type: string
+        reason:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    WhitelistCandidate:
+      type: object
+      properties:
+        userId:
+          type: string
+        discordName:
+          type: string
+        steamId:
+          type: string
+        roleName:
+          type: string
+
+    ApiResponse_WhitelistEntry:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/WhitelistEntry"
+
+    ApiResponse_WhitelistEntryArray:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhitelistEntry"
+
+    # ── Tickets ─────────────────────────────────────────
+    TicketEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        ticketId:
+          type: integer
+        eventType:
+          type: string
+          enum: [created, escalated, closed]
+        actorId:
+          type: string
+        detail:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    TicketMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        ticketId:
+          type: integer
+        authorId:
+          type: string
+        authorTag:
+          type: string
+        content:
+          type: string
+          nullable: true
+        attachments:
+          type: string
+          nullable: true
+        isStaff:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    Ticket:
+      type: object
+      properties:
+        id:
+          type: integer
+        uuid:
+          type: string
+        channelId:
+          type: string
+        userId:
+          type: string
+        status:
+          type: string
+          enum: [open, closed]
+        tier:
+          type: string
+          enum: [normal, community_officer, admin_officer]
+        createdAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+        closedBy:
+          type: string
+          nullable: true
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketEvent"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketMessage"
+
+    ProspectEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        prospectId:
+          type: integer
+        eventType:
+          type: string
+        actorId:
+          type: string
+        detail:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ProspectMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        prospectId:
+          type: integer
+        authorId:
+          type: string
+        authorTag:
+          type: string
+        content:
+          type: string
+          nullable: true
+        attachments:
+          type: string
+          nullable: true
+        isStaff:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    ProspectVote:
+      type: object
+      properties:
+        id:
+          type: integer
+        prospectId:
+          type: integer
+        voterId:
+          type: string
+        voterTag:
+          type: string
+          nullable: true
+        vote:
+          type: string
+          enum: [yes, no, unsure]
+        reason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    Prospect:
+      type: object
+      properties:
+        id:
+          type: integer
+        uuid:
+          type: string
+        channelId:
+          type: string
+        userId:
+          type: string
+        status:
+          type: string
+          enum: [open, closed, accepted, denied]
+        alias:
+          type: string
+        nationality:
+          type: string
+        dateOfBirth:
+          type: string
+        squadHours:
+          type: number
+        preferredRoles:
+          type: string
+        prevClan:
+          type: string
+        whyRb:
+          type: string
+        activeHours:
+          type: string
+        competitive:
+          type: string
+        steamId:
+          type: string
+        mentorId:
+          type: string
+          nullable: true
+        pausedAt:
+          type: string
+          format: date-time
+          nullable: true
+        extraDays:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+        closedBy:
+          type: string
+          nullable: true
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProspectEvent"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProspectMessage"
+        votes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProspectVote"
+
+    ApiResponse_Ticket:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Ticket"
+
+    ApiResponse_TicketArray:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Ticket"
+
+    ApiResponse_Prospect:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Prospect"
+
+    ApiResponse_ProspectArray:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Prospect"
+
+    # ── Matches ─────────────────────────────────────────
+    MatchTeam:
+      type: object
+      properties:
+        faction:
+          type: string
+        factionFull:
+          type: string
+        result:
+          type: string
+          enum: [WIN, LOSS, DRAW]
+
+    MatchPlayer:
+      type: object
+      properties:
+        name:
+          type: string
+        steamId:
+          type: string
+        squad:
+          type: string
+        role:
+          type: string
+        kills:
+          type: integer
+        deaths:
+          type: integer
+        revives:
+          type: integer
+        teamkills:
+          type: integer
+        isSquadLeader:
+          type: boolean
+
+    MatchDetail:
+      type: object
+      properties:
+        duration:
+          type: string
+        players:
+          type: integer
+        team1:
+          $ref: "#/components/schemas/MatchTeam"
+        team2:
+          $ref: "#/components/schemas/MatchTeam"
+        team1Players:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatchPlayer"
+        team2Players:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatchPlayer"
+
+    Match:
+      type: object
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+          format: date-time
+        map:
+          type: string
+        layer:
+          type: string
+        result:
+          type: string
+        server:
+          type: string
+        vodUrl:
+          type: string
+          nullable: true
+        hidden:
+          type: boolean
+        matchDetail:
+          oneOf:
+            - $ref: "#/components/schemas/MatchDetail"
+            - type: "null"
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ApiResponse_Match:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/Match"
+
+    ApiResponse_MatchArray:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Match"
+
+    # ── Servers ─────────────────────────────────────────
+    ServerStatus:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        ip:
+          type: string
+        port:
+          type: integer
+        players:
+          type: integer
+        maxPlayers:
+          type: integer
+        map:
+          type: string
+        status:
+          type: string
+          enum: [online, offline]
+        playerList:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              duration:
+                type: number
+        publicQueue:
+          type: integer
+        reserveQueue:
+          type: integer
+        metricHistory:
+          type: array
+          items:
+            type: object
+            properties:
+              time:
+                type: number
+              tickRate:
+                type: number
+                nullable: true
+              playerCount:
+                type: integer
+              publicQueue:
+                type: integer
+              reserveQueue:
+                type: integer
+
+    # ── Admin Groups ────────────────────────────────────
+    AdminGroup:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        permissions:
+          type: string
+          description: Space-separated permission flags
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── Server Config ───────────────────────────────────
+    ServerConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        server:
+          type: string
+        label:
+          type: string
+        sftpHost:
+          type: string
+          nullable: true
+        sftpPort:
+          type: integer
+        sftpUser:
+          type: string
+          nullable: true
+        sftpPass:
+          type: string
+          nullable: true
+          description: Always masked as "********" in responses
+        sftpPath:
+          type: string
+          nullable: true
+        syncEnabled:
+          type: boolean
+
+    # ── SquadJS Config ──────────────────────────────────
+    SquadJSPlugin:
+      type: object
+      required: [plugin, enabled]
+      properties:
+        plugin:
+          type: string
+          description: Plugin class name
+        enabled:
+          type: boolean
+      additionalProperties: true
+
+    # ── Discord Bot ─────────────────────────────────────
+    SeedingConfig:
+      type: object
+      properties:
+        id:
+          type: integer
+        enabled:
+          type: boolean
+        channelId:
+          type: string
+          nullable: true
+        roleId:
+          type: string
+          nullable: true
+        seedThreshold:
+          type: integer
+        resetThreshold:
+          type: integer
+        dailyTime:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+          nullable: true
+        serverName:
+          type: string
+          nullable: true
+
+    SeedingSession:
+      type: object
+      properties:
+        id:
+          type: integer
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        durationMinutes:
+          type: number
+          nullable: true
+        startPlayers:
+          type: integer
+          nullable: true
+        peakPlayers:
+          type: integer
+          nullable: true
+        endPlayers:
+          type: integer
+          nullable: true
+        mapName:
+          type: string
+          nullable: true
+        layerName:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, completed, reset, expired]
+        callMessageId:
+          type: string
+          nullable: true
+        completionMessageId:
+          type: string
+          nullable: true
+
+    BotStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [online, offline, starting]
+        uptimeSeconds:
+          type: number
+        guildCount:
+          type: integer
+        memberCount:
+          type: integer
+        latencyMs:
+          type: number
+        dbConnected:
+          type: boolean
+        squadjsConnected:
+          type: boolean
+        seedingSchedulerActive:
+          type: boolean
+        prospectSchedulerActive:
+          type: boolean
+        lastHeartbeat:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    BotMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        messageId:
+          type: string
+        channelId:
+          type: string
+        channelName:
+          type: string
+          nullable: true
+        guildId:
+          type: string
+          nullable: true
+        authorId:
+          type: string
+        authorTag:
+          type: string
+        content:
+          type: string
+          nullable: true
+        attachments:
+          type: array
+          items: {}
+          nullable: true
+        isDm:
+          type: boolean
+        direction:
+          type: string
+          enum: [incoming, outgoing]
+        createdAt:
+          type: string
+          format: date-time
+
+    BotLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        level:
+          type: integer
+        levelLabel:
+          type: string
+        module:
+          type: string
+          nullable: true
+        message:
+          type: string
+        data:
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    DiscordBotOverview:
+      type: object
+      properties:
+        tickets:
+          type: object
+          properties:
+            openByTier:
+              type: object
+              properties:
+                normal:
+                  type: integer
+                community_officer:
+                  type: integer
+                admin_officer:
+                  type: integer
+            recentlyClosed:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  uuid:
+                    type: string
+                  tier:
+                    type: string
+                  closedAt:
+                    type: string
+                  firstMessage:
+                    type: string
+                    nullable: true
+        prospects:
+          type: object
+          properties:
+            open:
+              type: integer
+            accepted:
+              type: integer
+            denied:
+              type: integer
+            recentActivity:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  alias:
+                    type: string
+                  status:
+                    type: string
+                  createdAt:
+                    type: string
+        seeding:
+          type: object
+          properties:
+            activeSession:
+              oneOf:
+                - $ref: "#/components/schemas/SeedingSession"
+                - type: "null"
+            recentSessions:
+              type: array
+              items:
+                $ref: "#/components/schemas/SeedingSession"
+            config:
+              type: object
+              nullable: true
+              properties:
+                enabled:
+                  type: boolean
+                seedThreshold:
+                  type: integer
+        botStatus:
+          oneOf:
+            - $ref: "#/components/schemas/BotStatus"
+            - type: "null"

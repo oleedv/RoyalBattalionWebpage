@@ -1,6 +1,7 @@
 import SFTPClient from "ssh2-sftp-client";
 import { generateAdminsCfg } from "./cfg-generator";
 import prisma from "./db";
+import { decrypt } from "./crypto";
 
 export async function triggerSftpDeploy(server?: string): Promise<void> {
   // If server is specified, deploy only that server; otherwise deploy all configured servers
@@ -38,7 +39,7 @@ async function deployForServer(server: string): Promise<void> {
   const host = config.sftpHost;
   const port = config.sftpPort || 22;
   const username = config.sftpUser;
-  const password = config.sftpPass;
+  const password = config.sftpPass ? decrypt(config.sftpPass) : null;
   const remotePath = config.sftpPath;
 
   if (!host || !username || !password || !remotePath) {

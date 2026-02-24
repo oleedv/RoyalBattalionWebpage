@@ -7,6 +7,7 @@ import type {
 import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission, getAllowedTicketTiers } from "../middleware/permissions";
+import { rateLimit } from "../middleware/rate-limit";
 import type { Permission } from "shared";
 
 const tickets = new Hono();
@@ -20,7 +21,7 @@ tickets.use("*", async (c, next) => {
 });
 
 // --- Public route: lookup prospect by UUID ---
-tickets.get("/by-uuid/prospect/:uuid", async (c) => {
+tickets.get("/by-uuid/prospect/:uuid", rateLimit(30), async (c) => {
   const uuid = c.req.param("uuid");
 
   const prospectRows: any[] = await getSecretaryDb().$queryRawUnsafe(
@@ -111,7 +112,7 @@ tickets.get("/by-uuid/prospect/:uuid", async (c) => {
 });
 
 // --- Public route: lookup ticket by UUID ---
-tickets.get("/by-uuid/:uuid", async (c) => {
+tickets.get("/by-uuid/:uuid", rateLimit(30), async (c) => {
   const uuid = c.req.param("uuid");
 
   const ticketRows: any[] = await getSecretaryDb().$queryRawUnsafe(

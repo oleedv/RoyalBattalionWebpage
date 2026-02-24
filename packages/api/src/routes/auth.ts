@@ -6,6 +6,7 @@ import type { Permission, ApiResponse, AuthSyncResponse, AuthMeResponse } from "
 import prisma from "../lib/db";
 import { fetchDiscordUser, fetchGuildRoles } from "../lib/discord";
 import { authMiddleware } from "../middleware/auth";
+import { rateLimit } from "../middleware/rate-limit";
 
 const auth = new Hono();
 
@@ -18,7 +19,7 @@ const getSecret = () => new TextEncoder().encode(process.env.JWT_SECRET!);
 const SYNC_CACHE_TTL_MS = 60 * 1000; // 1 minute
 const syncCache = new Map<string, { data: ApiResponse<AuthSyncResponse>; expiry: number }>();
 
-auth.post("/sync", zValidator("json", syncSchema), async (c) => {
+auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
   const { accessToken } = c.req.valid("json");
   const guildId = process.env.DISCORD_GUILD_ID;
 
@@ -95,15 +96,16 @@ auth.post("/sync", zValidator("json", syncSchema), async (c) => {
 
     console.log(`[auth/sync] Final permissions for ${discordUser.username}:`, permissions);
 
-    // Master user: always grant admin
-    if (discordUser.id === "195412349153312768" && !permissions.includes("admin")) {
+    // Master users: always grant admin (configured via ADMIN_DISCORD_IDS env var)
+    const adminIds = (process.env.ADMIN_DISCORD_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (adminIds.includes(discordUser.id) && !permissions.includes("admin")) {
       permissions.push("admin");
     }
 
     // Build JWT
     const token = await new SignJWT({ userId: user.id, permissions })
       .setProtectedHeader({ alg: "HS256" })
-      .setExpirationTime("24h")
+      .setExpirationTime("4h")
       .setIssuedAt()
       .sign(getSecret());
 
@@ -135,7 +137,7 @@ auth.post("/sync", zValidator("json", syncSchema), async (c) => {
         error: "NOT_IN_GUILD",
       }, 403);
     }
-    return c.json<ApiResponse<never>>({ success: false, error: message }, 500);
+    return c.json<ApiResponse<never>>({ success: false, error: "Auth sync failed" }, 500);
   }
 });
 

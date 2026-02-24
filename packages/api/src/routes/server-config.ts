@@ -5,6 +5,7 @@ import type { ApiResponse, ServerConfig } from "shared";
 import prisma from "../lib/db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
+import { encrypt, isEncryptionAvailable } from "../lib/crypto";
 
 const serverConfig = new Hono();
 
@@ -28,7 +29,7 @@ function toConfig(c: {
     sftpHost: c.sftpHost,
     sftpPort: c.sftpPort,
     sftpUser: c.sftpUser,
-    sftpPass: c.sftpPass,
+    sftpPass: c.sftpPass ? "********" : null,
     sftpPath: c.sftpPath,
     syncEnabled: c.syncEnabled,
   };
@@ -55,6 +56,14 @@ const upsertSchema = z.object({
 serverConfig.post("/", requirePermission("admin"), zValidator("json", upsertSchema), async (c) => {
   const body = c.req.valid("json");
 
+  // Encrypt SFTP password if encryption is available and a password is provided
+  const encryptPass = (pass: string | null | undefined): string | null => {
+    if (pass == null) return null;
+    return isEncryptionAvailable() ? encrypt(pass) : pass;
+  };
+
+  const sftpPass = encryptPass(body.sftpPass);
+
   const config = await prisma.serverConfig.upsert({
     where: { server: body.server },
     create: {
@@ -63,7 +72,7 @@ serverConfig.post("/", requirePermission("admin"), zValidator("json", upsertSche
       sftpHost: body.sftpHost ?? null,
       sftpPort: body.sftpPort ?? 22,
       sftpUser: body.sftpUser ?? null,
-      sftpPass: body.sftpPass ?? null,
+      sftpPass: sftpPass,
       sftpPath: body.sftpPath ?? null,
       syncEnabled: body.syncEnabled ?? true,
     },
@@ -72,7 +81,7 @@ serverConfig.post("/", requirePermission("admin"), zValidator("json", upsertSche
       ...(body.sftpHost !== undefined && { sftpHost: body.sftpHost }),
       ...(body.sftpPort !== undefined && { sftpPort: body.sftpPort }),
       ...(body.sftpUser !== undefined && { sftpUser: body.sftpUser }),
-      ...(body.sftpPass !== undefined && { sftpPass: body.sftpPass }),
+      ...(body.sftpPass !== undefined && { sftpPass }),
       ...(body.sftpPath !== undefined && { sftpPath: body.sftpPath }),
       ...(body.syncEnabled !== undefined && { syncEnabled: body.syncEnabled }),
     },

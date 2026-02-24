@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
+import { rateLimit, globalRateLimit } from "./middleware/rate-limit";
 import { jwtVerify } from "jose";
 import auth from "./routes/auth";
 import users from "./routes/users";
@@ -23,6 +25,9 @@ import type { Permission } from "shared";
 import type { ServerWebSocket } from "bun";
 
 const app = new Hono();
+
+app.use("*", secureHeaders());
+app.use("*", globalRateLimit(200));
 
 app.use(
   "*",
@@ -50,8 +55,17 @@ app.route("/squadjs-config", squadjsConfig);
 app.route("/server-config", serverConfig);
 app.route("/discord-bot", discordBot);
 
-// Public cfg endpoint (no auth) -- separate from /whitelist to avoid auth middleware
+// Public cfg endpoint (IP-restricted) -- separate from /whitelist to avoid auth middleware
 app.get("/admins.cfg", async (c) => {
+  const allowedIps = (process.env.CFG_ALLOWED_IPS || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (allowedIps.length > 0) {
+    const clientIp = c.req.header("x-forwarded-for")?.split(",")[0]?.trim()
+      || c.req.header("x-real-ip")
+      || "unknown";
+    if (!allowedIps.includes(clientIp)) {
+      return c.text("Forbidden", 403);
+    }
+  }
   const server = c.req.query("server");
   const cfg = await generateAdminsCfg(server || undefined);
   return c.text(cfg, 200, { "Content-Type": "text/plain" });

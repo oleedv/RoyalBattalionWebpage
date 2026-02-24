@@ -402,12 +402,16 @@ async function handleAdminAction(
         break;
 
       case "switchteam": {
-        const playerId = msg.steamId || msg.eosId;
-        if (!playerId) {
+        if (!msg.steamId && !msg.eosId) {
           ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing player ID" }));
           return;
         }
-        await squadjsSocket.executeRcon(serverKey, "forceTeamChange", playerId);
+        if (msg.steamId) {
+          await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChange ${msg.steamId}`);
+        } else {
+          await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChangeById ${msg.eosId}`);
+        }
+        const playerId = msg.steamId || msg.eosId;
         auditDirect(ws.data.userId, ws.data.userName, "rcon.switchteam", "LiveServer", serverKey, { playerId });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchteam" }));
         break;
@@ -420,9 +424,12 @@ async function handleAdminAction(
         }
         let switched = 0;
         for (const p of msg.players) {
-          const pid = p.steamId || p.eosId;
-          if (!pid) continue;
-          await squadjsSocket.executeRcon(serverKey, "forceTeamChange", pid);
+          if (!p.steamId && !p.eosId) continue;
+          if (p.steamId) {
+            await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChange ${p.steamId}`);
+          } else {
+            await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChangeById ${p.eosId}`);
+          }
           switched++;
           if (switched < msg.players.length) {
             await new Promise((r) => setTimeout(r, 100));

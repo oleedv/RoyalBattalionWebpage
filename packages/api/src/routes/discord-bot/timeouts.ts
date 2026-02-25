@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../generated/prisma/client";
 import type { TicketTimeout } from "shared";
 import getSecretaryDb from "../../lib/secretary-db";
 import { requirePermission } from "../../middleware/permissions";

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../generated/prisma/client";
 import type {
   ApiResponse,
   Ticket,

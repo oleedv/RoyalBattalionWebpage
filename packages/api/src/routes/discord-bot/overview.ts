@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../generated/prisma/client";
 import type { DiscordBotOverview, BotStatus, SeedingSession, Permission } from "shared";
 import getSecretaryDb from "../../lib/secretary-db";
 import { requirePermission, getAllowedTicketTiers } from "../../middleware/permissions";

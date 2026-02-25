@@ -8,15 +8,31 @@ datasource db {
 }
 
 model User {
-  id          String     @id @default(cuid())
-  discordId   String     @unique
-  discordName String
-  steamId     String?    @unique
-  eosId       String?    @unique
-  avatarUrl   String?
-  roles       UserRole[]
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id             String          @id @default(cuid())
+  discordId      String          @unique
+  discordName    String
+  steamId        String?         @unique
+  eosId          String?         @unique
+  avatarUrl      String?
+  country        String?
+  membershipDate DateTime?
+  dateOfBirth    DateTime?
+  roles          UserRole[]
+  comments       MemberComment[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model MemberComment {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  authorId   String
+  authorName String
+  text       String   @db.Text
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
 }
 
 model DiscordRole {

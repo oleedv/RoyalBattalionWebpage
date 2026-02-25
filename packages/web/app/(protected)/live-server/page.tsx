@@ -762,7 +762,7 @@ export default function LiveServerPage() {
       </Modal>
 
       {/* Main grid: Players + Chat */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3 lg:max-h-[calc(100vh-16rem)]">
         {/* Player list - 2 cols */}
         <div className="lg:col-span-2 flex flex-col">
           <div className="facet-border flex flex-1 flex-col rounded-sm bg-bg-card">
@@ -839,7 +839,7 @@ export default function LiveServerPage() {
         </div>
 
         {/* Chat + Broadcast */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 lg:min-h-0 lg:overflow-hidden">
           {/* Broadcast */}
           {canManage && (
             <form
@@ -864,7 +864,7 @@ export default function LiveServerPage() {
           )}
 
           {/* Chat feed */}
-          <div className="facet-border flex flex-col rounded-sm bg-bg-card" style={{ height: "350px" }}>
+          <div className="facet-border flex min-h-[200px] lg:min-h-0 flex-1 flex-col rounded-sm bg-bg-card">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
                 Chat
@@ -940,7 +940,7 @@ export default function LiveServerPage() {
           </div>
 
           {/* Console */}
-          <div className="facet-border flex flex-col rounded-sm bg-bg-card" style={{ height: "300px" }}>
+          <div className="facet-border flex min-h-[200px] lg:min-h-0 flex-1 flex-col rounded-sm bg-bg-card">
             <div className="border-b border-border px-4 py-2">
               <div className="flex items-center justify-between">
                 <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">

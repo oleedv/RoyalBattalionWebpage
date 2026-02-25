@@ -8,6 +8,8 @@ import type {
   Clan,
   ServerConfig,
   UserWithRoles,
+  UserWithRolesAndComments,
+  MemberComment,
   Ticket,
   Prospect,
   DiscordRole,
@@ -171,10 +173,44 @@ export function updateRoleWhitelistGrant(
 }
 
 // Users
-const usersClient = createCrudClient<UserWithRoles>("/users");
+const usersClient = createCrudClient<UserWithRolesAndComments>("/users");
 export const getUsers = usersClient.getAll;
-export const updateUser = (token: string, id: string, data: { steamId?: string; eosId?: string }) => usersClient.update(token, id, data);
+export const updateUser = (
+  token: string,
+  id: string,
+  data: {
+    steamId?: string;
+    eosId?: string;
+    country?: string;
+    membershipDate?: string | null;
+    dateOfBirth?: string | null;
+  },
+) => usersClient.update(token, id, data as Record<string, unknown>);
 export const deleteUser = usersClient.remove;
+
+// Member Comments
+export function addMemberComment(
+  token: string,
+  userId: string,
+  text: string,
+): Promise<ApiResponse<MemberComment>> {
+  return request<MemberComment>(`/users/${userId}/comments`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ text }),
+  });
+}
+
+export function deleteMemberComment(
+  token: string,
+  userId: string,
+  commentId: string,
+): Promise<ApiResponse<{ deleted: true }>> {
+  return request<{ deleted: true }>(`/users/${userId}/comments/${commentId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
 
 export function syncUserRoles(
   token: string

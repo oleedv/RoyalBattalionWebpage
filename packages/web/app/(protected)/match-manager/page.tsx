@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   getMatches,
   updateMatch,
   deleteMatch,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { Match } from "shared";
 
 export default function MatchesPage() {
@@ -43,6 +44,16 @@ export default function MatchesPage() {
     }
     init();
   }, [apiToken]);
+
+  const refreshMatches = useCallback(async () => {
+    if (!apiToken) return;
+    try {
+      const res = await getMatches(apiToken);
+      if (res.success && res.data) setMatches(res.data);
+    } catch { /* silent */ }
+  }, [apiToken]);
+
+  useAutoRefresh(refreshMatches, 20_000, !!apiToken && !editingId);
 
   function startEdit(match: Match) {
     setEditingId(match.id);

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getSeedingConfig, updateSeedingConfig, getSeedingSessions } from "@/lib/api-client";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { SeedingConfig, SeedingSession } from "shared";
 
 function SessionBadge({ status }: { status: SeedingSession["status"] }) {
@@ -44,6 +45,22 @@ export default function SeedingTab({ apiToken, canManage }: { apiToken: string; 
   }, [apiToken]);
 
   const isDirty = config && editConfig && JSON.stringify(config) !== JSON.stringify(editConfig);
+
+  const refreshSeeding = useCallback(async () => {
+    try {
+      const [configRes, sessionsRes] = await Promise.all([
+        getSeedingConfig(apiToken),
+        getSeedingSessions(apiToken, 50),
+      ]);
+      if (configRes.success && configRes.data) {
+        setConfig(configRes.data);
+        setEditConfig(configRes.data);
+      }
+      if (sessionsRes.success && sessionsRes.data) setSessions(sessionsRes.data);
+    } catch { /* silent */ }
+  }, [apiToken]);
+
+  useAutoRefresh(refreshSeeding, 20_000, !isDirty && !saving);
 
   async function handleSave() {
     if (!editConfig) return;

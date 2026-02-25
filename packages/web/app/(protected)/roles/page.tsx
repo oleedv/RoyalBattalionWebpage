@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   getRoles,
   createRole,
@@ -9,6 +9,7 @@ import {
   deleteRole,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { DiscordRole, Permission } from "shared";
 import { PERMISSIONS } from "shared";
 
@@ -281,6 +282,17 @@ export default function RolesPage() {
     }
     init();
   }, [apiToken]);
+
+  const refreshRoles = useCallback(async () => {
+    if (!apiToken) return;
+    try {
+      const res = await getRoles(apiToken);
+      if (res.success && res.data) setRoles(res.data);
+    } catch { /* silent */ }
+  }, [apiToken]);
+
+  const hasPending = Object.keys(pendingPerms).length > 0;
+  useAutoRefresh(refreshRoles, 20_000, !!apiToken && !hasPending && !deletingId);
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();

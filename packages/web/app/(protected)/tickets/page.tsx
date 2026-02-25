@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   getTickets,
   getTicket,
@@ -9,6 +9,7 @@ import {
   resolveDiscordNames,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { Ticket, Prospect, Permission } from "shared";
 
 type Tab = "tickets" | "prospects";
@@ -661,6 +662,29 @@ export default function TicketsPage() {
     if (!id) return "--";
     return nameMap[id] || id;
   }
+
+  const refreshData = useCallback(async () => {
+    if (!apiToken) return;
+    try {
+      if (tab === "tickets") {
+        const res = await getTickets(apiToken);
+        if (res.success && res.data) {
+          setTicketsState(res.data);
+          const ids = res.data.flatMap((t) => [t.userId, t.closedBy].filter(Boolean) as string[]);
+          resolveNames(ids);
+        }
+      } else {
+        const res = await getProspects(apiToken);
+        if (res.success && res.data) {
+          setProspects(res.data);
+          const ids = res.data.flatMap((p) => [p.userId, p.closedBy, p.mentorId].filter(Boolean) as string[]);
+          resolveNames(ids);
+        }
+      }
+    } catch { /* silent */ }
+  }, [apiToken, tab]);
+
+  useAutoRefresh(refreshData, 20_000, !!apiToken);
 
   useEffect(() => {
     if (!apiToken) return;

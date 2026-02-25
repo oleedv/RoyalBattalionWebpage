@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getDiscordBotOverview } from "@/lib/api-client";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { DiscordBotOverview, SeedingSession, BotStatus } from "shared";
 
 function StatCard({ label, value, color }: { label: string; value: number; color?: string }) {
@@ -99,6 +100,15 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
       setLoading(false);
     });
   }, [apiToken]);
+
+  const refreshOverview = useCallback(async () => {
+    try {
+      const res = await getDiscordBotOverview(apiToken);
+      if (res.success && res.data) setData(res.data);
+    } catch { /* silent */ }
+  }, [apiToken]);
+
+  useAutoRefresh(refreshOverview, 20_000, !!apiToken);
 
   if (loading) return <div className="text-text-muted">Loading overview...</div>;
   if (error) return <div className="text-danger">{error}</div>;

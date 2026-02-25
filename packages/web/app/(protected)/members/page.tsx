@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getUsers, updateUser, deleteUser, syncUserRoles } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { UserWithRoles } from "shared";
 
 function CopyableId({ value }: { value: string }) {
@@ -70,6 +71,16 @@ export default function MembersPage() {
     }
     init();
   }, [apiToken]);
+
+  const refreshUsers = useCallback(async () => {
+    if (!apiToken) return;
+    try {
+      const res = await getUsers(apiToken);
+      if (res.success && res.data) setUsers(res.data);
+    } catch { /* silent */ }
+  }, [apiToken]);
+
+  useAutoRefresh(refreshUsers, 20_000, !!apiToken && !editingId && !deletingId);
 
   function startEdit(user: UserWithRoles) {
     setEditingId(user.id);

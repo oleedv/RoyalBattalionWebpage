@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { getTickets, getTicket, resolveDiscordNames } from "@/lib/api-client";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
 import type { Ticket, Permission } from "shared";
 
@@ -148,6 +149,19 @@ export default function TicketsTab({ apiToken }: { apiToken: string }) {
       setLoading(false);
     });
   }, [apiToken]);
+
+  const refreshTickets = useCallback(async () => {
+    try {
+      const res = await getTickets(apiToken);
+      if (res.success && res.data) {
+        setTickets(res.data);
+        const ids = res.data.flatMap((t) => [t.userId, t.closedBy].filter(Boolean) as string[]);
+        resolveNames(ids);
+      }
+    } catch { /* silent */ }
+  }, [apiToken]);
+
+  useAutoRefresh(refreshTickets);
 
   async function handleExpand(id: number) {
     if (expandedId === id) { setExpandedId(null); return; }

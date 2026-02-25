@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   getWhitelist,
   addWhitelistEntry,
@@ -19,6 +19,7 @@ import {
   getServerConfigs,
   toggleServerSync,
 } from "@/lib/api-client";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
 import type { WhitelistEntry, WhitelistCandidate, AdminGroup, Clan, ServerConfig } from "shared";
 
@@ -150,6 +151,26 @@ export default function WhitelistPage() {
     }
     loadServer();
   }, [apiToken, activeServer, canManage]);
+
+  const refreshWhitelist = useCallback(async () => {
+    if (!apiToken || !activeServer) return;
+    try {
+      const [wlRes, grpRes, clanRes] = await Promise.all([
+        getWhitelist(apiToken, activeServer),
+        getAdminGroups(apiToken),
+        getClans(apiToken),
+      ]);
+      if (wlRes.success && wlRes.data) setEntries(wlRes.data);
+      if (grpRes.success && grpRes.data) setGroups(grpRes.data);
+      if (clanRes.success && clanRes.data) setClans(clanRes.data);
+      if (canManage) {
+        const candRes = await getWhitelistCandidates(apiToken, activeServer);
+        if (candRes.success && candRes.data) setCandidates(candRes.data);
+      }
+    } catch { /* silent */ }
+  }, [apiToken, activeServer, canManage]);
+
+  useAutoRefresh(refreshWhitelist, 20_000, !!apiToken && !!activeServer);
 
   async function handleToggleSync() {
     if (!apiToken || !activeServer) return;

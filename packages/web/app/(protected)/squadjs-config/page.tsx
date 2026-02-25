@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   getSquadJSEnvironments,
   getSquadJSPlugins,
   updateSquadJSPlugins,
   getSquadJSDescriptions,
 } from "@/lib/api-client";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
 import type { SquadJSPlugin, SquadJSPluginOptionValue } from "shared";
 
@@ -120,6 +121,19 @@ export default function SquadJSConfigPage() {
 
   const isDirty =
     JSON.stringify(plugins) !== JSON.stringify(originalPlugins);
+
+  const refreshPlugins = useCallback(async () => {
+    if (!apiToken || !activeEnv) return;
+    try {
+      const res = await getSquadJSPlugins(apiToken, activeEnv);
+      if (res.success && res.data) {
+        setPlugins(res.data.plugins);
+        setOriginalPlugins(res.data.plugins);
+      }
+    } catch { /* silent */ }
+  }, [apiToken, activeEnv]);
+
+  useAutoRefresh(refreshPlugins, 20_000, !!apiToken && !!activeEnv && !isDirty && !saving && !showDiff);
 
   const canView = hasPermission("view:squadjs") || hasPermission("manage:squadjs");
   const canManage = hasPermission("manage:squadjs");

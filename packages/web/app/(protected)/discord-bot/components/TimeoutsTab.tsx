@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   getTicketTimeouts,
   createTicketTimeout,
   expireTicketTimeout,
   resolveDiscordNames,
 } from "@/lib/api-client";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { TicketTimeout } from "shared";
 
 function fmtDate(iso: string) {
@@ -81,6 +82,19 @@ export default function TimeoutsTab({
   useEffect(() => {
     fetchTimeouts();
   }, [apiToken]);
+
+  const silentRefreshTimeouts = useCallback(async () => {
+    try {
+      const res = await getTicketTimeouts(apiToken);
+      if (res.success && res.data) {
+        setTimeouts(res.data);
+        const ids = res.data.flatMap((t) => [t.userId, t.timedOutBy]);
+        resolveNames(ids);
+      }
+    } catch { /* silent */ }
+  }, [apiToken]);
+
+  useAutoRefresh(silentRefreshTimeouts, 20_000, !showForm);
 
   async function handleCreate() {
     setFormError(null);

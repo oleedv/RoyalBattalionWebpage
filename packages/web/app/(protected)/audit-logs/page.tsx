@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getAuditLogs } from "@/lib/api-client";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
 import type { AuditLogEntry } from "shared";
 
@@ -180,6 +181,26 @@ export default function AuditLogsPage() {
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
+
+  const silentRefreshLogs = useCallback(async () => {
+    if (!apiToken) return;
+    try {
+      const res = await getAuditLogs(apiToken, {
+        page,
+        limit: PAGE_SIZE,
+        action: actionFilter || undefined,
+        resource: resourceFilter || undefined,
+        from: fromDate || undefined,
+        to: toDate ? toDate + "T23:59:59.999Z" : undefined,
+      });
+      if (res.success && res.data) {
+        setLogs(res.data.items);
+        setTotal(res.data.total);
+      }
+    } catch { /* silent */ }
+  }, [apiToken, page, actionFilter, resourceFilter, fromDate, toDate]);
+
+  useAutoRefresh(silentRefreshLogs, 20_000, !!apiToken);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 

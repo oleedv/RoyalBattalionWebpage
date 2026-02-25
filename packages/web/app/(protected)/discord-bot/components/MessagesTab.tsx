@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getBotMessages } from "@/lib/api-client";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { BotMessage } from "shared";
 
 const PAGE_SIZE = 50;
@@ -46,6 +47,27 @@ export default function MessagesTab({ apiToken }: { apiToken: string }) {
   useEffect(() => {
     fetchMessages(page);
   }, [page, fetchMessages]);
+
+  const silentRefreshMessages = useCallback(async () => {
+    try {
+      const res = await getBotMessages(apiToken, {
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+        author: author || undefined,
+        channel: channel || undefined,
+        dm: dmOnly || undefined,
+        search: search || undefined,
+        from: dateFrom || undefined,
+        to: dateTo || undefined,
+      });
+      if (res.success && res.data) {
+        setMessages(res.data.items);
+        setTotal(res.data.total);
+      }
+    } catch { /* silent */ }
+  }, [apiToken, page, author, channel, search, dmOnly, dateFrom, dateTo]);
+
+  useAutoRefresh(silentRefreshMessages, 20_000, !!apiToken);
 
   function applyFilters() {
     setPage(0);

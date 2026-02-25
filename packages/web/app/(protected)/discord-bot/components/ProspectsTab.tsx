@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   getProspects,
   getProspect,
@@ -9,6 +9,7 @@ import {
   unpauseProspect,
   extendProspect,
 } from "@/lib/api-client";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { Prospect } from "shared";
 
 function fmtDate(iso: string) {
@@ -129,6 +130,19 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
       setLoading(false);
     });
   }, [apiToken]);
+
+  const refreshProspects = useCallback(async () => {
+    try {
+      const res = await getProspects(apiToken);
+      if (res.success && res.data) {
+        setProspects(res.data);
+        const ids = res.data.flatMap((p) => [p.userId, p.closedBy, p.mentorId].filter(Boolean) as string[]);
+        resolveNames(ids);
+      }
+    } catch { /* silent */ }
+  }, [apiToken]);
+
+  useAutoRefresh(refreshProspects, 20_000, !actionLoading);
 
   async function handleExpand(id: number) {
     if (expandedId === id) { setExpandedId(null); return; }

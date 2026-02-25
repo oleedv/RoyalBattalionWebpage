@@ -72,6 +72,48 @@ function ActionBadge({ action }: { action: string }) {
   );
 }
 
+function formatDetailSummary(action: string, detail: Record<string, unknown> | null): string | null {
+  if (!detail) return null;
+  const name = detail.playerName as string | undefined;
+  const names = detail.playerNames as string[] | undefined;
+  switch (action) {
+    case "rcon.warn":
+      return name
+        ? `Warned ${name}${detail.message ? ` -- "${detail.message}"` : ""}`
+        : null;
+    case "rcon.kick":
+      return name
+        ? `Kicked ${name}${detail.reason ? ` -- ${detail.reason}` : ""}`
+        : null;
+    case "rcon.switchteam":
+      return name ? `Moved ${name} to other team` : null;
+    case "rcon.switchsquad":
+      return names?.length
+        ? `Moved ${detail.count} players (${names.join(", ")})`
+        : detail.count
+          ? `Moved ${detail.count} players`
+          : null;
+    case "rcon.switchclan":
+      return `Moved ${detail.count || 0} clan members${detail.clanTag ? ` [${detail.clanTag}]` : ""}${names?.length ? ` (${names.join(", ")})` : ""} to Team ${detail.targetTeam || "?"}`;
+    case "rcon.demotecommander":
+      return name ? `Demoted ${name}` : null;
+    case "rcon.broadcast":
+      return detail.message ? `"${detail.message}"` : null;
+    case "rcon.disband":
+      return `Disbanded squad ${detail.squadID || "?"} on team ${detail.teamID || "?"}`;
+    case "rcon.setnextlayer":
+      return detail.layer ? `Set next layer: ${detail.layer}` : null;
+    case "rcon.endmatch":
+      return "Ended current match";
+    case "whitelist.add":
+      return detail.name ? `Added ${detail.name}${detail.server ? ` on ${detail.server}` : ""}` : null;
+    case "whitelist.delete":
+      return detail.name ? `Removed ${detail.name}` : null;
+    default:
+      return null;
+  }
+}
+
 function DetailView({ detail }: { detail: Record<string, unknown> | null }) {
   if (!detail || Object.keys(detail).length === 0) {
     return <span className="text-text-muted">--</span>;
@@ -306,11 +348,20 @@ export default function AuditLogsPage() {
                     <td className="px-4 py-3">
                       {isExpanded ? (
                         <DetailView detail={log.detail} />
-                      ) : log.detail && Object.keys(log.detail).length > 0 ? (
-                        <span className="text-xs text-accent">Click to expand</span>
-                      ) : (
-                        <span className="text-text-muted">--</span>
-                      )}
+                      ) : (() => {
+                        const summary = formatDetailSummary(log.action, log.detail);
+                        if (summary) {
+                          return (
+                            <span className="text-xs text-text-secondary" title="Click for full details">
+                              {summary}
+                            </span>
+                          );
+                        }
+                        if (log.detail && Object.keys(log.detail).length > 0) {
+                          return <span className="text-xs text-accent">Click to expand</span>;
+                        }
+                        return <span className="text-text-muted">--</span>;
+                      })()}
                     </td>
                   </tr>
                 );

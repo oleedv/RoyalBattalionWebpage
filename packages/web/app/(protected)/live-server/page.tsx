@@ -545,6 +545,7 @@ export default function LiveServerPage() {
       action: "warn",
       steamId: warnTarget.steamID,
       eosId: warnTarget.eosID,
+      playerName: warnTarget.name,
       message: warnMsg.trim(),
     });
     setWarnTarget(null);
@@ -557,6 +558,7 @@ export default function LiveServerPage() {
       action: "kick",
       steamId: kickTarget.steamID,
       eosId: kickTarget.eosID,
+      playerName: kickTarget.name,
       reason: kickReason.trim() || "Kicked by admin",
     });
     setKickTarget(null);
@@ -568,6 +570,7 @@ export default function LiveServerPage() {
       action: "switchteam",
       steamId: player.steamID,
       eosId: player.eosID,
+      playerName: player.name,
     });
   }
 
@@ -582,6 +585,7 @@ export default function LiveServerPage() {
       players: switchSquadTarget.players.map((p) => ({
         steamId: p.steamID,
         eosId: p.eosID,
+        name: p.name,
       })),
     });
     setSwitchSquadTarget(null);
@@ -599,7 +603,7 @@ export default function LiveServerPage() {
   }
 
   function handleDemoteCommander(player: Player) {
-    sendAction({ action: "demotecommander", steamId: player.steamID, eosId: player.eosID });
+    sendAction({ action: "demotecommander", steamId: player.steamID, eosId: player.eosID, playerName: player.name });
   }
 
   function handleSwitchClan() {

@@ -488,6 +488,18 @@ class SquadJSSocketManager {
     this.listeners.clear();
   }
 
+  refreshPlayers(serverKey: string): void {
+    const state = this.servers.get(serverKey);
+    if (!state?.connected) return;
+    state.socket.emit("players", (data: SquadJSPlayer[]) => {
+      if (Array.isArray(data)) {
+        state.players = data;
+        if (state.serverInfo) state.serverInfo.playerCount = data.length;
+        this.broadcast(serverKey, "UPDATED_PLAYER_INFORMATION", data);
+      }
+    });
+  }
+
   getServerKeys(): string[] {
     return Array.from(this.servers.keys());
   }

@@ -376,7 +376,7 @@ export default {
 
 async function handleAdminAction(
   ws: ServerWebSocket<WSData>,
-  msg: { action: string; server?: string; steamId?: string; eosId?: string; message?: string; reason?: string; teamID?: string; squadID?: string; players?: { steamId?: string; eosId?: string }[]; clanTag?: string; targetTeam?: string }
+  msg: { action: string; server?: string; steamId?: string; eosId?: string; playerName?: string; message?: string; reason?: string; teamID?: string; squadID?: string; players?: { steamId?: string; eosId?: string; name?: string }[]; clanTag?: string; clanId?: string; targetTeam?: string }
 ) {
   const serverKey = ws.data.serverKey;
   console.log(`[live-server] RCON ${msg.action} from user ${ws.data.userId} on ${serverKey}`);
@@ -390,7 +390,7 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "warn", playerId, msg.message);
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.warn", "LiveServer", serverKey, { playerId, message: msg.message });
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.warn", "LiveServer", serverKey, { playerId, playerName: msg.playerName, message: msg.message });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "warn" }));
         break;
       }
@@ -402,8 +402,9 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "kick", playerId, msg.reason || "Kicked by admin");
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.kick", "LiveServer", serverKey, { playerId, reason: msg.reason });
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.kick", "LiveServer", serverKey, { playerId, playerName: msg.playerName, reason: msg.reason });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "kick" }));
+        setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
         break;
       }
 
@@ -428,8 +429,9 @@ async function handleAdminAction(
           await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChangeById ${msg.eosId}`);
         }
         const playerId = msg.steamId || msg.eosId;
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchteam", "LiveServer", serverKey, { playerId });
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchteam", "LiveServer", serverKey, { playerId, playerName: msg.playerName });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchteam" }));
+        setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
         break;
       }
 
@@ -451,8 +453,9 @@ async function handleAdminAction(
             await new Promise((r) => setTimeout(r, 100));
           }
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchsquad", "LiveServer", serverKey, { count: switched });
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchsquad", "LiveServer", serverKey, { count: switched, playerNames: msg.players!.map((p) => p.name).filter(Boolean) });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchsquad" }));
+        setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
         break;
       }
 
@@ -464,6 +467,7 @@ async function handleAdminAction(
         await squadjsSocket.executeRcon(serverKey, "execute", `AdminDisbandSquad ${msg.teamID} ${msg.squadID}`);
         auditDirect(ws.data.userId, ws.data.userName, "rcon.disband", "LiveServer", serverKey, { teamID: msg.teamID, squadID: msg.squadID });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "disband" }));
+        setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
         break;
       }
 
@@ -496,7 +500,7 @@ async function handleAdminAction(
           await squadjsSocket.executeRcon(serverKey, "execute", `AdminDemoteCommander ${msg.eosId}`);
         }
         const playerId = msg.steamId || msg.eosId;
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.demotecommander", "LiveServer", serverKey, { playerId });
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.demotecommander", "LiveServer", serverKey, { playerId, playerName: msg.playerName });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "demotecommander" }));
         break;
       }
@@ -540,8 +544,9 @@ async function handleAdminAction(
             await new Promise((r) => setTimeout(r, 100));
           }
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchclan", "LiveServer", serverKey, { clanId: msg.clanId, clanTag: msg.clanTag, targetTeam: msg.targetTeam, count: switched });
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchclan", "LiveServer", serverKey, { clanId: msg.clanId, clanTag: msg.clanTag, targetTeam: msg.targetTeam, count: switched, playerNames: toSwitch.map((p) => p.name) });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchclan" }));
+        setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
         break;
       }
 

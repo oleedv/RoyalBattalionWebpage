@@ -56,11 +56,19 @@ const EVENTS_TO_RELAY = [
   "PLAYER_WARNED",
   "SQUAD_CREATED",
   "ADMIN_BROADCAST",
+  "POSSESSED_ADMIN_CAMERA",
+  "UNPOSSESSED_ADMIN_CAMERA",
+  "RCON_ERROR",
+  "PLAYER_TEAM_CHANGE",
+  "PLAYER_SQUAD_CHANGE",
+  "UPDATED_LAYER_INFORMATION",
+  "PLAYER_AUTO_KICKED",
+  "ROUND_ENDED",
 ];
 
 export interface ConsoleEntry {
   time: string;
-  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "kill" | "newgame";
+  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "kill" | "newgame" | "admincam" | "rconerror" | "teamchange" | "squadchange" | "autokick" | "roundend";
   message: string;
 }
 
@@ -386,6 +394,74 @@ class SquadJSSocketManager {
       case "TEAMKILL": {
         const tk = data as { attacker?: { name?: string }; victim?: { name?: string }; weapon?: string };
         this.addConsoleEntry(state, "teamkill", `${tk?.attacker?.name || "Unknown"} teamkilled ${tk?.victim?.name || "Unknown"}${tk?.weapon ? ` (${tk.weapon})` : ""}`);
+        break;
+      }
+      case "POSSESSED_ADMIN_CAMERA": {
+        const pac = data as { player?: { name?: string } };
+        if (pac?.player?.name) this.addConsoleEntry(state, "admincam", `${pac.player.name} entered admin cam`);
+        break;
+      }
+      case "UNPOSSESSED_ADMIN_CAMERA": {
+        const uac = data as { player?: { name?: string } };
+        if (uac?.player?.name) this.addConsoleEntry(state, "admincam", `${uac.player.name} left admin cam`);
+        break;
+      }
+      case "RCON_ERROR": {
+        const re = data as { error?: string; message?: string };
+        this.addConsoleEntry(state, "rconerror", `RCON error: ${re?.error || re?.message || "Unknown error"}`);
+        break;
+      }
+      case "PLAYER_TEAM_CHANGE": {
+        const ptc = data as { player?: { name?: string }; newTeamID?: string; oldTeamID?: string };
+        if (ptc?.player?.name) this.addConsoleEntry(state, "teamchange", `${ptc.player.name} switched to Team ${ptc.newTeamID || "?"}`);
+        break;
+      }
+      case "PLAYER_SQUAD_CHANGE": {
+        const psc = data as { player?: { name?: string }; newSquad?: { squadName?: string }; newSquadID?: string };
+        if (psc?.player?.name) {
+          const squadName = psc.newSquad?.squadName || (psc.newSquadID ? `Squad ${psc.newSquadID}` : "Unassigned");
+          this.addConsoleEntry(state, "squadchange", `${psc.player.name} moved to ${squadName}`);
+        }
+        break;
+      }
+      case "UPDATED_LAYER_INFORMATION": {
+        if (data && typeof data === "object" && state.serverInfo) {
+          const li = data as Record<string, unknown>;
+          if (li.currentLayer != null) {
+            const cl = li.currentLayer;
+            if (typeof cl === "object") {
+              const obj = cl as Record<string, unknown>;
+              if (obj.name) state.serverInfo.currentLayer = String(obj.name);
+              if (Array.isArray(obj.teams) && obj.teams.length >= 2) {
+                const t1 = obj.teams[0] as Record<string, unknown>;
+                const t2 = obj.teams[1] as Record<string, unknown>;
+                if (t1?.faction) state.serverInfo.team1Faction = String(t1.faction);
+                if (t2?.faction) state.serverInfo.team2Faction = String(t2.faction);
+              }
+            } else {
+              state.serverInfo.currentLayer = String(cl);
+            }
+          }
+          if (li.nextLayer !== undefined) {
+            const nl = li.nextLayer;
+            if (typeof nl === "object" && nl !== null && "name" in (nl as object)) {
+              state.serverInfo.nextLayer = String((nl as Record<string, unknown>).name);
+            } else {
+              state.serverInfo.nextLayer = nl as string ?? state.serverInfo.nextLayer;
+            }
+          }
+        }
+        break;
+      }
+      case "PLAYER_AUTO_KICKED": {
+        const pak = data as { player?: { name?: string }; reason?: string };
+        this.addConsoleEntry(state, "autokick", `${pak?.player?.name || "Unknown"} auto-kicked: ${pak?.reason || "Unassigned"}`);
+        break;
+      }
+      case "ROUND_ENDED": {
+        const rnd = data as { winner?: string; loser?: string; message?: string };
+        const msg = rnd?.message || (rnd?.winner ? `Winner: ${rnd.winner}` : "Round ended");
+        this.addConsoleEntry(state, "roundend", msg);
         break;
       }
     }

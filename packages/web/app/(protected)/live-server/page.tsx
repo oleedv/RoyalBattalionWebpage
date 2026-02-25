@@ -109,7 +109,7 @@ type WSMessage =
 
 interface ConsoleEntry {
   time: string;
-  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "kill" | "newgame" | "wound" | "revive" | "squad";
+  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "kill" | "newgame" | "wound" | "revive" | "squad" | "admincam" | "rconerror" | "teamchange" | "squadchange" | "autokick" | "roundend";
   message: string;
 }
 
@@ -117,6 +117,7 @@ type ChatFilter = "All" | "ChatAll" | "ChatTeam" | "ChatSquad" | "ChatAdmin";
 
 const CONSOLE_TYPES: ConsoleEntry["type"][] = [
   "warn", "kick", "ban", "broadcast", "connect", "disconnect", "teamkill", "kill", "newgame", "wound", "revive", "squad",
+  "admincam", "rconerror", "teamchange", "squadchange", "autokick", "roundend",
 ];
 
 const WARN_TEMPLATES = [
@@ -156,7 +157,14 @@ export default function LiveServerPage() {
   const [metricHistory, setMetricHistory] = useState<MetricSample[]>([]);
   const [team1Search, setTeam1Search] = useState("");
   const [team2Search, setTeam2Search] = useState("");
-  const [consoleFilters, setConsoleFilters] = useState<Set<ConsoleEntry["type"]>>(new Set(CONSOLE_TYPES));
+  const [consoleFilters, setConsoleFilters] = useState<Set<ConsoleEntry["type"]>>(() => {
+    if (typeof window === "undefined") return new Set(CONSOLE_TYPES);
+    try {
+      const stored = localStorage.getItem("rb-console-filters");
+      if (stored) return new Set(JSON.parse(stored));
+    } catch {}
+    return new Set(CONSOLE_TYPES);
+  });
   const [consoleFilterOpen, setConsoleFilterOpen] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [activity, setActivity] = useState(false);
@@ -209,12 +217,15 @@ export default function LiveServerPage() {
       const msg: WSMessage = JSON.parse(event.data);
 
       switch (msg.type) {
-        case "servers":
+        case "servers": {
           setServerKeys(msg.data);
+          const stored = localStorage.getItem("rb-default-server");
+          const initial = (stored && msg.data.includes(stored)) ? stored : msg.data[0];
           setActiveServer((prev) =>
-            !prev && msg.data.length > 0 ? msg.data[0] : prev
+            !prev && msg.data.length > 0 ? initial : prev
           );
           break;
+        }
         case "snapshot":
           setSquadjsConnected(msg.data.connected);
           setPlayers(msg.data.players);
@@ -369,6 +380,67 @@ export default function LiveServerPage() {
         if (sc?.squad?.squadName) {
           addConsoleEntry("squad", `Squad "${sc.squad.squadName}" created${sc.player?.name ? ` by ${sc.player.name}` : ""}`);
         }
+        break;
+      }
+      case "POSSESSED_ADMIN_CAMERA": {
+        const pac = data as { player?: { name?: string } };
+        if (pac?.player?.name) addConsoleEntry("admincam", `${pac.player.name} entered admin cam`);
+        break;
+      }
+      case "UNPOSSESSED_ADMIN_CAMERA": {
+        const uac = data as { player?: { name?: string } };
+        if (uac?.player?.name) addConsoleEntry("admincam", `${uac.player.name} left admin cam`);
+        break;
+      }
+      case "RCON_ERROR": {
+        const re = data as { error?: string; message?: string };
+        addConsoleEntry("rconerror", `RCON error: ${re?.error || re?.message || "Unknown error"}`);
+        break;
+      }
+      case "PLAYER_TEAM_CHANGE": {
+        const ptc = data as { player?: { name?: string }; newTeamID?: string };
+        if (ptc?.player?.name) addConsoleEntry("teamchange", `${ptc.player.name} switched to Team ${ptc.newTeamID || "?"}`);
+        break;
+      }
+      case "PLAYER_SQUAD_CHANGE": {
+        const psc = data as { player?: { name?: string }; newSquad?: { squadName?: string }; newSquadID?: string };
+        if (psc?.player?.name) {
+          const squadName = psc.newSquad?.squadName || (psc.newSquadID ? `Squad ${psc.newSquadID}` : "Unassigned");
+          addConsoleEntry("squadchange", `${psc.player.name} moved to ${squadName}`);
+        }
+        break;
+      }
+      case "UPDATED_LAYER_INFORMATION": {
+        if (data && typeof data === "object") {
+          const li = data as Record<string, unknown>;
+          setServerInfo((prev) => {
+            if (!prev) return prev;
+            const updated = { ...prev };
+            if (li.currentLayer != null) {
+              updated.currentLayer = li.currentLayer as ServerInfo["currentLayer"];
+            }
+            if (li.nextLayer !== undefined) {
+              updated.nextLayer = li.nextLayer as ServerInfo["nextLayer"];
+            }
+            return updated;
+          });
+        }
+        break;
+      }
+      case "PLAYER_AUTO_KICKED": {
+        const pak = data as { player?: { name?: string }; reason?: string };
+        addConsoleEntry("autokick", `${pak?.player?.name || "Unknown"} auto-kicked: ${pak?.reason || "Unassigned"}`);
+        break;
+      }
+      case "ROUND_ENDED": {
+        const rnd = data as { winner?: string; loser?: string; message?: string };
+        const msg = rnd?.message || (rnd?.winner ? `Winner: ${rnd.winner}` : "Round ended");
+        addConsoleEntry("roundend", msg);
+        setChatLog((prev) => {
+          const divider: ChatMessage = { chat: "__DIVIDER__", steamID: "", eosID: "", name: "", message: msg, time: new Date().toISOString() };
+          const next = [...prev, divider];
+          return next.length > 100 ? next.slice(-100) : next;
+        });
         break;
       }
     }
@@ -571,6 +643,12 @@ export default function LiveServerPage() {
       case "revive": return "text-emerald-400";
       case "squad": return "text-blue-400";
       case "newgame": return "text-accent font-bold";
+      case "admincam": return "text-purple-400";
+      case "rconerror": return "text-danger font-bold";
+      case "teamchange": return "text-blue-400/70";
+      case "squadchange": return "text-text-muted";
+      case "autokick": return "text-danger";
+      case "roundend": return "text-accent font-bold";
       default: return "text-text-secondary";
     }
   }
@@ -580,6 +658,7 @@ export default function LiveServerPage() {
       const next = new Set(prev);
       if (next.has(type)) next.delete(type);
       else next.add(type);
+      localStorage.setItem("rb-console-filters", JSON.stringify([...next]));
       return next;
     });
   }

@@ -102,7 +102,7 @@ type OnlineClanData = Record<string, OnlineClanEntry>;
 
 type WSMessage =
   | { type: "servers"; data: string[] }
-  | { type: "snapshot"; data: Snapshot; server?: string }
+  | { type: "snapshot"; data: Snapshot; server?: string; configured?: boolean }
   | { type: "event"; event: string; data: unknown; server?: string }
   | { type: "action_result"; success: boolean; error?: string; action?: string }
   | { type: "online_clans"; data: OnlineClanData };
@@ -137,6 +137,7 @@ export default function LiveServerPage() {
 
   const [connected, setConnected] = useState(false);
   const [squadjsConnected, setSquadjsConnected] = useState(false);
+  const [squadjsConfigured, setSquadjsConfigured] = useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
   const [chatLog, setChatLog] = useState<ChatMessage[]>([]);
@@ -227,6 +228,7 @@ export default function LiveServerPage() {
           break;
         }
         case "snapshot":
+          if (msg.configured !== undefined) setSquadjsConfigured(msg.configured);
           setSquadjsConnected(msg.data.connected);
           setPlayers(msg.data.players);
           setServerInfo(msg.data.serverInfo);
@@ -732,9 +734,11 @@ export default function LiveServerPage() {
             <span className="text-xs text-text-muted">
               {connected && squadjsConnected
                 ? "Connected"
-                : connected
-                  ? "API connected, SquadJS disconnected"
-                  : "Disconnected"}
+                : connected && !squadjsConfigured
+                  ? "SquadJS not configured (SQUADJS_SERVERS env var missing)"
+                  : connected
+                    ? "API connected, SquadJS disconnected"
+                    : "Disconnected"}
             </span>
           </div>
         </div>

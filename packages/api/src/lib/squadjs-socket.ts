@@ -120,7 +120,7 @@ class SquadJSSocketManager {
     const configs = parseServers();
 
     if (configs.length === 0) {
-      console.log("[squadjs-socket] SQUADJS_SERVERS not set, skipping");
+      console.warn("[squadjs-socket] SQUADJS_SERVERS not set — live server will show as offline");
       return;
     }
 
@@ -520,6 +520,16 @@ class SquadJSSocketManager {
 
   isConfigured(): boolean {
     return this.servers.size > 0;
+  }
+
+  getStatus(): { configured: boolean; servers: { key: string; connected: boolean }[] } {
+    return {
+      configured: this.servers.size > 0,
+      servers: Array.from(this.servers.entries()).map(([key, state]) => ({
+        key,
+        connected: state.connected,
+      })),
+    };
   }
 
   async executeRcon(serverKey: string, method: string, ...args: unknown[]): Promise<unknown> {

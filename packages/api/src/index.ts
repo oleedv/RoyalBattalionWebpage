@@ -76,6 +76,7 @@ app.get("/admins.cfg", async (c) => {
 });
 
 app.get("/health", (c) => c.json({ status: "ok" }));
+app.get("/live-server/health", (c) => c.json(squadjsSocket.getStatus()));
 
 // Global error handler -- return JSON instead of plain text for unhandled exceptions
 app.onError((err, c) => {
@@ -288,11 +289,13 @@ export default {
       );
 
       const snapshot = squadjsSocket.getSnapshot(ws.data.serverKey);
+      const configured = squadjsSocket.isConfigured();
       ws.send(
         JSON.stringify({
           type: "snapshot",
           data: snapshot || { connected: false, players: [], serverInfo: null, chatLog: [], consoleLog: [], tickRate: null, metricHistory: [] },
           server: ws.data.serverKey,
+          configured,
         })
       );
     },
@@ -333,6 +336,7 @@ export default {
             type: "snapshot",
             data: snapshot || { connected: false, players: [], serverInfo: null, chatLog: [], consoleLog: [], tickRate: null, metricHistory: [] },
             server: msg.server,
+            configured: squadjsSocket.isConfigured(),
           }));
           return;
         }

@@ -1,4 +1,5 @@
 import { createMiddleware } from "hono/factory";
+import { logger } from "../lib/logger";
 
 interface RateLimitEntry {
   count: number;
@@ -54,7 +55,7 @@ export function rateLimit(maxRequests: number, windowMs: number = 60_000) {
     if (result.limited) {
       const retryAfterMs = Math.max(0, result.resetAt - Date.now());
       const retryAfterSec = Math.ceil(retryAfterMs / 1000);
-      console.warn(`[rate-limit] BLOCKED scope=route path=${path} ip=${ip} count=${result.count}/${maxRequests} retryIn=${retryAfterSec}s`);
+      logger.warn("rate-limit", `BLOCKED scope=route path=${path} ip=${ip} count=${result.count}/${maxRequests} retryIn=${retryAfterSec}s`);
       c.header("Retry-After", String(retryAfterSec));
       return c.json({
         success: false,
@@ -80,7 +81,7 @@ export function globalRateLimit(maxRequests: number = 200, windowMs: number = 60
     if (result.limited) {
       const retryAfterMs = Math.max(0, result.resetAt - Date.now());
       const retryAfterSec = Math.ceil(retryAfterMs / 1000);
-      console.warn(`[rate-limit] BLOCKED scope=global path=${path} ip=${ip} count=${result.count}/${maxRequests} retryIn=${retryAfterSec}s`);
+      logger.warn("rate-limit", `BLOCKED scope=global path=${path} ip=${ip} count=${result.count}/${maxRequests} retryIn=${retryAfterSec}s`);
       c.header("Retry-After", String(retryAfterSec));
       return c.json({
         success: false,

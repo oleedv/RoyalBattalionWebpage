@@ -2,8 +2,9 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { PERMISSIONS } from "shared";
-import type { ApiResponse, DiscordRole, Permission } from "shared";
+import type { DiscordRole, Permission } from "shared";
 import prisma from "../lib/db";
+import { findOrThrow, success, fail } from "../lib/crud-helpers";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { audit } from "../lib/audit";
@@ -37,10 +38,7 @@ roles.get("/", async (c) => {
     grantsWhitelist: r.grantsWhitelist,
   }));
 
-  return c.json<ApiResponse<DiscordRole[]>>({
-    success: true,
-    data: result,
-  });
+  return success(c, result);
 });
 
 roles.post("/", zValidator("json", createRoleSchema), async (c) => {
@@ -68,12 +66,9 @@ roles.post("/", zValidator("json", createRoleSchema), async (c) => {
 
     audit(c, "role.create", "DiscordRole", role.id, { name, discordRoleId, permissions });
 
-    return c.json<ApiResponse<DiscordRole>>({ success: true, data: result }, 201);
+    return success(c, result, 201);
   } catch {
-    return c.json<ApiResponse<never>>({
-      success: false,
-      error: "Failed to create role. The Discord role ID may already be mapped.",
-    }, 400);
+    return fail(c, "Failed to create role. The Discord role ID may already be mapped.");
   }
 });
 
@@ -81,10 +76,7 @@ roles.put("/:id/permissions", zValidator("json", updatePermissionsSchema), async
   const id = c.req.param("id");
   const { permissions } = c.req.valid("json");
 
-  const existing = await prisma.discordRole.findUnique({ where: { id } });
-  if (!existing) {
-    return c.json<ApiResponse<never>>({ success: false, error: "Role not found" }, 404);
-  }
+  const existing = await findOrThrow(prisma.discordRole, { id }, "Role");
 
   // Replace all permissions
   await prisma.rolePermission.deleteMany({ where: { roleId: id } });
@@ -107,7 +99,7 @@ roles.put("/:id/permissions", zValidator("json", updatePermissionsSchema), async
 
   audit(c, "role.update_permissions", "DiscordRole", id, { name: existing.name, permissions });
 
-  return c.json<ApiResponse<DiscordRole>>({ success: true, data: result });
+  return success(c, result);
 });
 
 const whitelistGrantSchema = z.object({
@@ -118,10 +110,7 @@ roles.put("/:id/whitelist-grant", zValidator("json", whitelistGrantSchema), asyn
   const id = c.req.param("id");
   const { grantsWhitelist } = c.req.valid("json");
 
-  const existing = await prisma.discordRole.findUnique({ where: { id } });
-  if (!existing) {
-    return c.json<ApiResponse<never>>({ success: false, error: "Role not found" }, 404);
-  }
+  const existing = await findOrThrow(prisma.discordRole, { id }, "Role");
 
   await prisma.discordRole.update({
     where: { id },
@@ -130,22 +119,19 @@ roles.put("/:id/whitelist-grant", zValidator("json", whitelistGrantSchema), asyn
 
   audit(c, "role.update_whitelist_grant", "DiscordRole", id, { name: existing.name, grantsWhitelist });
 
-  return c.json<ApiResponse<{ updated: true }>>({ success: true, data: { updated: true } });
+  return success(c, { updated: true as const });
 });
 
 roles.delete("/:id", async (c) => {
   const id = c.req.param("id");
 
-  const existing = await prisma.discordRole.findUnique({ where: { id } });
-  if (!existing) {
-    return c.json<ApiResponse<never>>({ success: false, error: "Role not found" }, 404);
-  }
+  const existing = await findOrThrow(prisma.discordRole, { id }, "Role");
 
   await prisma.discordRole.delete({ where: { id } });
 
   audit(c, "role.delete", "DiscordRole", id, { name: existing.name, discordRoleId: existing.discordRoleId });
 
-  return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
+  return success(c, { deleted: true as const });
 });
 
 export default roles;

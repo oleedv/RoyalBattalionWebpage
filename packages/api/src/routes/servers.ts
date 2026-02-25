@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { ApiResponse } from "shared";
+import { env } from "../lib/env";
 
 const servers = new Hono();
 
@@ -24,8 +25,8 @@ let cache: { data: ServerStatus[]; expiry: number } | null = null;
 const DEFAULT_SERVER_IDS = ["27560507", "36099124"];
 
 function getServerIds(): string[] {
-  const env = process.env.BATTLEMETRICS_SERVER_IDS;
-  if (env) return env.split(",").map((s) => s.trim()).filter(Boolean);
+  const ids = env.BATTLEMETRICS_SERVER_IDS;
+  if (ids) return ids.split(",").map((s) => s.trim()).filter(Boolean);
   return DEFAULT_SERVER_IDS;
 }
 

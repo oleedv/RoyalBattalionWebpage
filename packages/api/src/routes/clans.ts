@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import type { ApiResponse, Clan } from "shared";
+import type { Clan } from "shared";
 import prisma from "../lib/db";
+import { findOrThrow, success, fail } from "../lib/crud-helpers";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { audit } from "../lib/audit";
@@ -32,7 +33,7 @@ function toClan(c: { id: string; name: string; tag: string; createdAt: Date }): 
 
 clans.get("/", async (c) => {
   const rows = await prisma.clan.findMany({ orderBy: { name: "asc" } });
-  return c.json<ApiResponse<Clan[]>>({ success: true, data: rows.map(toClan) });
+  return success(c, rows.map(toClan));
 });
 
 clans.post("/", zValidator("json", createClanSchema), async (c) => {
@@ -40,12 +41,9 @@ clans.post("/", zValidator("json", createClanSchema), async (c) => {
   try {
     const clan = await prisma.clan.create({ data: { name, tag } });
     await audit(c, "clan.create", "clan", clan.id, { name, tag });
-    return c.json<ApiResponse<Clan>>({ success: true, data: toClan(clan) }, 201);
+    return success(c, toClan(clan), 201);
   } catch {
-    return c.json<ApiResponse<never>>(
-      { success: false, error: "Failed to create clan. Name or tag may already exist." },
-      400
-    );
+    return fail(c, "Failed to create clan. Name or tag may already exist.");
   }
 });
 
@@ -53,10 +51,7 @@ clans.put("/:id", zValidator("json", updateClanSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
-  const existing = await prisma.clan.findUnique({ where: { id } });
-  if (!existing) {
-    return c.json<ApiResponse<never>>({ success: false, error: "Clan not found" }, 404);
-  }
+  await findOrThrow(prisma.clan, { id }, "Clan");
 
   try {
     const clan = await prisma.clan.update({
@@ -67,23 +62,20 @@ clans.put("/:id", zValidator("json", updateClanSchema), async (c) => {
       },
     });
     await audit(c, "clan.update", "clan", id, { changes: body });
-    return c.json<ApiResponse<Clan>>({ success: true, data: toClan(clan) });
+    return success(c, toClan(clan));
   } catch {
-    return c.json<ApiResponse<never>>({ success: false, error: "Failed to update clan" }, 400);
+    return fail(c, "Failed to update clan");
   }
 });
 
 clans.delete("/:id", async (c) => {
   const id = c.req.param("id");
 
-  const existing = await prisma.clan.findUnique({ where: { id } });
-  if (!existing) {
-    return c.json<ApiResponse<never>>({ success: false, error: "Clan not found" }, 404);
-  }
+  const existing = await findOrThrow(prisma.clan, { id }, "Clan");
 
   await prisma.clan.delete({ where: { id } });
   await audit(c, "clan.delete", "clan", id, { name: existing.name, tag: existing.tag });
-  return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
+  return success(c, { deleted: true as const });
 });
 
 export default clans;

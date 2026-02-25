@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { Prisma } from "@prisma/client";
 import type {
   ApiResponse,
   Ticket,
@@ -24,12 +25,11 @@ tickets.use("*", async (c, next) => {
 tickets.get("/by-uuid/prospect/:uuid", rateLimit(30), async (c) => {
   const uuid = c.req.param("uuid");
 
-  const prospectRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
+  const prospectRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
             squad_hours, preferred_roles, prev_clan, why_rb, active_hours, competitive,
             steam_id, mentor_id, paused_at, extra_days, created_at, closed_at, closed_by
-     FROM prospects WHERE uuid = ?`,
-    uuid
+     FROM prospects WHERE uuid = ${uuid}`
   );
 
   if (prospectRows.length === 0) {
@@ -39,22 +39,19 @@ tickets.get("/by-uuid/prospect/:uuid", rateLimit(30), async (c) => {
   const r = prospectRows[0];
   const id = r.id;
 
-  const eventRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, prospect_id, event_type, actor_id, detail, created_at
-     FROM prospect_events WHERE prospect_id = ? ORDER BY created_at ASC`,
-    id
+  const eventRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, prospect_id, event_type, actor_id, detail, created_at
+     FROM prospect_events WHERE prospect_id = ${id} ORDER BY created_at ASC`
   );
 
-  const messageRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, prospect_id, author_id, author_tag, content, attachments, is_staff, created_at
-     FROM prospect_messages WHERE prospect_id = ? ORDER BY created_at ASC`,
-    id
+  const messageRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, prospect_id, author_id, author_tag, content, attachments, is_staff, created_at
+     FROM prospect_messages WHERE prospect_id = ${id} ORDER BY created_at ASC`
   );
 
-  const voteRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, prospect_id, voter_id, voter_tag, vote, reason, created_at
-     FROM prospect_votes WHERE prospect_id = ? ORDER BY created_at ASC`,
-    id
+  const voteRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, prospect_id, voter_id, voter_tag, vote, reason, created_at
+     FROM prospect_votes WHERE prospect_id = ${id} ORDER BY created_at ASC`
   );
 
   const prospect: Prospect = {
@@ -115,10 +112,9 @@ tickets.get("/by-uuid/prospect/:uuid", rateLimit(30), async (c) => {
 tickets.get("/by-uuid/:uuid", rateLimit(30), async (c) => {
   const uuid = c.req.param("uuid");
 
-  const ticketRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by
-     FROM tickets WHERE uuid = ?`,
-    uuid
+  const ticketRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by
+     FROM tickets WHERE uuid = ${uuid}`
   );
 
   if (ticketRows.length === 0) {
@@ -128,16 +124,14 @@ tickets.get("/by-uuid/:uuid", rateLimit(30), async (c) => {
   const r = ticketRows[0];
   const id = r.id;
 
-  const eventRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, ticket_id, event_type, actor_id, detail, created_at
-     FROM ticket_events WHERE ticket_id = ? ORDER BY created_at ASC`,
-    id
+  const eventRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, ticket_id, event_type, actor_id, detail, created_at
+     FROM ticket_events WHERE ticket_id = ${id} ORDER BY created_at ASC`
   );
 
-  const messageRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, ticket_id, author_id, author_tag, content, attachments, is_staff, created_at
-     FROM ticket_messages WHERE ticket_id = ? ORDER BY created_at ASC`,
-    id
+  const messageRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, ticket_id, author_id, author_tag, content, attachments, is_staff, created_at
+     FROM ticket_messages WHERE ticket_id = ${id} ORDER BY created_at ASC`
   );
 
   const ticket: Ticket = {
@@ -174,25 +168,22 @@ tickets.get("/by-uuid/:uuid", rateLimit(30), async (c) => {
 });
 
 // GET /tickets - list all tickets
-tickets.get("/", requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer"), async (c) => {
+tickets.get("/", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer"), async (c) => {
   const userPermissions = c.get("permissions") as Permission[];
   const allowedTiers = getAllowedTicketTiers(userPermissions);
 
-  let query = `SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by FROM tickets`;
-  const params: string[] = [];
-
-  if (allowedTiers !== null) {
-    if (allowedTiers.length === 0) {
-      return c.json<ApiResponse<Ticket[]>>({ success: true, data: [] });
-    }
-    const placeholders = allowedTiers.map(() => "?").join(", ");
-    query += ` WHERE tier IN (${placeholders})`;
-    params.push(...allowedTiers);
+  if (allowedTiers !== null && allowedTiers.length === 0) {
+    return c.json<ApiResponse<Ticket[]>>({ success: true, data: [] });
   }
 
-  query += ` ORDER BY created_at DESC`;
+  const where = allowedTiers !== null
+    ? Prisma.sql`WHERE tier IN (${Prisma.join(allowedTiers)})`
+    : Prisma.empty;
 
-  const rows: any[] = await getSecretaryDb().$queryRawUnsafe(query, ...params);
+  const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by
+    FROM tickets ${where} ORDER BY created_at DESC`
+  );
 
   const result: Ticket[] = rows.map((r) => ({
     id: r.id,
@@ -210,13 +201,12 @@ tickets.get("/", requirePermission("view:tickets", "manage:tickets", "view:ticke
 });
 
 // GET /tickets/:id - get ticket with events and messages
-tickets.get("/:id", requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer"), async (c) => {
+tickets.get("/:id", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer"), async (c) => {
   const id = Number(c.req.param("id"));
 
-  const ticketRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by
-     FROM tickets WHERE id = ?`,
-    id
+  const ticketRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by
+     FROM tickets WHERE id = ${id}`
   );
 
   if (ticketRows.length === 0) {
@@ -232,16 +222,14 @@ tickets.get("/:id", requirePermission("view:tickets", "manage:tickets", "view:ti
     return c.json<ApiResponse<never>>({ success: false, error: "Insufficient permissions" }, 403);
   }
 
-  const eventRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, ticket_id, event_type, actor_id, detail, created_at
-     FROM ticket_events WHERE ticket_id = ? ORDER BY created_at ASC`,
-    id
+  const eventRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, ticket_id, event_type, actor_id, detail, created_at
+     FROM ticket_events WHERE ticket_id = ${id} ORDER BY created_at ASC`
   );
 
-  const messageRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, ticket_id, author_id, author_tag, content, attachments, is_staff, created_at
-     FROM ticket_messages WHERE ticket_id = ? ORDER BY created_at ASC`,
-    id
+  const messageRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, ticket_id, author_id, author_tag, content, attachments, is_staff, created_at
+     FROM ticket_messages WHERE ticket_id = ${id} ORDER BY created_at ASC`
   );
 
   const ticket: Ticket = {
@@ -278,9 +266,9 @@ tickets.get("/:id", requirePermission("view:tickets", "manage:tickets", "view:ti
 });
 
 // GET /tickets/prospects/list - list all prospects
-tickets.get("/prospects/list", requirePermission("view:tickets", "manage:tickets"), async (c) => {
-  const rows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
+tickets.get("/prospects/list", rateLimit(30), requirePermission("view:tickets", "manage:tickets"), async (c) => {
+  const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
             squad_hours, preferred_roles, prev_clan, why_rb, active_hours, competitive,
             steam_id, mentor_id, paused_at, extra_days, created_at, closed_at, closed_by
      FROM prospects
@@ -315,15 +303,14 @@ tickets.get("/prospects/list", requirePermission("view:tickets", "manage:tickets
 });
 
 // GET /tickets/prospects/:id - get prospect with events, messages, votes
-tickets.get("/prospects/:id", requirePermission("view:tickets", "manage:tickets"), async (c) => {
+tickets.get("/prospects/:id", rateLimit(30), requirePermission("view:tickets", "manage:tickets"), async (c) => {
   const id = Number(c.req.param("id"));
 
-  const prospectRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
+  const prospectRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
             squad_hours, preferred_roles, prev_clan, why_rb, active_hours, competitive,
             steam_id, mentor_id, paused_at, extra_days, created_at, closed_at, closed_by
-     FROM prospects WHERE id = ?`,
-    id
+     FROM prospects WHERE id = ${id}`
   );
 
   if (prospectRows.length === 0) {
@@ -332,22 +319,19 @@ tickets.get("/prospects/:id", requirePermission("view:tickets", "manage:tickets"
 
   const r = prospectRows[0];
 
-  const eventRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, prospect_id, event_type, actor_id, detail, created_at
-     FROM prospect_events WHERE prospect_id = ? ORDER BY created_at ASC`,
-    id
+  const eventRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, prospect_id, event_type, actor_id, detail, created_at
+     FROM prospect_events WHERE prospect_id = ${id} ORDER BY created_at ASC`
   );
 
-  const messageRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, prospect_id, author_id, author_tag, content, attachments, is_staff, created_at
-     FROM prospect_messages WHERE prospect_id = ? ORDER BY created_at ASC`,
-    id
+  const messageRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, prospect_id, author_id, author_tag, content, attachments, is_staff, created_at
+     FROM prospect_messages WHERE prospect_id = ${id} ORDER BY created_at ASC`
   );
 
-  const voteRows: any[] = await getSecretaryDb().$queryRawUnsafe(
-    `SELECT id, prospect_id, voter_id, voter_tag, vote, reason, created_at
-     FROM prospect_votes WHERE prospect_id = ? ORDER BY created_at ASC`,
-    id
+  const voteRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, prospect_id, voter_id, voter_tag, vote, reason, created_at
+     FROM prospect_votes WHERE prospect_id = ${id} ORDER BY created_at ASC`
   );
 
   const prospect: Prospect = {

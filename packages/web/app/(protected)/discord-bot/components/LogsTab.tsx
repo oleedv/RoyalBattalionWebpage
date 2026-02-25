@@ -62,13 +62,37 @@ export default function LogsTab({ apiToken }: { apiToken: string }) {
     fetchLogs(page);
   }, [page, fetchLogs]);
 
-  // Auto-refresh
+  // Auto-refresh with visibility-based pausing
   useEffect(() => {
-    if (autoRefresh) {
-      intervalRef.current = setInterval(() => fetchLogs(page), 5000);
-    }
-    return () => {
+    function startInterval() {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(() => fetchLogs(page), 15000);
+    }
+
+    function stopInterval() {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
+
+    function handleVisibility() {
+      if (document.hidden) {
+        stopInterval();
+      } else if (autoRefresh) {
+        fetchLogs(page);
+        startInterval();
+      }
+    }
+
+    if (autoRefresh) {
+      startInterval();
+      document.addEventListener("visibilitychange", handleVisibility);
+    }
+
+    return () => {
+      stopInterval();
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [autoRefresh, page, fetchLogs]);
 

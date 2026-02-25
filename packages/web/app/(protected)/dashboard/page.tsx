@@ -238,8 +238,27 @@ export default function DashboardPage() {
     }
 
     fetchStats();
-    const interval = setInterval(fetchStats, 30_000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = setInterval(fetchStats, 30_000);
+
+    function handleVisibility() {
+      if (document.hidden) {
+        if (interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+      } else {
+        fetchStats();
+        if (!interval) {
+          interval = setInterval(fetchStats, 30_000);
+        }
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      if (interval) clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [apiToken]);
 
   async function handleLinkSteam(e: React.FormEvent) {

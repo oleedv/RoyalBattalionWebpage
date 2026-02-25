@@ -1,20 +1,23 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import type { ApiResponse, UserWithRoles } from "shared";
+import type { UserWithRoles } from "shared";
 import prisma from "../lib/db";
+import { env } from "../lib/env";
+import { findOrThrow, success, fail } from "../lib/crud-helpers";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { syncAllUserRoles } from "../lib/role-sync";
 import { audit } from "../lib/audit";
+import { rateLimit } from "../middleware/rate-limit";
 
 const users = new Hono();
 
 const linkSteamSchema = z.object({
-  steamId: z.string().min(1),
+  steamId: z.string().regex(/^\d{17}$/, "Steam ID must be a 17-digit number"),
 });
 
-users.post("/link-steam", authMiddleware, zValidator("json", linkSteamSchema), async (c) => {
+users.post("/link-steam", authMiddleware, rateLimit(10), zValidator("json", linkSteamSchema), async (c) => {
   const userId = c.get("userId");
   const { steamId } = c.req.valid("json");
 
@@ -24,15 +27,9 @@ users.post("/link-steam", authMiddleware, zValidator("json", linkSteamSchema), a
       data: { steamId },
     });
 
-    return c.json<ApiResponse<{ steamId: string }>>({
-      success: true,
-      data: { steamId: user.steamId! },
-    });
+    return success(c, { steamId: user.steamId! });
   } catch (err) {
-    return c.json<ApiResponse<never>>({
-      success: false,
-      error: "Failed to link Steam ID. It may already be linked to another account.",
-    }, 400);
+    return fail(c, "Failed to link Steam ID. It may already be linked to another account.");
   }
 });
 
@@ -55,23 +52,17 @@ function mapUser(u: any): UserWithRoles {
 }
 
 users.post("/sync-roles", authMiddleware, requirePermission("manage:members"), async (c) => {
-  if (!process.env.DISCORD_BOT_TOKEN) {
-    return c.json<ApiResponse<never>>(
-      { success: false, error: "DISCORD_BOT_TOKEN is not configured" },
-      503
-    );
+  if (!env.DISCORD_BOT_TOKEN) {
+    return fail(c, "DISCORD_BOT_TOKEN is not configured", 503);
   }
 
   try {
     const updated = await syncAllUserRoles();
     await audit(c, "member.sync_roles", "user", null, { updated });
-    return c.json<ApiResponse<{ updated: number }>>({
-      success: true,
-      data: { updated },
-    });
+    return success(c, { updated });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Sync failed";
-    return c.json<ApiResponse<never>>({ success: false, error: message }, 500);
+    return fail(c, message, 500);
   }
 });
 
@@ -87,10 +78,7 @@ users.get("/", authMiddleware, requirePermission("view:members", "manage:members
 
   const result: UserWithRoles[] = dbUsers.map(mapUser);
 
-  return c.json<ApiResponse<UserWithRoles[]>>({
-    success: true,
-    data: result,
-  });
+  return success(c, result);
 });
 
 const updateUserSchema = z.object({
@@ -102,10 +90,7 @@ users.put("/:id", authMiddleware, requirePermission("manage:members"), zValidato
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
-  const existing = await prisma.user.findUnique({ where: { id } });
-  if (!existing) {
-    return c.json<ApiResponse<never>>({ success: false, error: "User not found" }, 404);
-  }
+  await findOrThrow(prisma.user, { id }, "User");
 
   try {
     const updated = await prisma.user.update({
@@ -123,15 +108,9 @@ users.put("/:id", authMiddleware, requirePermission("manage:members"), zValidato
 
     await audit(c, "member.update", "user", id, { changes: body });
 
-    return c.json<ApiResponse<UserWithRoles>>({
-      success: true,
-      data: mapUser(updated),
-    });
+    return success(c, mapUser(updated));
   } catch {
-    return c.json<ApiResponse<never>>({
-      success: false,
-      error: "Failed to update user. The Steam ID may already be linked to another account.",
-    }, 400);
+    return fail(c, "Failed to update user. The Steam ID may already be linked to another account.");
   }
 });
 
@@ -152,24 +131,18 @@ users.post("/resolve-ids", authMiddleware, zValidator("json", resolveIdsSchema),
     nameMap[u.discordId] = u.discordName;
   }
 
-  return c.json<ApiResponse<Record<string, string>>>({
-    success: true,
-    data: nameMap,
-  });
+  return success(c, nameMap);
 });
 
 users.delete("/:id", authMiddleware, requirePermission("manage:members"), async (c) => {
   const id = c.req.param("id");
 
-  const existing = await prisma.user.findUnique({ where: { id } });
-  if (!existing) {
-    return c.json<ApiResponse<never>>({ success: false, error: "User not found" }, 404);
-  }
+  const existing = await findOrThrow(prisma.user, { id }, "User");
 
   await prisma.user.delete({ where: { id } });
   await audit(c, "member.delete", "user", id, { discordName: existing.discordName });
 
-  return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
+  return success(c, { deleted: true as const });
 });
 
 export default users;

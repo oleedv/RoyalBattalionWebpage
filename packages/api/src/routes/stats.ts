@@ -1,10 +1,12 @@
 import { Hono } from "hono";
+import { Prisma } from "@prisma/client";
 import type { ApiResponse, Permission, Match } from "shared";
 import prisma from "../lib/db";
 import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
 import { fetchAllServers, type ServerStatus } from "./servers";
 import { squadjsSocket } from "../lib/squadjs-socket";
+import { logger } from "../lib/logger";
 
 const stats = new Hono();
 
@@ -20,7 +22,7 @@ stats.get("/summary", async (c) => {
   const serversPromise = fetchAllServers().then((data) => {
     result.servers = data;
   }).catch((err) => {
-    console.error("[stats] Failed to fetch servers:", err);
+    logger.error("stats", "Failed to fetch servers", err);
     result.servers = [];
   });
 
@@ -57,8 +59,8 @@ stats.get("/summary", async (c) => {
 
       promises.push(
         secretaryDb
-          .$queryRawUnsafe<{ status: string; count: number }[]>(
-            `SELECT status, COUNT(*) as count FROM tickets GROUP BY status`
+          .$queryRaw<{ status: string; count: number }[]>(
+            Prisma.sql`SELECT status, COUNT(*) as count FROM tickets GROUP BY status`
           )
           .then((rows: any[]) => {
             let open = 0;
@@ -70,14 +72,14 @@ stats.get("/summary", async (c) => {
             result.tickets = { open, closed };
           })
           .catch((err: unknown) => {
-            console.error("[stats] Failed to fetch tickets:", err);
+            logger.error("stats", "Failed to fetch tickets", err);
           })
       );
 
       promises.push(
         secretaryDb
-          .$queryRawUnsafe<{ status: string; count: number }[]>(
-            `SELECT status, COUNT(*) as count FROM prospects GROUP BY status`
+          .$queryRaw<{ status: string; count: number }[]>(
+            Prisma.sql`SELECT status, COUNT(*) as count FROM prospects GROUP BY status`
           )
           .then((rows: any[]) => {
             let open = 0;
@@ -93,11 +95,11 @@ stats.get("/summary", async (c) => {
             result.prospects = { open, accepted, denied };
           })
           .catch((err: unknown) => {
-            console.error("[stats] Failed to fetch prospects:", err);
+            logger.error("stats", "Failed to fetch prospects", err);
           })
       );
     } catch (err) {
-      console.error("[stats] Secretary DB not available:", err);
+      logger.error("stats", "Secretary DB not available", err);
     }
   }
 
@@ -110,7 +112,7 @@ stats.get("/summary", async (c) => {
       ]).then(([total, withSteam]) => {
         result.members = { total, withSteam };
       }).catch((err) => {
-        console.error("[stats] Failed to fetch members:", err);
+        logger.error("stats", "Failed to fetch members", err);
       })
     );
   }
@@ -121,7 +123,7 @@ stats.get("/summary", async (c) => {
       prisma.whitelistEntry.count().then((total) => {
         result.whitelist = { total };
       }).catch((err) => {
-        console.error("[stats] Failed to fetch whitelist:", err);
+        logger.error("stats", "Failed to fetch whitelist", err);
       })
     );
   }
@@ -156,7 +158,7 @@ stats.get("/summary", async (c) => {
         }));
         result.recentMatches = recent;
       }).catch((err) => {
-        console.error("[stats] Failed to fetch matches:", err);
+        logger.error("stats", "Failed to fetch matches", err);
       })
     );
   }

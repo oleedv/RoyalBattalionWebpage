@@ -1,4 +1,6 @@
 import { io, Socket } from "socket.io-client";
+import { env } from "./env";
+import { logger } from "./logger";
 
 export interface SquadJSPlayer {
   playerID: string;
@@ -97,7 +99,7 @@ interface ServerState {
 
 // Parse env: SQUADJS_SERVERS="staging|ws://ip:4001|token,production|ws://ip:4000|token"
 function parseServers(): { key: string; url: string; token: string }[] {
-  const raw = process.env.SQUADJS_SERVERS;
+  const raw = env.SQUADJS_SERVERS;
   if (!raw) return [];
 
   return raw
@@ -120,11 +122,11 @@ class SquadJSSocketManager {
     const configs = parseServers();
 
     if (configs.length === 0) {
-      console.warn("[squadjs-socket] SQUADJS_SERVERS not set — live server will show as offline");
+      logger.warn("squadjs", "SQUADJS_SERVERS not set -- live server will show as offline");
       return;
     }
 
-    console.log(`[squadjs-socket] Connecting to ${configs.length} server(s): ${configs.map((c) => `${c.key} -> ${c.url}`).join(", ")}`);
+    logger.info("squadjs", `Connecting to ${configs.length} server(s): ${configs.map((c) => `${c.key} -> ${c.url}`).join(", ")}`);
 
     for (const cfg of configs) {
       this.connectServer(cfg.key, cfg.url, cfg.token);
@@ -161,9 +163,9 @@ class SquadJSSocketManager {
 
     socket.on("connect", () => {
       if (state.reconnectErrorCount > 0) {
-        console.log(`[squadjs-socket] Reconnected to ${key} after ${state.reconnectErrorCount} failed attempt(s)`);
+        logger.info("squadjs", `Reconnected to ${key} after ${state.reconnectErrorCount} failed attempt(s)`);
       } else {
-        console.log(`[squadjs-socket] Connected to ${key}`);
+        logger.info("squadjs", `Connected to ${key}`);
       }
       state.reconnectErrorCount = 0;
       state.connected = true;
@@ -172,7 +174,7 @@ class SquadJSSocketManager {
     });
 
     socket.on("disconnect", (reason) => {
-      console.log(`[squadjs-socket] ${key} disconnected: ${reason}`);
+      logger.info("squadjs", `${key} disconnected: ${reason}`);
       state.connected = false;
       if (state.pollInterval) { clearInterval(state.pollInterval); state.pollInterval = null; }
       if (state.metricInterval) { clearInterval(state.metricInterval); state.metricInterval = null; }
@@ -182,9 +184,10 @@ class SquadJSSocketManager {
     socket.on("connect_error", (err) => {
       state.reconnectErrorCount++;
       if (state.reconnectErrorCount === 1) {
-        console.error(`[squadjs-socket] ${key} connect_error: ${err.message}`, (err as any).description || "");
+        const description = "description" in err ? String(err.description) : "";
+        logger.error("squadjs", `${key} connect_error: ${err.message}`, description);
       } else if (state.reconnectErrorCount % 5 === 0) {
-        console.warn(`[squadjs-socket] ${key} still reconnecting (attempt ${state.reconnectErrorCount})...`);
+        logger.warn("squadjs", `${key} still reconnecting (attempt ${state.reconnectErrorCount})...`);
       }
     });
 
@@ -241,7 +244,7 @@ class SquadJSSocketManager {
     // Fallback: publish partial info after 10s if not all acks arrive
     const infoTimeout = setTimeout(() => {
       if (!infoPublished && received > 0) {
-        console.warn(`[squadjs-socket] ${key}: only ${received}/${infoKeys.length} info acks received, publishing partial data`);
+        logger.warn("squadjs", `${key}: only ${received}/${infoKeys.length} info acks received, publishing partial data`);
         publishInfo();
       }
     }, 10_000);
@@ -474,7 +477,7 @@ class SquadJSSocketManager {
       try {
         cb(serverKey, event, data);
       } catch (err) {
-        console.error("[squadjs-socket] Listener error:", err);
+        logger.error("squadjs", "Listener error", err);
       }
     }
   }
@@ -543,7 +546,7 @@ class SquadJSSocketManager {
     const now = Date.now();
     const lastExec = state.lastRcon.get(dedupeKey);
     if (lastExec && now - lastExec < 2000) {
-      console.warn(`[squadjs-socket] Dedup: skipping duplicate rcon.${method} on ${serverKey}`);
+      logger.warn("squadjs", `Dedup: skipping duplicate rcon.${method} on ${serverKey}`);
       return "deduplicated";
     }
     state.lastRcon.set(dedupeKey, now);
@@ -555,7 +558,7 @@ class SquadJSSocketManager {
       }
     }
 
-    console.log(`[squadjs-socket] RCON ${serverKey}: rcon.${method}(${args.map(String).join(", ")})`);
+    logger.info("squadjs", `RCON ${serverKey}: rcon.${method}(${args.map(String).join(", ")})`);
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error("RCON timeout")), 10000);

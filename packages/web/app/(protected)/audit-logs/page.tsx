@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { getAuditLogs } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
+import { DataTable, type Column } from "@/components/data-table";
+import { SearchInput } from "@/components/search-input";
+import { formatDateTime } from "@/lib/format";
 import type { AuditLogEntry } from "shared";
 
 const RESOURCE_OPTIONS = [
@@ -34,18 +37,6 @@ const ACTION_PREFIXES = [
 ];
 
 const PAGE_SIZE = 50;
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
 
 function formatAction(action: string): string {
   return action.replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -219,6 +210,69 @@ export default function AuditLogsPage() {
 
   const hasFilters = actionFilter || resourceFilter || userSearch || fromDate || toDate;
 
+  const auditColumns = useMemo((): Column<AuditLogEntry>[] => [
+    {
+      key: "time",
+      header: "Time",
+      render: (log) => (
+        <span className="whitespace-nowrap text-text-secondary">
+          {formatDateTime(log.createdAt)}
+        </span>
+      ),
+    },
+    {
+      key: "user",
+      header: "User",
+      render: (log) => (
+        <span className="font-medium text-text-primary">{log.userName}</span>
+      ),
+    },
+    {
+      key: "action",
+      header: "Action",
+      render: (log) => <ActionBadge action={log.action} />,
+    },
+    {
+      key: "resource",
+      header: "Resource",
+      render: (log) => (
+        <span className="text-text-secondary">{log.resource.replace(/_/g, " ")}</span>
+      ),
+    },
+    {
+      key: "resourceId",
+      header: "Resource ID",
+      render: (log) =>
+        log.resourceId ? (
+          <code className="text-xs text-text-muted">
+            {log.resourceId.length > 16 ? log.resourceId.slice(0, 12) + "..." : log.resourceId}
+          </code>
+        ) : (
+          <span className="text-text-muted">--</span>
+        ),
+    },
+    {
+      key: "details",
+      header: "Details",
+      render: (log) => {
+        const isExpanded = expandedId === log.id;
+        if (isExpanded) return <DetailView detail={log.detail} />;
+        const summary = formatDetailSummary(log.action, log.detail);
+        if (summary) {
+          return (
+            <span className="text-xs text-text-secondary" title="Click for full details">
+              {summary}
+            </span>
+          );
+        }
+        if (log.detail && Object.keys(log.detail).length > 0) {
+          return <span className="text-xs text-accent">Click to expand</span>;
+        }
+        return <span className="text-text-muted">--</span>;
+      },
+    },
+  ], [expandedId]);
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -265,12 +319,11 @@ export default function AuditLogsPage() {
         </div>
         <div>
           <label className="mb-1 block text-xs text-text-muted">User</label>
-          <input
-            type="text"
+          <SearchInput
             value={userSearch}
-            onChange={(e) => setUserSearch(e.target.value)}
+            onChange={setUserSearch}
             placeholder="Search by name..."
-            className="w-40 rounded-sm border border-border bg-bg-secondary px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted"
+            className="w-40"
           />
         </div>
         <div>
@@ -309,87 +362,14 @@ export default function AuditLogsPage() {
       )}
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-sm border border-border">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-bg-secondary text-left text-xs uppercase tracking-wider text-text-muted">
-              <th className="px-4 py-3">Time</th>
-              <th className="px-4 py-3">User</th>
-              <th className="px-4 py-3">Action</th>
-              <th className="px-4 py-3">Resource</th>
-              <th className="px-4 py-3">Resource ID</th>
-              <th className="px-4 py-3">Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-text-muted">
-                  Loading...
-                </td>
-              </tr>
-            ) : filteredLogs.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-text-muted">
-                  No audit log entries found
-                </td>
-              </tr>
-            ) : (
-              filteredLogs.map((log) => {
-                const isExpanded = expandedId === log.id;
-                return (
-                  <tr
-                    key={log.id}
-                    onClick={() => setExpandedId(isExpanded ? null : log.id)}
-                    className="cursor-pointer border-b border-border transition-colors hover:bg-bg-tertiary/50 last:border-0"
-                  >
-                    <td className="whitespace-nowrap px-4 py-3 text-text-secondary">
-                      {formatDate(log.createdAt)}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-text-primary">
-                      {log.userName}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ActionBadge action={log.action} />
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      {log.resource.replace(/_/g, " ")}
-                    </td>
-                    <td className="px-4 py-3">
-                      {log.resourceId ? (
-                        <code className="text-xs text-text-muted">
-                          {log.resourceId.length > 16
-                            ? log.resourceId.slice(0, 12) + "..."
-                            : log.resourceId}
-                        </code>
-                      ) : (
-                        <span className="text-text-muted">--</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {isExpanded ? (
-                        <DetailView detail={log.detail} />
-                      ) : (() => {
-                        const summary = formatDetailSummary(log.action, log.detail);
-                        if (summary) {
-                          return (
-                            <span className="text-xs text-text-secondary" title="Click for full details">
-                              {summary}
-                            </span>
-                          );
-                        }
-                        if (log.detail && Object.keys(log.detail).length > 0) {
-                          return <span className="text-xs text-accent">Click to expand</span>;
-                        }
-                        return <span className="text-text-muted">--</span>;
-                      })()}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+      <div className="rounded-sm border border-border">
+        <DataTable<AuditLogEntry>
+          columns={auditColumns}
+          data={loading ? [] : filteredLogs}
+          keyExtractor={(log) => log.id}
+          emptyMessage={loading ? "Loading..." : "No audit log entries found"}
+          onRowClick={(log) => setExpandedId(expandedId === log.id ? null : log.id)}
+        />
       </div>
 
       {/* Pagination */}

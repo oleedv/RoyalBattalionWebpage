@@ -1,4 +1,5 @@
 import type { SquadJSPlugin } from "shared";
+import { env } from "./env";
 
 const REPO = "oleedv/Royal-Battalion-SquadJS";
 const BRANCH = "main";
@@ -11,7 +12,7 @@ const CONFIG_FILES: Record<string, string> = {
 export type Environment = "staging" | "production";
 
 function getToken(): string | null {
-  return process.env.GITHUB_CONFIG_TOKEN || null;
+  return env.GITHUB_CONFIG_TOKEN || null;
 }
 
 function headers(): HeadersInit {

@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { getUsers, updateUser, deleteUser, syncUserRoles } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { DataTable, type Column } from "@/components/data-table";
+import { SearchInput } from "@/components/search-input";
+import { formatDate } from "@/lib/format";
 import type { UserWithRoles } from "shared";
 
 function CopyableId({ value }: { value: string }) {
@@ -150,6 +153,118 @@ export default function MembersPage() {
       )
     : users;
 
+  const memberColumns = useMemo(() => {
+    const cols: Column<UserWithRoles>[] = [
+      {
+        key: "member",
+        header: "Member",
+        render: (user) => (
+          <div className="flex items-center gap-3">
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt="" className="h-8 w-8 rounded-full" />
+            ) : (
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-bg-tertiary text-xs text-text-muted">
+                {user.discordName.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div>
+              <div className="font-medium text-text-primary">{user.discordName}</div>
+              <div className="text-xs text-text-muted">{user.discordId}</div>
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: "steamId",
+        header: "Steam ID",
+        render: (user) =>
+          editingId === user.id ? (
+            <input
+              type="text"
+              value={editSteamId}
+              onChange={(e) => setEditSteamId(e.target.value)}
+              className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none"
+              placeholder="Steam64 ID"
+            />
+          ) : user.steamId ? (
+            <code className="text-accent">{user.steamId}</code>
+          ) : (
+            <span className="text-text-muted">--</span>
+          ),
+      },
+      {
+        key: "eosId",
+        header: "EOS ID",
+        render: (user) =>
+          editingId === user.id ? (
+            <input
+              type="text"
+              value={editEosId}
+              onChange={(e) => setEditEosId(e.target.value)}
+              className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
+              placeholder="EOS ID"
+            />
+          ) : user.eosId ? (
+            <CopyableId value={user.eosId} />
+          ) : (
+            <span className="text-text-muted">--</span>
+          ),
+      },
+      {
+        key: "roles",
+        header: "Roles",
+        render: (user) => (
+          <div className="flex flex-wrap gap-1">
+            {user.roles.length > 0 ? (
+              user.roles.map((role) => (
+                <span
+                  key={role.id}
+                  className="rounded-sm border border-accent/15 bg-accent/5 px-2 py-0.5 text-xs text-accent/80"
+                >
+                  {role.name}
+                </span>
+              ))
+            ) : (
+              <span className="text-text-muted">--</span>
+            )}
+          </div>
+        ),
+      },
+      {
+        key: "joined",
+        header: "Joined",
+        render: (user) => (
+          <span className="text-text-secondary">{formatDate(user.createdAt)}</span>
+        ),
+      },
+    ];
+    if (canManage) {
+      cols.push({
+        key: "actions",
+        header: "Actions",
+        render: (user) =>
+          editingId === user.id ? (
+            <div className="flex items-center gap-2">
+              <button onClick={() => saveEdit(user.id)} className="text-xs text-success transition-colors hover:text-success/80">Save</button>
+              <button onClick={cancelEdit} className="text-xs text-text-muted transition-colors hover:text-text-primary">Cancel</button>
+              {editError && <span className="text-xs text-danger">{editError}</span>}
+            </div>
+          ) : deletingId === user.id ? (
+            <div className="flex items-center gap-2">
+              <button onClick={() => handleDelete(user.id)} className="text-xs text-danger transition-colors hover:text-danger/80">Confirm</button>
+              <button onClick={() => setDeletingId(null)} className="text-xs text-text-muted transition-colors hover:text-text-primary">Cancel</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button onClick={() => startEdit(user)} className="text-xs text-text-muted transition-colors hover:text-accent">Edit</button>
+              <button onClick={() => setDeletingId(user.id)} className="text-xs text-text-muted transition-colors hover:text-danger">Delete</button>
+            </div>
+          ),
+      });
+    }
+    return cols;
+  }, [canManage, editingId, deletingId, editSteamId, editEosId, editError]);
+
   if (loading) {
     return <div className="text-text-secondary">Loading members...</div>;
   }
@@ -182,194 +297,22 @@ export default function MembersPage() {
 
       {/* Search */}
       <div className="mb-6">
-        <input
-          type="text"
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           placeholder="Search by name, Steam ID, EOS ID, or Discord ID..."
-          className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+          className="w-full"
         />
       </div>
 
       {/* Members table */}
       <div className="facet-border overflow-hidden rounded-sm bg-bg-card">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  Member
-                </th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  Steam ID
-                </th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  EOS ID
-                </th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  Roles
-                </th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                  Joined
-                </th>
-                {canManage && (
-                  <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-                    Actions
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={canManage ? 6 : 5}
-                    className="px-4 py-8 text-center text-text-muted"
-                  >
-                    {search
-                      ? "No members match your search"
-                      : "No members found"}
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="border-b border-border/50 transition-colors hover:bg-bg-tertiary/50"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        {user.avatarUrl ? (
-                          <img
-                            src={user.avatarUrl}
-                            alt=""
-                            className="h-8 w-8 rounded-full"
-                          />
-                        ) : (
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-bg-tertiary text-xs text-text-muted">
-                            {user.discordName.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div>
-                          <div className="font-medium text-text-primary">
-                            {user.discordName}
-                          </div>
-                          <div className="text-xs text-text-muted">
-                            {user.discordId}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {editingId === user.id ? (
-                        <input
-                          type="text"
-                          value={editSteamId}
-                          onChange={(e) => setEditSteamId(e.target.value)}
-                          className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none"
-                          placeholder="Steam64 ID"
-                        />
-                      ) : user.steamId ? (
-                        <code className="text-accent">{user.steamId}</code>
-                      ) : (
-                        <span className="text-text-muted">--</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {editingId === user.id ? (
-                        <input
-                          type="text"
-                          value={editEosId}
-                          onChange={(e) => setEditEosId(e.target.value)}
-                          className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
-                          placeholder="EOS ID"
-                        />
-                      ) : user.eosId ? (
-                        <CopyableId value={user.eosId} />
-                      ) : (
-                        <span className="text-text-muted">--</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {user.roles.length > 0 ? (
-                          user.roles.map((role) => (
-                            <span
-                              key={role.id}
-                              className="rounded-sm border border-accent/15 bg-accent/5 px-2 py-0.5 text-xs text-accent/80"
-                            >
-                              {role.name}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-text-muted">--</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      {new Date(user.createdAt).toLocaleDateString()}
-                    </td>
-                    {canManage && (
-                      <td className="px-4 py-3">
-                        {editingId === user.id ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => saveEdit(user.id)}
-                              className="text-xs text-success transition-colors hover:text-success/80"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={cancelEdit}
-                              className="text-xs text-text-muted transition-colors hover:text-text-primary"
-                            >
-                              Cancel
-                            </button>
-                            {editError && (
-                              <span className="text-xs text-danger">
-                                {editError}
-                              </span>
-                            )}
-                          </div>
-                        ) : deletingId === user.id ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleDelete(user.id)}
-                              className="text-xs text-danger transition-colors hover:text-danger/80"
-                            >
-                              Confirm
-                            </button>
-                            <button
-                              onClick={() => setDeletingId(null)}
-                              className="text-xs text-text-muted transition-colors hover:text-text-primary"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => startEdit(user)}
-                              className="text-xs text-text-muted transition-colors hover:text-accent"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => setDeletingId(user.id)}
-                              className="text-xs text-text-muted transition-colors hover:text-danger"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<UserWithRoles>
+          columns={memberColumns}
+          data={filtered}
+          keyExtractor={(user) => user.id}
+          emptyMessage={search ? "No members match your search" : "No members found"}
+        />
       </div>
     </div>
   );

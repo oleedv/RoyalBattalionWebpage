@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import prisma from "./db";
+import { logger } from "./logger";
 
 export async function audit(
   c: Context,
@@ -28,7 +29,7 @@ export async function audit(
       },
     });
   } catch (err) {
-    console.error("[audit] Failed to create audit log:", err);
+    logger.error("audit", "Failed to create audit log", err);
   }
 }
 
@@ -52,6 +53,6 @@ export async function auditDirect(
       },
     });
   } catch (err) {
-    console.error("[audit] Failed to create audit log:", err);
+    logger.error("audit", "Failed to create audit log", err);
   }
 }

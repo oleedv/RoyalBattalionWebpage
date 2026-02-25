@@ -1,0 +1,337 @@
+import { squadjsSocket } from "../lib/squadjs-socket";
+import { auditDirect } from "../lib/audit";
+import { logger } from "../lib/logger";
+import prisma from "../lib/db";
+import type { ServerWebSocket } from "bun";
+import type { WSData } from "./types";
+
+export const wsClients = new Set<ServerWebSocket<WSData>>();
+
+/** Set up the SquadJS event relay to all subscribed live-server WebSocket clients. */
+export function initLiveServerRelay() {
+  // Clear previous listeners first (handles bun --watch re-evaluation)
+  squadjsSocket.clearListeners();
+  squadjsSocket.onEvent((serverKey, event, data) => {
+    const message = JSON.stringify({ type: "event", event, data, server: serverKey });
+    for (const ws of wsClients) {
+      try {
+        if (ws.data.serverKey === serverKey) {
+          ws.send(message);
+        }
+      } catch (err) {
+        logger.error("live-server", "Failed to send to client, removing", err);
+        wsClients.delete(ws);
+      }
+    }
+  });
+}
+
+export function handleLiveServerOpen(ws: ServerWebSocket<WSData>) {
+  wsClients.add(ws);
+  logger.info("live-server", `WebSocket connected (${wsClients.size} clients)`);
+
+  // Send available servers + initial snapshot
+  ws.send(
+    JSON.stringify({
+      type: "servers",
+      data: squadjsSocket.getServerKeys(),
+    })
+  );
+
+  const snapshot = squadjsSocket.getSnapshot(ws.data.serverKey);
+  const configured = squadjsSocket.isConfigured();
+  ws.send(
+    JSON.stringify({
+      type: "snapshot",
+      data: snapshot || { connected: false, players: [], serverInfo: null, chatLog: [], consoleLog: [], tickRate: null, metricHistory: [] },
+      server: ws.data.serverKey,
+      configured,
+    })
+  );
+}
+
+export function handleLiveServerMessage(ws: ServerWebSocket<WSData>, message: string | Buffer) {
+  try {
+    const text = typeof message === "string" ? message : message.toString();
+    const msg = JSON.parse(text) as {
+      action: string;
+      server?: string;
+      steamId?: string;
+      eosId?: string;
+      message?: string;
+      reason?: string;
+      teamID?: string;
+      squadID?: string;
+      players?: { steamId?: string; eosId?: string }[];
+      clanTag?: string;
+      targetTeam?: string;
+    };
+
+    // Handle server switching
+    if (msg.action === "switch_server" && msg.server) {
+      ws.data.serverKey = msg.server;
+      const snapshot = squadjsSocket.getSnapshot(msg.server);
+      ws.send(JSON.stringify({
+        type: "snapshot",
+        data: snapshot || { connected: false, players: [], serverInfo: null, chatLog: [], consoleLog: [], tickRate: null, metricHistory: [] },
+        server: msg.server,
+        configured: squadjsSocket.isConfigured(),
+      }));
+      return;
+    }
+
+    if (!ws.data.canManage) {
+      ws.send(
+        JSON.stringify({
+          type: "action_result",
+          success: false,
+          error: "Manage live-server permission required",
+        })
+      );
+      return;
+    }
+
+    handleAdminAction(ws, msg);
+  } catch (err) {
+    logger.error("live-server", "Error handling WebSocket message", err);
+    ws.send(
+      JSON.stringify({
+        type: "action_result",
+        success: false,
+        error: "Invalid message format",
+      })
+    );
+  }
+}
+
+export function handleLiveServerClose(ws: ServerWebSocket<WSData>) {
+  wsClients.delete(ws);
+  logger.info("live-server", `WebSocket disconnected (${wsClients.size} clients)`);
+}
+
+async function handleAdminAction(
+  ws: ServerWebSocket<WSData>,
+  msg: { action: string; server?: string; steamId?: string; eosId?: string; playerName?: string; message?: string; reason?: string; teamID?: string; squadID?: string; players?: { steamId?: string; eosId?: string; name?: string }[]; clanTag?: string; clanId?: string; targetTeam?: string }
+) {
+  const serverKey = ws.data.serverKey;
+  logger.info("live-server", `RCON ${msg.action} from user ${ws.data.userId} on ${serverKey}`);
+
+  try {
+    switch (msg.action) {
+      case "warn": {
+        const playerId = msg.steamId || msg.eosId;
+        if (!playerId || !msg.message) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing player ID or message" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "warn", playerId, msg.message);
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.warn", "LiveServer", serverKey, { playerId, playerName: msg.playerName, message: msg.message });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "warn" }));
+        break;
+      }
+
+      case "kick": {
+        const playerId = msg.steamId || msg.eosId;
+        if (!playerId) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing player ID" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "kick", playerId, msg.reason || "Kicked by admin");
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.kick", "LiveServer", serverKey, { playerId, playerName: msg.playerName, reason: msg.reason });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "kick" }));
+        setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
+        break;
+      }
+
+      case "broadcast":
+        if (!msg.message) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing message" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "broadcast", msg.message);
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.broadcast", "LiveServer", serverKey, { message: msg.message });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "broadcast" }));
+        break;
+
+      case "switchteam": {
+        if (!msg.steamId && !msg.eosId) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing player ID" }));
+          return;
+        }
+        if (msg.steamId) {
+          await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChange ${msg.steamId}`);
+        } else {
+          await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChangeById ${msg.eosId}`);
+        }
+        const playerId = msg.steamId || msg.eosId;
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchteam", "LiveServer", serverKey, { playerId, playerName: msg.playerName });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchteam" }));
+        setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
+        break;
+      }
+
+      case "switchsquad": {
+        if (!msg.players?.length) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing players list" }));
+          return;
+        }
+        let switched = 0;
+        for (const p of msg.players) {
+          if (!p.steamId && !p.eosId) continue;
+          if (p.steamId) {
+            await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChange ${p.steamId}`);
+          } else {
+            await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChangeById ${p.eosId}`);
+          }
+          switched++;
+          if (switched < msg.players.length) {
+            await new Promise((r) => setTimeout(r, 100));
+          }
+        }
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchsquad", "LiveServer", serverKey, { count: switched, playerNames: msg.players!.map((p) => p.name).filter(Boolean) });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchsquad" }));
+        setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
+        break;
+      }
+
+      case "disband": {
+        if (!msg.teamID || !msg.squadID) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing team or squad ID" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "execute", `AdminDisbandSquad ${msg.teamID} ${msg.squadID}`);
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.disband", "LiveServer", serverKey, { teamID: msg.teamID, squadID: msg.squadID });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "disband" }));
+        setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
+        break;
+      }
+
+      case "endmatch": {
+        await squadjsSocket.executeRcon(serverKey, "execute", "AdminEndMatch");
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.endmatch", "LiveServer", serverKey, {});
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "endmatch" }));
+        break;
+      }
+
+      case "setnextlayer": {
+        if (!msg.message) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing layer name" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "execute", `AdminSetNextLayer ${msg.message}`);
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.setnextlayer", "LiveServer", serverKey, { layer: msg.message });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "setnextlayer" }));
+        break;
+      }
+
+      case "demotecommander": {
+        if (!msg.steamId && !msg.eosId) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing player ID" }));
+          return;
+        }
+        if (msg.steamId) {
+          await squadjsSocket.executeRcon(serverKey, "execute", `AdminDemoteCommander ${msg.steamId}`);
+        } else {
+          await squadjsSocket.executeRcon(serverKey, "execute", `AdminDemoteCommander ${msg.eosId}`);
+        }
+        const playerId = msg.steamId || msg.eosId;
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.demotecommander", "LiveServer", serverKey, { playerId, playerName: msg.playerName });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "demotecommander" }));
+        break;
+      }
+
+      case "switchclan": {
+        if ((!msg.clanTag && !msg.clanId) || !msg.targetTeam) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing clan identifier or target team" }));
+          return;
+        }
+        const snapshot = squadjsSocket.getSnapshot(serverKey);
+        if (!snapshot) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Server not connected" }));
+          return;
+        }
+        const onlineSteamIds = snapshot.players.map((p) => p.steamID).filter(Boolean);
+        // Support both clanId (new) and clanTag (legacy)
+        const clanWhere = msg.clanId
+          ? { clanId: msg.clanId, steamId: { in: onlineSteamIds } }
+          : { clan: msg.clanTag, steamId: { in: onlineSteamIds } };
+        const clanEntries = await prisma.whitelistEntry.findMany({
+          where: clanWhere,
+          select: { steamId: true },
+        });
+        const clanSteamIds = new Set(clanEntries.map((e) => e.steamId));
+        const toSwitch = snapshot.players.filter(
+          (p) => clanSteamIds.has(p.steamID) && p.teamID !== msg.targetTeam
+        );
+        if (toSwitch.length === 0) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "No clan members to switch" }));
+          return;
+        }
+        let switched = 0;
+        for (const p of toSwitch) {
+          if (p.steamID) {
+            await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChange ${p.steamID}`);
+          } else if (p.eosID) {
+            await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChangeById ${p.eosID}`);
+          }
+          switched++;
+          if (switched < toSwitch.length) {
+            await new Promise((r) => setTimeout(r, 100));
+          }
+        }
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchclan", "LiveServer", serverKey, { clanId: msg.clanId, clanTag: msg.clanTag, targetTeam: msg.targetTeam, count: switched, playerNames: toSwitch.map((p) => p.name) });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchclan" }));
+        setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
+        break;
+      }
+
+      case "get_online_clans": {
+        const snapshot = squadjsSocket.getSnapshot(serverKey);
+        if (!snapshot) {
+          ws.send(JSON.stringify({ type: "online_clans", data: {} }));
+          return;
+        }
+        const steamIds = snapshot.players.map((p) => p.steamID).filter(Boolean);
+        if (steamIds.length === 0) {
+          ws.send(JSON.stringify({ type: "online_clans", data: {} }));
+          return;
+        }
+        const entries = await prisma.whitelistEntry.findMany({
+          where: { steamId: { in: steamIds }, clanId: { not: null } },
+          select: { steamId: true, clanId: true, clanRef: { select: { id: true, name: true, tag: true } } },
+        });
+        const playerMap = new Map(snapshot.players.map((p) => [p.steamID, p]));
+        const clanMap: Record<string, { id: string; tag: string; members: { teamID: string; steamId: string; name: string }[] }> = {};
+        for (const e of entries) {
+          if (!e.clanRef) continue;
+          const player = playerMap.get(e.steamId);
+          if (!player) continue;
+          const key = e.clanRef.id;
+          if (!clanMap[key]) clanMap[key] = { id: e.clanRef.id, tag: e.clanRef.tag, members: [] };
+          clanMap[key].members.push({ teamID: player.teamID, steamId: player.steamID, name: player.name });
+        }
+        // Also include legacy clan string entries that haven't been migrated yet
+        const legacyEntries = await prisma.whitelistEntry.findMany({
+          where: { steamId: { in: steamIds }, clan: { not: null }, clanId: null },
+          select: { steamId: true, clan: true },
+        });
+        for (const e of legacyEntries) {
+          if (!e.clan) continue;
+          const player = playerMap.get(e.steamId);
+          if (!player) continue;
+          const key = `legacy:${e.clan}`;
+          if (!clanMap[key]) clanMap[key] = { id: "", tag: e.clan, members: [] };
+          clanMap[key].members.push({ teamID: player.teamID, steamId: player.steamID, name: player.name });
+        }
+        ws.send(JSON.stringify({ type: "online_clans", data: clanMap }));
+        break;
+      }
+
+      default:
+        ws.send(JSON.stringify({ type: "action_result", success: false, error: `Unknown action: ${msg.action}` }));
+    }
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "Action failed";
+    ws.send(JSON.stringify({ type: "action_result", success: false, error }));
+  }
+}

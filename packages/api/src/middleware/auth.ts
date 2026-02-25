@@ -1,17 +1,14 @@
 import { createMiddleware } from "hono/factory";
 import { jwtVerify } from "jose";
 import type { Permission } from "shared";
+import { env } from "../lib/env";
 
 type AuthVariables = {
   userId: string;
   permissions: Permission[];
 };
 
-const getSecret = () => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error("JWT_SECRET is not set");
-  return new TextEncoder().encode(secret);
-};
+const getSecret = () => new TextEncoder().encode(env.JWT_SECRET);
 
 export const authMiddleware = createMiddleware<{
   Variables: AuthVariables;

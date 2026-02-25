@@ -1,6 +1,12 @@
+import type { RowDataPacket } from "mysql2/promise";
 import prisma from "./db";
 import { getSquadJSPool } from "./squadjs-db";
 import { assembleMatchDetail } from "./match-assembler";
+import { logger } from "./logger";
+
+interface MatchIdRow extends RowDataPacket {
+  id: number;
+}
 
 export async function syncMatches(): Promise<{ synced: number; total: number }> {
   const pool = getSquadJSPool();
@@ -13,7 +19,7 @@ export async function syncMatches(): Promise<{ synced: number; total: number }> 
        AND layer_classname NOT LIKE '%Jensen%'
      ORDER BY id`
   );
-  const matchIds = (rows as any[]).map((r: any) => r.id as number);
+  const matchIds = (rows as MatchIdRow[]).map((r) => r.id);
 
   // Get already-synced squadjsIds
   const existing = await prisma.match.findMany({
@@ -38,19 +44,19 @@ export async function syncMatches(): Promise<{ synced: number; total: number }> 
           layer: assembled.meta.layer,
           result: assembled.meta.result,
           server: assembled.meta.serverName,
-          matchDetail: assembled.detail as any,
+          matchDetail: assembled.detail as unknown as Record<string, unknown>,
           hidden: false,
           createdBy: "squadjs-sync",
         },
       });
       synced++;
     } catch (err) {
-      console.error(`Failed to sync match ${matchId}:`, err);
+      logger.error("match-sync", `Failed to sync match ${matchId}`, err);
     }
   }
 
   if (synced > 0) {
-    console.log(`[match-sync] Synced ${synced} new matches (${matchIds.length} total in SquadJS)`);
+    logger.info("match-sync", `Synced ${synced} new matches (${matchIds.length} total in SquadJS)`);
   }
 
   return { synced, total: matchIds.length };
@@ -75,7 +81,7 @@ export async function resyncAllMatches(): Promise<{ resynced: number }> {
       await prisma.match.update({
         where: { id: match.id },
         data: {
-          matchDetail: assembled.detail as any,
+          matchDetail: assembled.detail as unknown as Record<string, unknown>,
           map: assembled.meta.map,
           layer: assembled.meta.layer,
           result: assembled.meta.result,
@@ -83,10 +89,10 @@ export async function resyncAllMatches(): Promise<{ resynced: number }> {
       });
       resynced++;
     } catch (err) {
-      console.error(`[match-sync] Failed to resync match ${match.squadjsId}:`, err);
+      logger.error("match-sync", `Failed to resync match ${match.squadjsId}`, err);
     }
   }
 
-  console.log(`[match-sync] Resynced ${resynced}/${matches.length} matches`);
+  logger.info("match-sync", `Resynced ${resynced}/${matches.length} matches`);
   return { resynced };
 }

@@ -1,11 +1,12 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { env } from "./env";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 
 function getKey(): Buffer {
-  const key = process.env.ENCRYPTION_KEY;
+  const key = env.ENCRYPTION_KEY;
   if (!key) throw new Error("ENCRYPTION_KEY is not set");
   // Accept a 64-char hex string (32 bytes) or a raw 32-byte string
   if (key.length === 64 && /^[0-9a-f]+$/i.test(key)) {

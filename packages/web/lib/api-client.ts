@@ -58,6 +58,38 @@ function authHeaders(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
 }
 
+function createCrudClient<T>(basePath: string) {
+  return {
+    getAll(token: string, query?: string) {
+      const qs = query ? `?${query}` : "";
+      return request<T[]>(`${basePath}${qs}`, { headers: authHeaders(token) });
+    },
+    getOne(token: string, id: string) {
+      return request<T>(`${basePath}/${id}`, { headers: authHeaders(token) });
+    },
+    create(token: string, data: Record<string, unknown>) {
+      return request<T>(basePath, {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify(data),
+      });
+    },
+    update(token: string, id: string, data: Record<string, unknown>) {
+      return request<T>(`${basePath}/${id}`, {
+        method: "PUT",
+        headers: authHeaders(token),
+        body: JSON.stringify(data),
+      });
+    },
+    remove(token: string, id: string) {
+      return request<{ deleted: true }>(`${basePath}/${id}`, {
+        method: "DELETE",
+        headers: authHeaders(token),
+      });
+    },
+  };
+}
+
 // Auth
 export function syncAuth(
   accessToken: string
@@ -75,49 +107,20 @@ export function getMe(token: string): Promise<ApiResponse<AuthMeResponse>> {
 }
 
 // Whitelist
-export function getWhitelist(
-  token: string,
-  server?: string
-): Promise<ApiResponse<WhitelistEntry[]>> {
-  const qs = server ? `?server=${encodeURIComponent(server)}` : "";
-  return request<WhitelistEntry[]>(`/whitelist${qs}`, {
-    headers: authHeaders(token),
-  });
-}
-
-export function addWhitelistEntry(
+const whitelistClient = createCrudClient<WhitelistEntry>("/whitelist");
+export const getWhitelist = (token: string, server?: string) =>
+  whitelistClient.getAll(token, server ? `server=${encodeURIComponent(server)}` : undefined);
+export const addWhitelistEntry = (
   token: string,
   steamId: string,
   opts?: { name?: string; clan?: string; clanId?: string; role?: string; groupId?: string; reason?: string; expiresAt?: string; server?: string }
-): Promise<ApiResponse<WhitelistEntry>> {
-  return request<WhitelistEntry>("/whitelist", {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify({ steamId, ...opts }),
-  });
-}
-
-export function updateWhitelistEntry(
+) => whitelistClient.create(token, { steamId, ...opts });
+export const updateWhitelistEntry = (
   token: string,
   id: string,
   data: { steamId?: string; name?: string; clan?: string; clanId?: string | null; role?: string; groupId?: string | null; reason?: string; expiresAt?: string | null }
-): Promise<ApiResponse<WhitelistEntry>> {
-  return request<WhitelistEntry>(`/whitelist/${id}`, {
-    method: "PUT",
-    headers: authHeaders(token),
-    body: JSON.stringify(data),
-  });
-}
-
-export function deleteWhitelistEntry(
-  token: string,
-  id: string
-): Promise<ApiResponse<{ deleted: true }>> {
-  return request<{ deleted: true }>(`/whitelist/${id}`, {
-    method: "DELETE",
-    headers: authHeaders(token),
-  });
-}
+) => whitelistClient.update(token, id, data as Record<string, unknown>);
+export const deleteWhitelistEntry = whitelistClient.remove;
 
 export function bulkAddWhitelist(
   token: string,
@@ -142,88 +145,18 @@ export function getWhitelistCandidates(
 }
 
 // Admin Groups
-export function getAdminGroups(
-  token: string
-): Promise<ApiResponse<AdminGroup[]>> {
-  return request<AdminGroup[]>("/admin-groups", {
-    headers: authHeaders(token),
-  });
-}
-
-export function createAdminGroup(
-  token: string,
-  data: { name: string; permissions: string; sortOrder?: number }
-): Promise<ApiResponse<AdminGroup>> {
-  return request<AdminGroup>("/admin-groups", {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify(data),
-  });
-}
-
-export function updateAdminGroup(
-  token: string,
-  id: string,
-  data: { name?: string; permissions?: string; sortOrder?: number }
-): Promise<ApiResponse<AdminGroup>> {
-  return request<AdminGroup>(`/admin-groups/${id}`, {
-    method: "PUT",
-    headers: authHeaders(token),
-    body: JSON.stringify(data),
-  });
-}
-
-export function deleteAdminGroup(
-  token: string,
-  id: string
-): Promise<ApiResponse<{ deleted: true }>> {
-  return request<{ deleted: true }>(`/admin-groups/${id}`, {
-    method: "DELETE",
-    headers: authHeaders(token),
-  });
-}
+const adminGroupsClient = createCrudClient<AdminGroup>("/admin-groups");
+export const getAdminGroups = adminGroupsClient.getAll;
+export const createAdminGroup = (token: string, data: { name: string; permissions: string; sortOrder?: number }) => adminGroupsClient.create(token, data);
+export const updateAdminGroup = (token: string, id: string, data: { name?: string; permissions?: string; sortOrder?: number }) => adminGroupsClient.update(token, id, data);
+export const deleteAdminGroup = adminGroupsClient.remove;
 
 // Clans
-export function getClans(
-  token: string
-): Promise<ApiResponse<Clan[]>> {
-  return request<Clan[]>("/clans", {
-    headers: authHeaders(token),
-  });
-}
-
-export function createClan(
-  token: string,
-  data: { name: string; tag: string }
-): Promise<ApiResponse<Clan>> {
-  return request<Clan>("/clans", {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify(data),
-  });
-}
-
-export function updateClan(
-  token: string,
-  id: string,
-  data: { name?: string; tag?: string }
-): Promise<ApiResponse<Clan>> {
-  return request<Clan>(`/clans/${id}`, {
-    method: "PUT",
-    headers: authHeaders(token),
-    body: JSON.stringify(data),
-  });
-}
-
-export function deleteClan(
-  token: string,
-  id: string
-): Promise<ApiResponse<{ deleted: true }>> {
-  return request<{ deleted: true }>(`/clans/${id}`, {
-    method: "DELETE",
-    headers: authHeaders(token),
-  });
-}
+const clansClient = createCrudClient<Clan>("/clans");
+export const getClans = clansClient.getAll;
+export const createClan = (token: string, data: { name: string; tag: string }) => clansClient.create(token, data);
+export const updateClan = (token: string, id: string, data: { name?: string; tag?: string }) => clansClient.update(token, id, data);
+export const deleteClan = clansClient.remove;
 
 export function updateRoleWhitelistGrant(
   token: string,
@@ -238,41 +171,16 @@ export function updateRoleWhitelistGrant(
 }
 
 // Users
+const usersClient = createCrudClient<UserWithRoles>("/users");
+export const getUsers = usersClient.getAll;
+export const updateUser = (token: string, id: string, data: { steamId?: string; eosId?: string }) => usersClient.update(token, id, data);
+export const deleteUser = usersClient.remove;
+
 export function syncUserRoles(
   token: string
 ): Promise<ApiResponse<{ updated: number }>> {
   return request<{ updated: number }>("/users/sync-roles", {
     method: "POST",
-    headers: authHeaders(token),
-  });
-}
-
-export function getUsers(
-  token: string
-): Promise<ApiResponse<UserWithRoles[]>> {
-  return request<UserWithRoles[]>("/users", {
-    headers: authHeaders(token),
-  });
-}
-
-export function updateUser(
-  token: string,
-  id: string,
-  data: { steamId?: string; eosId?: string }
-): Promise<ApiResponse<UserWithRoles>> {
-  return request<UserWithRoles>(`/users/${id}`, {
-    method: "PUT",
-    headers: authHeaders(token),
-    body: JSON.stringify(data),
-  });
-}
-
-export function deleteUser(
-  token: string,
-  id: string
-): Promise<ApiResponse<{ deleted: true }>> {
-  return request<{ deleted: true }>(`/users/${id}`, {
-    method: "DELETE",
     headers: authHeaders(token),
   });
 }
@@ -300,24 +208,10 @@ export function linkSteam(
 }
 
 // Roles
-export function getRoles(
-  token: string
-): Promise<ApiResponse<DiscordRole[]>> {
-  return request<DiscordRole[]>("/roles", {
-    headers: authHeaders(token),
-  });
-}
-
-export function createRole(
-  token: string,
-  data: { discordRoleId: string; name: string; permissions?: Permission[] }
-): Promise<ApiResponse<DiscordRole>> {
-  return request<DiscordRole>("/roles", {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify(data),
-  });
-}
+const rolesClient = createCrudClient<DiscordRole>("/roles");
+export const getRoles = rolesClient.getAll;
+export const createRole = (token: string, data: { discordRoleId: string; name: string; permissions?: Permission[] }) => rolesClient.create(token, data);
+export const deleteRole = rolesClient.remove;
 
 export function updateRolePermissions(
   token: string,
@@ -328,16 +222,6 @@ export function updateRolePermissions(
     method: "PUT",
     headers: authHeaders(token),
     body: JSON.stringify({ permissions }),
-  });
-}
-
-export function deleteRole(
-  token: string,
-  id: string
-): Promise<ApiResponse<{ deleted: true }>> {
-  return request<{ deleted: true }>(`/roles/${id}`, {
-    method: "DELETE",
-    headers: authHeaders(token),
   });
 }
 
@@ -389,28 +273,16 @@ export function getProspect(
 }
 
 // Matches
-export function getPublicMatches(): Promise<ApiResponse<Match[]>> {
-  return request<Match[]>("/matches/public");
-}
-
-export function getMatches(
-  token: string
-): Promise<ApiResponse<Match[]>> {
-  return request<Match[]>("/matches", {
-    headers: authHeaders(token),
-  });
-}
-
-export function updateMatch(
+const matchesClient = createCrudClient<Match>("/matches");
+export const getMatches = matchesClient.getAll;
+export const updateMatch = (
   token: string,
   id: string,
   data: { date?: string; map?: string; layer?: string; result?: string; vodUrl?: string | null; hidden?: boolean; server?: string }
-): Promise<ApiResponse<Match>> {
-  return request<Match>(`/matches/${id}`, {
-    method: "PUT",
-    headers: authHeaders(token),
-    body: JSON.stringify(data),
-  });
+) => matchesClient.update(token, id, data as Record<string, unknown>);
+
+export function getPublicMatches(): Promise<ApiResponse<Match[]>> {
+  return request<Match[]>("/matches/public");
 }
 
 // Dashboard Stats
@@ -461,15 +333,7 @@ export function getServerStatus(): Promise<ApiResponse<ServerStatus[]>> {
   return request<ServerStatus[]>("/servers/status");
 }
 
-export function deleteMatch(
-  token: string,
-  id: string
-): Promise<ApiResponse<{ deleted: true }>> {
-  return request<{ deleted: true }>(`/matches/${id}`, {
-    method: "DELETE",
-    headers: authHeaders(token),
-  });
-}
+export const deleteMatch = matchesClient.remove;
 
 // Server Config
 export function getServerConfigs(

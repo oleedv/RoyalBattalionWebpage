@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import type { ApiResponse, Match } from "shared";
+import type { Match } from "shared";
 import prisma from "../lib/db";
+import { findOrThrow, success, fail } from "../lib/crud-helpers";
 import { resyncAllMatches } from "../lib/match-sync";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
@@ -20,7 +21,7 @@ matches.get("/public", async (c) => {
 
   const result: Match[] = entries.map(toMatch);
 
-  return c.json<ApiResponse<Match[]>>({ success: true, data: result });
+  return success(c, result);
 });
 
 // All remaining routes require user auth
@@ -71,17 +72,14 @@ matches.get("/", requirePermission("manage:matches"), async (c) => {
     orderBy: { date: "desc" },
   });
 
-  return c.json<ApiResponse<Match[]>>({ success: true, data: entries.map(toMatch) });
+  return success(c, entries.map(toMatch));
 });
 
 matches.put("/:id", requirePermission("manage:matches"), zValidator("json", updateMatchSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
-  const existing = await prisma.match.findUnique({ where: { id } });
-  if (!existing) {
-    return c.json<ApiResponse<never>>({ success: false, error: "Match not found" }, 404);
-  }
+  await findOrThrow(prisma.match, { id }, "Match");
 
   try {
     const entry = await prisma.match.update({
@@ -98,12 +96,9 @@ matches.put("/:id", requirePermission("manage:matches"), zValidator("json", upda
     });
 
     await audit(c, "match.update", "match", id, { changes: body });
-    return c.json<ApiResponse<Match>>({ success: true, data: toMatch(entry) });
+    return success(c, toMatch(entry));
   } catch {
-    return c.json<ApiResponse<never>>({
-      success: false,
-      error: "Failed to update match",
-    }, 400);
+    return fail(c, "Failed to update match");
   }
 });
 
@@ -111,27 +106,21 @@ matches.post("/resync", requirePermission("manage:matches"), async (c) => {
   try {
     const result = await resyncAllMatches();
     await audit(c, "match.resync", "match");
-    return c.json<ApiResponse<{ resynced: number }>>({ success: true, data: result });
+    return success(c, result);
   } catch (err) {
-    return c.json<ApiResponse<never>>({
-      success: false,
-      error: err instanceof Error ? err.message : "Resync failed",
-    }, 500);
+    return fail(c, err instanceof Error ? err.message : "Resync failed", 500);
   }
 });
 
 matches.delete("/:id", requirePermission("manage:matches"), async (c) => {
   const id = c.req.param("id");
 
-  const existing = await prisma.match.findUnique({ where: { id } });
-  if (!existing) {
-    return c.json<ApiResponse<never>>({ success: false, error: "Match not found" }, 404);
-  }
+  const existing = await findOrThrow(prisma.match, { id }, "Match");
 
   await prisma.match.delete({ where: { id } });
   await audit(c, "match.delete", "match", id, { map: existing.map, layer: existing.layer });
 
-  return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
+  return success(c, { deleted: true as const });
 });
 
 export default matches;

@@ -162,7 +162,7 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
     function connect() {
       if (cancelled) return;
       const wsBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001").replace(/^http/, "ws");
-      const ws = new WebSocket(`${wsBase}/presence/ws?token=${apiToken}&page=${encodeURIComponent(pathname)}`);
+      const ws = new WebSocket(`${wsBase}/presence/ws?page=${encodeURIComponent(pathname)}`, [`auth-${apiToken}`]);
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);

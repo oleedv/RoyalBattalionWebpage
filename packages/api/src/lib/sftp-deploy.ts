@@ -2,6 +2,8 @@ import SFTPClient from "ssh2-sftp-client";
 import { generateAdminsCfg } from "./cfg-generator";
 import prisma from "./db";
 import { decrypt } from "./crypto";
+import { env } from "./env";
+import { logger } from "./logger";
 
 export async function triggerSftpDeploy(server?: string): Promise<void> {
   // If server is specified, deploy only that server; otherwise deploy all configured servers
@@ -11,7 +13,7 @@ export async function triggerSftpDeploy(server?: string): Promise<void> {
     const configs = await prisma.serverConfig.findMany({ where: { syncEnabled: true } });
     if (configs.length === 0) {
       // Fall back to env vars only if SFTP_SYNC_ENABLED is explicitly set
-      if (process.env.SFTP_SYNC_ENABLED === "true") {
+      if (env.SFTP_SYNC_ENABLED === "true") {
         await deployWithEnvVars();
       }
       return;
@@ -32,7 +34,7 @@ async function deployForServer(server: string): Promise<void> {
   }
 
   if (!config.syncEnabled) {
-    console.log(`[sftp-deploy] Sync disabled for server "${server}", skipping`);
+    logger.info("sftp", `Sync disabled for server "${server}", skipping`);
     return;
   }
 
@@ -43,7 +45,7 @@ async function deployForServer(server: string): Promise<void> {
   const remotePath = config.sftpPath;
 
   if (!host || !username || !password || !remotePath) {
-    console.log(`[sftp-deploy] Incomplete SFTP config for server "${server}", skipping`);
+    logger.info("sftp", `Incomplete SFTP config for server "${server}", skipping`);
     return;
   }
 
@@ -54,18 +56,18 @@ async function deployForServer(server: string): Promise<void> {
   try {
     await sftp.connect({ host, port, username, password });
     await sftp.put(Buffer.from(cfg, "utf-8"), filePath);
-    console.log(`[sftp-deploy] Uploaded admins.cfg for server "${server}" to ${filePath}`);
+    logger.info("sftp", `Uploaded admins.cfg for server "${server}" to ${filePath}`);
   } finally {
     await sftp.end();
   }
 }
 
 async function deployWithEnvVars(server?: string): Promise<void> {
-  const host = process.env.SFTP_HOST;
-  const port = Number(process.env.SFTP_PORT) || 22;
-  const username = process.env.SFTP_USER;
-  const password = process.env.SFTP_PASS;
-  const remotePath = process.env.SFTP_PATH;
+  const host = env.SFTP_HOST;
+  const port = env.SFTP_PORT;
+  const username = env.SFTP_USER;
+  const password = env.SFTP_PASS;
+  const remotePath = env.SFTP_PATH;
 
   if (!host || !username || !password || !remotePath) {
     return;
@@ -78,7 +80,7 @@ async function deployWithEnvVars(server?: string): Promise<void> {
   try {
     await sftp.connect({ host, port, username, password });
     await sftp.put(Buffer.from(cfg, "utf-8"), filePath);
-    console.log(`[sftp-deploy] Uploaded admins.cfg to ${filePath} (env vars)`);
+    logger.info("sftp", `Uploaded admins.cfg to ${filePath} (env vars)`);
   } finally {
     await sftp.end();
   }

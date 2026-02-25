@@ -81,6 +81,10 @@ model WhitelistEntry {
   createdAt DateTime    @default(now())
 
   @@unique([steamId, server])
+  @@index([server])
+  @@index([expiresAt])
+  @@index([clanId])
+  @@index([groupId])
 }
 
 model ServerConfig {
@@ -109,6 +113,8 @@ model Match {
   createdBy   String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([createdAt])
 }
 
 model AuditLog {

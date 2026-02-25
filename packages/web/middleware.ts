@@ -1,7 +1,20 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PROTECTED_PATHS = ["/dashboard", "/whitelist", "/members", "/roles", "/tickets", "/api-docs"];
+const PROTECTED_PATHS = [
+  "/dashboard",
+  "/whitelist",
+  "/members",
+  "/roles",
+  "/tickets",
+  "/api-docs",
+  "/settings",
+  "/match-manager",
+  "/squadjs-config",
+  "/discord-bot",
+  "/live-server",
+  "/audit-logs",
+];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -29,5 +42,18 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/whitelist/:path*", "/members/:path*", "/roles/:path*", "/tickets/:path*", "/api-docs/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/whitelist/:path*",
+    "/members/:path*",
+    "/roles/:path*",
+    "/tickets/:path*",
+    "/api-docs/:path*",
+    "/settings/:path*",
+    "/match-manager/:path*",
+    "/squadjs-config/:path*",
+    "/discord-bot/:path*",
+    "/live-server/:path*",
+    "/audit-logs/:path*",
+  ],
 };

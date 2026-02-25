@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import type { ApiResponse, AdminGroup } from "shared";
+import type { AdminGroup } from "shared";
 import prisma from "../lib/db";
+import { findOrThrow, success, fail } from "../lib/crud-helpers";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { audit } from "../lib/audit";
@@ -44,10 +45,7 @@ adminGroups.get("/", async (c) => {
     orderBy: { sortOrder: "asc" },
   });
 
-  return c.json<ApiResponse<AdminGroup[]>>({
-    success: true,
-    data: groups.map(toAdminGroup),
-  });
+  return success(c, groups.map(toAdminGroup));
 });
 
 adminGroups.post("/", zValidator("json", createGroupSchema), async (c) => {
@@ -60,15 +58,9 @@ adminGroups.post("/", zValidator("json", createGroupSchema), async (c) => {
 
     await audit(c, "admin_group.create", "admin_group", group.id, { name });
 
-    return c.json<ApiResponse<AdminGroup>>(
-      { success: true, data: toAdminGroup(group) },
-      201
-    );
+    return success(c, toAdminGroup(group), 201);
   } catch {
-    return c.json<ApiResponse<never>>(
-      { success: false, error: "Failed to create group. Name may already exist." },
-      400
-    );
+    return fail(c, "Failed to create group. Name may already exist.");
   }
 });
 
@@ -76,10 +68,7 @@ adminGroups.put("/:id", zValidator("json", updateGroupSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
-  const existing = await prisma.adminGroup.findUnique({ where: { id } });
-  if (!existing) {
-    return c.json<ApiResponse<never>>({ success: false, error: "Group not found" }, 404);
-  }
+  await findOrThrow(prisma.adminGroup, { id }, "Admin group");
 
   try {
     const group = await prisma.adminGroup.update({
@@ -93,27 +82,21 @@ adminGroups.put("/:id", zValidator("json", updateGroupSchema), async (c) => {
 
     await audit(c, "admin_group.update", "admin_group", id, { changes: body });
 
-    return c.json<ApiResponse<AdminGroup>>({ success: true, data: toAdminGroup(group) });
+    return success(c, toAdminGroup(group));
   } catch {
-    return c.json<ApiResponse<never>>(
-      { success: false, error: "Failed to update group" },
-      400
-    );
+    return fail(c, "Failed to update group");
   }
 });
 
 adminGroups.delete("/:id", async (c) => {
   const id = c.req.param("id");
 
-  const existing = await prisma.adminGroup.findUnique({ where: { id } });
-  if (!existing) {
-    return c.json<ApiResponse<never>>({ success: false, error: "Group not found" }, 404);
-  }
+  const existing = await findOrThrow(prisma.adminGroup, { id }, "Admin group");
 
   await prisma.adminGroup.delete({ where: { id } });
   await audit(c, "admin_group.delete", "admin_group", id, { name: existing.name });
 
-  return c.json<ApiResponse<{ deleted: true }>>({ success: true, data: { deleted: true } });
+  return success(c, { deleted: true as const });
 });
 
 export default adminGroups;

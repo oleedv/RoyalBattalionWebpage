@@ -1,4 +1,81 @@
-import type { Pool } from "mysql2/promise";
+import type { Pool, RowDataPacket } from "mysql2/promise";
+
+// --- Raw SQL row interfaces ---
+
+interface MatchRow extends RowDataPacket {
+  id: number;
+  server_id: number;
+  dlc: string | null;
+  mapClassname: string;
+  layerClassname: string;
+  map: string;
+  layer: string;
+  startTime: Date;
+  endTime: Date | null;
+  winner: string | null;
+  serverName: string | null;
+}
+
+interface ScoreboardRow extends RowDataPacket {
+  teamId: number;
+  teamName: string;
+  squadId: number | null;
+  squadName: string | null;
+  isLeader: number;
+  role: string;
+  eosID: string;
+  steamID: string | null;
+  playerName: string;
+}
+
+interface FactionRow extends RowDataPacket {
+  teamName: string;
+}
+
+interface SquadDetailRow extends RowDataPacket {
+  squadName: string;
+  teamName: string;
+  playerEOSID: string;
+}
+
+interface SpawnRow extends RowDataPacket {
+  eosID: string;
+  playerName: string;
+  playerClassname: string;
+  time: Date;
+  spawnPointInstance: string | null;
+}
+
+interface DeathRow extends RowDataPacket {
+  attackerTeamID: number;
+  victimTeamID: number;
+  teamkill: number;
+  weapon: string | null;
+  damage: string | null;
+  attacker: string | null;
+  attackerEosID: string | null;
+  attackerName: string | null;
+  victim: string | null;
+  victimEosID: string | null;
+  victimName: string | null;
+}
+
+interface ReviveRow extends RowDataPacket {
+  reviver: string | null;
+  reviverEosID: string | null;
+  reviverName: string | null;
+  reviverTeamID: number;
+}
+
+interface PeakRow extends RowDataPacket {
+  peak: number | null;
+}
+
+interface PlayerRow extends RowDataPacket {
+  eosID: string;
+  steamID: string | null;
+  lastName: string;
+}
 
 export interface MatchDetailJson {
   duration: string;
@@ -147,7 +224,7 @@ export async function assembleMatchDetail(
      WHERE m.id = ?`,
     [matchId]
   );
-  const match = (matchRows as any[])[0];
+  const match = (matchRows as MatchRow[])[0];
   if (!match || !match.endTime) return null;
 
   // Skip training/jensen's range
@@ -160,7 +237,7 @@ export async function assembleMatchDetail(
   if (durationMs < 5 * 60_000) return null;
 
   // 2. Scoreboard snapshot (authoritative end-of-round data)
-  let scoreboard: any[] = [];
+  let scoreboard: ScoreboardRow[] = [];
   try {
     const [scoreboardRows] = await pool.query(
       `SELECT sb.team_id AS teamId, sb.team_name AS teamName,
@@ -172,16 +249,16 @@ export async function assembleMatchDetail(
        WHERE sb.match_id = ?`,
       [matchId]
     );
-    scoreboard = scoreboardRows as any[];
-  } catch (err: any) {
-    if (err?.errno !== 1146) throw err;
+    scoreboard = scoreboardRows as ScoreboardRow[];
+  } catch (err: unknown) {
+    if ((err as { errno?: number })?.errno !== 1146) throw err;
   }
   const hasScoreboard = scoreboard.length > 0;
 
   // 3. Legacy queries -- only needed when scoreboard is not available
   let factions: string[] = [];
-  let squadDetailRows: any[] = [];
-  let spawns: any[] = [];
+  let squadDetailRows: SquadDetailRow[] = [];
+  let spawns: SpawnRow[] = [];
 
   if (!hasScoreboard) {
     // Squad creations -> faction per teamID
@@ -189,7 +266,7 @@ export async function assembleMatchDetail(
       "SELECT DISTINCT sc.team_name AS teamName FROM squadjs_squad_creations sc WHERE sc.match_id = ?",
       [matchId]
     );
-    factions = (squadRows as any[]).map((r: any) => r.teamName as string);
+    factions = (squadRows as FactionRow[]).map((r) => r.teamName);
 
     const [sqDetailRows] = await pool.query(
       `SELECT sc.squad_name AS squadName, sc.team_name AS teamName, p.eos_id AS playerEOSID
@@ -198,7 +275,7 @@ export async function assembleMatchDetail(
        WHERE sc.match_id = ?`,
       [matchId]
     );
-    squadDetailRows = sqDetailRows as any[];
+    squadDetailRows = sqDetailRows as SquadDetailRow[];
 
     // Spawns (for role info)
     const [spawnRows] = await pool.query(
@@ -210,7 +287,7 @@ export async function assembleMatchDetail(
        WHERE s.match_id = ? ORDER BY s.time ASC`,
       [matchId]
     );
-    spawns = spawnRows as any[];
+    spawns = spawnRows as SpawnRow[];
   }
 
   // 4. Deaths (always needed for K/D/TK stats)
@@ -226,7 +303,7 @@ export async function assembleMatchDetail(
      WHERE ce.match_id = ? AND ce.event_type = 'death'`,
     [matchId]
   );
-  const deaths = deathRows as any[];
+  const deaths = deathRows as DeathRow[];
 
   // 5. Revives (always needed)
   const [reviveRows] = await pool.query(
@@ -237,14 +314,14 @@ export async function assembleMatchDetail(
      WHERE ce.match_id = ? AND ce.event_type = 'revive'`,
     [matchId]
   );
-  const revives = reviveRows as any[];
+  const revives = reviveRows as ReviveRow[];
 
   // 6. Peak player count
   const [pcRows] = await pool.query(
     "SELECT MAX(players) AS peak FROM squadjs_player_counts WHERE match_id = ?",
     [matchId]
   );
-  const peakPlayers = (pcRows as any[])[0]?.peak || 0;
+  const peakPlayers = (pcRows as PeakRow[])[0]?.peak || 0;
 
   // 7. Player mapping (eosID <-> steamID)
   const [playerRows] = await pool.query(
@@ -253,7 +330,7 @@ export async function assembleMatchDetail(
   const eosBysteam = new Map<string, string>();
   const steamByEos = new Map<string, string>();
   const nameByEos = new Map<string, string>();
-  for (const p of playerRows as any[]) {
+  for (const p of playerRows as PlayerRow[]) {
     if (p.steamID) {
       eosBysteam.set(p.steamID, p.eosID);
       steamByEos.set(p.eosID, p.steamID);
@@ -278,10 +355,10 @@ export async function assembleMatchDetail(
       const faction = sq.teamName;
 
       const asAttacker = deaths.find(
-        (d: any) => d.attacker === steamByEos.get(eosID) || d.attacker === eosID || d.attackerEosID === eosID
+        (d) => d.attacker === steamByEos.get(eosID) || d.attacker === eosID || d.attackerEosID === eosID
       );
       const asVictim = deaths.find(
-        (d: any) => d.victim === steamByEos.get(eosID) || d.victim === eosID || d.victimEosID === eosID
+        (d) => d.victim === steamByEos.get(eosID) || d.victim === eosID || d.victimEosID === eosID
       );
 
       if (asAttacker && !teamFactions.has(asAttacker.attackerTeamID)) {
@@ -291,7 +368,7 @@ export async function assembleMatchDetail(
         teamFactions.set(asVictim.victimTeamID, faction);
       }
 
-      const spawn = spawns.find((s: any) => s.eosID === eosID);
+      const spawn = spawns.find((s) => s.eosID === eosID);
       if (spawn) {
         const spawnPoint = spawn.spawnPointInstance || "";
         if (spawnPoint.includes("Team1") && !teamFactions.has(1)) {
@@ -465,13 +542,13 @@ export async function assembleMatchDetail(
   for (const [steamId, p] of playerMap) {
     if (p.teamId !== 0) continue;
 
-    const asAttacker = deaths.find((d: any) => d.attacker === steamId);
+    const asAttacker = deaths.find((d) => d.attacker === steamId);
     if (asAttacker?.attackerTeamID) {
       p.teamId = asAttacker.attackerTeamID;
       continue;
     }
 
-    const asVictim = deaths.find((d: any) => d.victim === steamId);
+    const asVictim = deaths.find((d) => d.victim === steamId);
     if (asVictim?.victimTeamID) {
       p.teamId = asVictim.victimTeamID;
       continue;

@@ -4,9 +4,11 @@ import { zValidator } from "@hono/zod-validator";
 import { SignJWT } from "jose";
 import type { Permission, ApiResponse, AuthSyncResponse, AuthMeResponse } from "shared";
 import prisma from "../lib/db";
+import { env } from "../lib/env";
 import { fetchDiscordUser, fetchGuildRoles } from "../lib/discord";
 import { authMiddleware } from "../middleware/auth";
 import { rateLimit } from "../middleware/rate-limit";
+import { logger } from "../lib/logger";
 
 const auth = new Hono();
 
@@ -14,14 +16,14 @@ const syncSchema = z.object({
   accessToken: z.string().min(1),
 });
 
-const getSecret = () => new TextEncoder().encode(process.env.JWT_SECRET!);
+const getSecret = () => new TextEncoder().encode(env.JWT_SECRET);
 
 const SYNC_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const syncCache = new Map<string, { data: ApiResponse<AuthSyncResponse>; expiry: number }>();
 
 auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
   const { accessToken } = c.req.valid("json");
-  const guildId = process.env.DISCORD_GUILD_ID;
+  const guildId = env.DISCORD_GUILD_ID;
 
   if (!guildId) {
     return c.json<ApiResponse<never>>({ success: false, error: "DISCORD_GUILD_ID is not configured" }, 500);
@@ -46,7 +48,7 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
 
     const guildRoles = await fetchGuildRoles(accessToken, guildId);
 
-    console.log(`[auth/sync] User ${discordUser.username}(${discordUser.id}) has ${guildRoles.length} Discord roles:`, guildRoles);
+    logger.info("auth", `User ${discordUser.username}(${discordUser.id}) has ${guildRoles.length} Discord roles`, guildRoles);
 
     const avatarUrl = discordUser.avatar
       ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
@@ -72,7 +74,7 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
       include: { permissions: true },
     });
 
-    console.log(`[auth/sync] Matched ${knownRoles.length}/${guildRoles.length} roles to DB:`, knownRoles.map((r) => `${r.name}(${r.discordRoleId})`));
+    logger.info("auth", `Matched ${knownRoles.length}/${guildRoles.length} roles to DB`, knownRoles.map((r) => `${r.name}(${r.discordRoleId})`));
 
     // Sync user roles: remove old, add new
     await prisma.userRole.deleteMany({ where: { userId: user.id } });
@@ -95,10 +97,10 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
       ),
     ];
 
-    console.log(`[auth/sync] Final permissions for ${discordUser.username}:`, permissions);
+    logger.info("auth", `Final permissions for ${discordUser.username}`, permissions);
 
     // Master users: always grant admin (configured via ADMIN_DISCORD_IDS env var)
-    const adminIds = (process.env.ADMIN_DISCORD_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const adminIds = env.ADMIN_DISCORD_IDS.split(",").map((s) => s.trim()).filter(Boolean);
     if (adminIds.includes(discordUser.id) && !permissions.includes("admin")) {
       permissions.push("admin");
     }
@@ -131,7 +133,7 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
     return c.json(response);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Auth sync failed";
-    console.error("[auth/sync] Error:", err);
+    logger.error("auth", "Auth sync error", err);
     if (message.includes("guild member fetch failed: 404")) {
       return c.json<ApiResponse<never>>({
         success: false,

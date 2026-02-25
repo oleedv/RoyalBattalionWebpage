@@ -2,6 +2,15 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePermissions } from "@/lib/permission-context";
+import { Modal } from "@/components/modal";
+
+import type { Player, ServerInfo, ChatMessage, ConsoleEntry, MetricSample, WSMessage, OnlineClanData, ChatFilter } from "./lib/types";
+import { handleGameEvent, type GameEventAction } from "./lib/handle-game-event";
+import { InfoCell } from "./components/info-cell";
+import { Sparkline } from "./components/sparkline";
+import { MapImg, getMapThumbnailUrls } from "./components/map-img";
+import { TeamColumn } from "./components/team-column";
+import { PlayerCard } from "./components/player-card";
 
 const WS_BASE =
   (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001").replace(
@@ -26,15 +35,11 @@ const FACTION_META: Record<string, { name: string; flag: string }> = {
 };
 
 function getFaction(players: Player[], serverFaction?: string): { name: string; flag: string } | null {
-  // Primary: use faction from A2S server info
   if (serverFaction) {
-    // A2S TeamOne_s/TeamTwo_s can be full layer strings like "Gorodok_RAAS_v12_USA" or just "USA"
-    // Try matching the last segment or the full string against known factions
     for (const key of Object.keys(FACTION_META)) {
       if (serverFaction === key || serverFaction.endsWith(`_${key}`)) return FACTION_META[key];
     }
   }
-  // Fallback: extract from first player's role prefix
   for (const p of players) {
     if (!p.role || typeof p.role !== "string") continue;
     const prefix = p.role.split("_")[0];
@@ -42,78 +47,6 @@ function getFaction(players: Player[], serverFaction?: string): { name: string; 
   }
   return null;
 }
-
-interface Player {
-  playerID: string;
-  eosID: string;
-  steamID: string;
-  name: string;
-  teamID: string;
-  squadID: string | null;
-  squad?: { squadName: string; size: number; creatorName: string };
-  role: string;
-  isLeader: boolean;
-  playtime?: number;
-}
-
-interface ServerInfo {
-  serverName: string;
-  maxPlayers: number;
-  publicSlots: number;
-  reserveSlots: number;
-  playerCount: number;
-  publicQueue: number;
-  reserveQueue: number;
-  currentLayer: string | { name: string; [key: string]: unknown } | null;
-  nextLayer: string | { name: string; [key: string]: unknown } | null;
-  team1Faction?: string;
-  team2Faction?: string;
-}
-
-interface ChatMessage {
-  chat: string;
-  steamID: string;
-  eosID: string;
-  name: string;
-  message: string;
-  time: string;
-}
-
-interface MetricSample {
-  time: number;
-  tickRate: number | null;
-  playerCount: number;
-  publicQueue: number;
-  reserveQueue: number;
-}
-
-interface Snapshot {
-  connected: boolean;
-  players: Player[];
-  serverInfo: ServerInfo | null;
-  chatLog: ChatMessage[];
-  consoleLog: ConsoleEntry[];
-  tickRate: number | null;
-  metricHistory: MetricSample[];
-}
-
-type OnlineClanEntry = { id: string; tag: string; members: { teamID: string; steamId: string; name: string }[] };
-type OnlineClanData = Record<string, OnlineClanEntry>;
-
-type WSMessage =
-  | { type: "servers"; data: string[] }
-  | { type: "snapshot"; data: Snapshot; server?: string; configured?: boolean }
-  | { type: "event"; event: string; data: unknown; server?: string }
-  | { type: "action_result"; success: boolean; error?: string; action?: string }
-  | { type: "online_clans"; data: OnlineClanData };
-
-interface ConsoleEntry {
-  time: string;
-  type: "warn" | "kick" | "ban" | "broadcast" | "connect" | "disconnect" | "teamkill" | "kill" | "newgame" | "wound" | "revive" | "squad" | "admincam" | "rconerror" | "teamchange" | "squadchange" | "autokick" | "roundend";
-  message: string;
-}
-
-type ChatFilter = "All" | "ChatAll" | "ChatTeam" | "ChatSquad" | "ChatAdmin";
 
 const CONSOLE_TYPES: ConsoleEntry["type"][] = [
   "warn", "kick", "ban", "broadcast", "connect", "disconnect", "teamkill", "kill", "newgame", "wound", "revive", "squad",
@@ -209,6 +142,42 @@ export default function LiveServerPage() {
     return () => clearInterval(interval);
   }, [connected]);
 
+  const applyGameEventActions = useCallback((actions: GameEventAction[]) => {
+    for (const action of actions) {
+      switch (action.type) {
+        case "setPlayers":
+          setPlayers(action.players);
+          break;
+        case "setServerInfo":
+          setServerInfo(action.updater);
+          break;
+        case "setSquadjsConnected":
+          setSquadjsConnected(action.connected);
+          break;
+        case "appendChat":
+          setChatLog((prev) => {
+            const next = [...prev, action.message];
+            return next.length > 100 ? next.slice(-100) : next;
+          });
+          break;
+        case "setTickRate":
+          setTickRate(action.tickRate);
+          break;
+        case "appendConsole":
+          setConsoleLog((prev) => {
+            const next = [...prev, { time: new Date().toISOString(), ...action.entry }];
+            return next.length > 200 ? next.slice(-200) : next;
+          });
+          break;
+        case "requestClanRefresh":
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ action: "get_online_clans" }));
+          }
+          break;
+      }
+    }
+  }, []);
+
   const handleMessage = useCallback((event: MessageEvent) => {
     if (activityTimeout.current) clearTimeout(activityTimeout.current);
     setActivity(true);
@@ -241,9 +210,11 @@ export default function LiveServerPage() {
             wsRef.current.send(JSON.stringify({ action: "get_online_clans" }));
           }
           break;
-        case "event":
-          handleGameEvent(msg.event, msg.data);
+        case "event": {
+          const actions = handleGameEvent(msg.event, msg.data);
+          applyGameEventActions(actions);
           break;
+        }
         case "action_result":
           if (msg.success) {
             setActionFeedback(`${msg.action} executed successfully`);
@@ -259,201 +230,7 @@ export default function LiveServerPage() {
     } catch (err) {
       console.error("[live-server] Failed to process WebSocket message:", err, event.data);
     }
-  }, []);
-
-  function handleGameEvent(event: string, data: unknown) {
-    switch (event) {
-      case "UPDATED_PLAYER_INFORMATION":
-      case "SNAPSHOT_PLAYERS":
-        if (Array.isArray(data)) {
-          setPlayers(data);
-          // Refresh clan data when players change
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ action: "get_online_clans" }));
-          }
-        }
-        break;
-      case "SNAPSHOT_SERVER_INFO":
-        if (data) setServerInfo(data as ServerInfo);
-        break;
-      case "CONNECTION_STATUS":
-        if (data && typeof data === "object" && "connected" in data) {
-          setSquadjsConnected((data as { connected: boolean }).connected);
-        }
-        break;
-      case "UPDATED_A2S_INFORMATION":
-        if (data && typeof data === "object") {
-          const a2s = data as Record<string, unknown>;
-          setServerInfo((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              playerCount: (a2s.a2sPlayerCount as number) ?? prev.playerCount,
-              currentLayer: (a2s.currentLayer as ServerInfo["currentLayer"]) ?? prev.currentLayer,
-              ...(a2s.nextLayer !== undefined ? { nextLayer: a2s.nextLayer as ServerInfo["nextLayer"] } : {}),
-              ...(typeof a2s.publicQueue === "number" ? { publicQueue: a2s.publicQueue } : {}),
-              ...(typeof a2s.reserveQueue === "number" ? { reserveQueue: a2s.reserveQueue } : {}),
-            };
-          });
-        }
-        break;
-      case "CHAT_MESSAGE":
-        if (data && typeof data === "object") {
-          setChatLog((prev) => {
-            const next = [...prev, data as ChatMessage];
-            return next.length > 100 ? next.slice(-100) : next;
-          });
-        }
-        break;
-      case "TICK_RATE":
-        if (typeof data === "number") setTickRate(data);
-        else if (data && typeof data === "object" && "tickRate" in data) {
-          setTickRate((data as { tickRate: number }).tickRate);
-        }
-        break;
-      case "NEW_GAME": {
-        const layer = (data as { layerClassname?: string })?.layerClassname || "Unknown";
-        setChatLog((prev) => {
-          const divider: ChatMessage = { chat: "__DIVIDER__", steamID: "", eosID: "", name: "", message: layer, time: new Date().toISOString() };
-          const next = [...prev, divider];
-          return next.length > 100 ? next.slice(-100) : next;
-        });
-        addConsoleEntry("newgame", `New game started${layer !== "Unknown" ? `: ${layer}` : ""}`);
-        break;
-      }
-      case "PLAYER_CONNECTED": {
-        const pc = data as { player?: { name?: string } };
-        if (pc?.player?.name) addConsoleEntry("connect", `${pc.player.name} connected`);
-        break;
-      }
-      case "PLAYER_DISCONNECTED": {
-        const pd = data as { player?: { name?: string } };
-        if (pd?.player?.name) addConsoleEntry("disconnect", `${pd.player.name} disconnected`);
-        break;
-      }
-      case "PLAYER_WARNED": {
-        const pw = data as { player?: { name?: string }; reason?: string };
-        addConsoleEntry("warn", `${pw?.player?.name || "Unknown"} warned: ${pw?.reason || "No reason"}`);
-        break;
-      }
-      case "PLAYER_KICKED": {
-        const pk = data as { player?: { name?: string }; reason?: string };
-        addConsoleEntry("kick", `${pk?.player?.name || "Unknown"} kicked: ${pk?.reason || "No reason"}`);
-        break;
-      }
-      case "PLAYER_BANNED": {
-        const pb = data as { player?: { name?: string }; reason?: string };
-        addConsoleEntry("ban", `${pb?.player?.name || "Unknown"} banned: ${pb?.reason || "No reason"}`);
-        break;
-      }
-      case "ADMIN_BROADCAST": {
-        const ab = data as { message?: string };
-        if (ab?.message) addConsoleEntry("broadcast", `Broadcast: ${ab.message}`);
-        break;
-      }
-      case "TEAMKILL": {
-        const tk = data as { attacker?: { name?: string }; victim?: { name?: string }; weapon?: string };
-        addConsoleEntry("teamkill", `${tk?.attacker?.name || "Unknown"} teamkilled ${tk?.victim?.name || "Unknown"}${tk?.weapon ? ` (${tk.weapon})` : ""}`);
-        break;
-      }
-      case "PLAYER_WOUNDED": {
-        const pw2 = data as { attacker?: { name?: string }; victim?: { name?: string }; weapon?: string };
-        if (pw2?.attacker?.name && pw2?.victim?.name) {
-          addConsoleEntry("wound", `${pw2.attacker.name} wounded ${pw2.victim.name}${pw2.weapon ? ` (${pw2.weapon})` : ""}`);
-        }
-        break;
-      }
-      case "PLAYER_DIED": {
-        const pd2 = data as { attacker?: { name?: string }; victim?: { name?: string }; weapon?: string };
-        if (pd2?.attacker?.name && pd2?.victim?.name) {
-          addConsoleEntry("kill", `${pd2.attacker.name} killed ${pd2.victim.name}${pd2.weapon ? ` (${pd2.weapon})` : ""}`);
-        }
-        break;
-      }
-      case "PLAYER_REVIVED": {
-        const pr = data as { reviver?: { name?: string }; victim?: { name?: string } };
-        if (pr?.reviver?.name && pr?.victim?.name) {
-          addConsoleEntry("revive", `${pr.reviver.name} revived ${pr.victim.name}`);
-        }
-        break;
-      }
-      case "SQUAD_CREATED": {
-        const sc = data as { player?: { name?: string }; squad?: { squadName?: string } };
-        if (sc?.squad?.squadName) {
-          addConsoleEntry("squad", `Squad "${sc.squad.squadName}" created${sc.player?.name ? ` by ${sc.player.name}` : ""}`);
-        }
-        break;
-      }
-      case "POSSESSED_ADMIN_CAMERA": {
-        const pac = data as { player?: { name?: string } };
-        if (pac?.player?.name) addConsoleEntry("admincam", `${pac.player.name} entered admin cam`);
-        break;
-      }
-      case "UNPOSSESSED_ADMIN_CAMERA": {
-        const uac = data as { player?: { name?: string } };
-        if (uac?.player?.name) addConsoleEntry("admincam", `${uac.player.name} left admin cam`);
-        break;
-      }
-      case "RCON_ERROR": {
-        const re = data as { error?: string; message?: string };
-        addConsoleEntry("rconerror", `RCON error: ${re?.error || re?.message || "Unknown error"}`);
-        break;
-      }
-      case "PLAYER_TEAM_CHANGE": {
-        const ptc = data as { player?: { name?: string }; newTeamID?: string };
-        if (ptc?.player?.name) addConsoleEntry("teamchange", `${ptc.player.name} switched to Team ${ptc.newTeamID || "?"}`);
-        break;
-      }
-      case "PLAYER_SQUAD_CHANGE": {
-        const psc = data as { player?: { name?: string }; newSquad?: { squadName?: string }; newSquadID?: string };
-        if (psc?.player?.name) {
-          const squadName = psc.newSquad?.squadName || (psc.newSquadID ? `Squad ${psc.newSquadID}` : "Unassigned");
-          addConsoleEntry("squadchange", `${psc.player.name} moved to ${squadName}`);
-        }
-        break;
-      }
-      case "UPDATED_LAYER_INFORMATION": {
-        if (data && typeof data === "object") {
-          const li = data as Record<string, unknown>;
-          setServerInfo((prev) => {
-            if (!prev) return prev;
-            const updated = { ...prev };
-            if (li.currentLayer != null) {
-              updated.currentLayer = li.currentLayer as ServerInfo["currentLayer"];
-            }
-            if (li.nextLayer !== undefined) {
-              updated.nextLayer = li.nextLayer as ServerInfo["nextLayer"];
-            }
-            return updated;
-          });
-        }
-        break;
-      }
-      case "PLAYER_AUTO_KICKED": {
-        const pak = data as { player?: { name?: string }; reason?: string };
-        addConsoleEntry("autokick", `${pak?.player?.name || "Unknown"} auto-kicked: ${pak?.reason || "Unassigned"}`);
-        break;
-      }
-      case "ROUND_ENDED": {
-        const rnd = data as { winner?: string; loser?: string; message?: string };
-        const msg = rnd?.message || (rnd?.winner ? `Winner: ${rnd.winner}` : "Round ended");
-        addConsoleEntry("roundend", msg);
-        setChatLog((prev) => {
-          const divider: ChatMessage = { chat: "__DIVIDER__", steamID: "", eosID: "", name: "", message: msg, time: new Date().toISOString() };
-          const next = [...prev, divider];
-          return next.length > 100 ? next.slice(-100) : next;
-        });
-        break;
-      }
-    }
-  }
-
-  function addConsoleEntry(type: ConsoleEntry["type"], message: string) {
-    setConsoleLog((prev) => {
-      const next = [...prev, { time: new Date().toISOString(), type, message }];
-      return next.length > 200 ? next.slice(-200) : next;
-    });
-  }
+  }, [applyGameEventActions]);
 
   const connectWs = useCallback(() => {
     if (!apiToken) return;
@@ -467,7 +244,7 @@ export default function LiveServerPage() {
       reconnectRef.current = null;
     }
 
-    const ws = new WebSocket(`${WS_BASE}/live-server/ws?token=${apiToken}`);
+    const ws = new WebSocket(`${WS_BASE}/live-server/ws`, [`auth-${apiToken}`]);
     wsRef.current = ws;
 
     ws.onopen = () => setConnected(true);
@@ -541,7 +318,7 @@ export default function LiveServerPage() {
     setBroadcastMsg("");
   }
 
-  function handleWarn() {
+  const handleWarn = useCallback(() => {
     if (!warnTarget || !warnMsg.trim()) return;
     sendAction({
       action: "warn",
@@ -552,9 +329,9 @@ export default function LiveServerPage() {
     });
     setWarnTarget(null);
     setWarnMsg("");
-  }
+  }, [warnTarget, warnMsg]);
 
-  function handleKick() {
+  const handleKick = useCallback(() => {
     if (!kickTarget) return;
     sendAction({
       action: "kick",
@@ -565,22 +342,22 @@ export default function LiveServerPage() {
     });
     setKickTarget(null);
     setKickReason("");
-  }
+  }, [kickTarget, kickReason]);
 
-  function handleSwitchTeam(player: Player) {
+  const handleSwitchTeam = useCallback((player: Player) => {
     sendAction({
       action: "switchteam",
       steamId: player.steamID,
       eosId: player.eosID,
       playerName: player.name,
     });
-  }
+  }, []);
 
-  function handleDisbandSquad(teamID: string, squadID: string) {
+  const handleDisbandSquad = useCallback((teamID: string, squadID: string) => {
     sendAction({ action: "disband", teamID, squadID });
-  }
+  }, []);
 
-  function handleSwitchSquad() {
+  const handleSwitchSquad = useCallback(() => {
     if (!switchSquadTarget) return;
     sendAction({
       action: "switchsquad",
@@ -591,7 +368,7 @@ export default function LiveServerPage() {
       })),
     });
     setSwitchSquadTarget(null);
-  }
+  }, [switchSquadTarget]);
 
   function handleEndMatch() {
     sendAction({ action: "endmatch" });
@@ -669,13 +446,18 @@ export default function LiveServerPage() {
     });
   }
 
-  function formatPlaytime(seconds?: number): string {
+  const formatPlaytime = useCallback((seconds?: number): string => {
     if (!seconds || seconds < 60) return "";
     const mins = Math.floor(seconds / 60);
     if (mins < 60) return `${mins}m`;
     const hrs = Math.floor(mins / 60);
     return `${hrs}h${mins % 60}m`;
-  }
+  }, []);
+
+  const onWarnPlayer = useCallback((p: Player) => { setWarnTarget(p); setWarnMsg(""); }, []);
+  const onKickPlayer = useCallback((p: Player) => { setKickTarget(p); setKickReason(""); }, []);
+  const onSwitchSquadCallback = useCallback((name: string, squadPlayers: Player[]) => setSwitchSquadTarget({ squadName: name, players: squadPlayers }), []);
+  const onSelectPlayer = useCallback((p: Player) => setSelectedPlayer(p), []);
 
   if (!canView) {
     return <div className="text-danger">Insufficient permissions.</div>;
@@ -889,77 +671,95 @@ export default function LiveServerPage() {
       )}
 
       {/* End Match confirmation */}
-      {endMatchConfirm && (
-        <ActionModal
-          title="End Match"
-          onConfirm={handleEndMatch}
-          onCancel={() => setEndMatchConfirm(false)}
-          confirmLabel="End Match"
-          confirmClass="bg-danger hover:bg-danger/80"
-        >
-          <p className="text-sm text-text-secondary">
-            Are you sure you want to end the current match? This will immediately end the game for all players.
-          </p>
-        </ActionModal>
-      )}
+      <Modal open={endMatchConfirm} onClose={() => setEndMatchConfirm(false)} className="max-w-md bg-bg-secondary p-6">
+        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
+          End Match
+        </h3>
+        <p className="text-sm text-text-secondary">
+          Are you sure you want to end the current match? This will immediately end the game for all players.
+        </p>
+        <div className="mt-4 flex justify-end gap-3">
+          <button
+            onClick={() => setEndMatchConfirm(false)}
+            className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleEndMatch}
+            className="rounded-sm bg-danger px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-danger/80 disabled:opacity-40"
+          >
+            End Match
+          </button>
+        </div>
+      </Modal>
 
       {/* Clan move modal */}
-      {clanMoveModalOpen && (
-        <ActionModal
-          title="Move Clan"
-          onConfirm={handleSwitchClan}
-          onCancel={() => { setClanMoveModalOpen(false); setClanMoveSelectedKey(null); }}
-          confirmLabel={clanMoveSelectedKey ? `Move ${getMovableClans(clanMoveTargetTeam).find((c) => c.key === clanMoveSelectedKey)?.count || 0} players` : "Select a clan"}
-          confirmClass="bg-warning hover:bg-warning/80"
-          confirmDisabled={!clanMoveSelectedKey}
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium tracking-wide text-text-muted uppercase">Target Team</label>
-              <div className="flex gap-2">
-                {(["1", "2"] as const).map((t) => (
+      <Modal open={clanMoveModalOpen} onClose={() => { setClanMoveModalOpen(false); setClanMoveSelectedKey(null); }} className="max-w-md bg-bg-secondary p-6">
+        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
+          Move Clan
+        </h3>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium tracking-wide text-text-muted uppercase">Target Team</label>
+            <div className="flex gap-2">
+              {(["1", "2"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => { setClanMoveTargetTeam(t); setClanMoveSelectedKey(null); }}
+                  className={`flex-1 rounded-sm border px-4 py-2 text-sm font-medium transition-colors ${
+                    clanMoveTargetTeam === t
+                      ? t === "1" ? "border-blue-500/40 bg-blue-500/10 text-blue-400" : "border-red-500/40 bg-red-500/10 text-red-400"
+                      : "border-border bg-bg-tertiary text-text-muted hover:text-text-primary"
+                  }`}
+                >
+                  Team {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium tracking-wide text-text-muted uppercase">Select Clan</label>
+            {getMovableClans(clanMoveTargetTeam).length === 0 ? (
+              <p className="text-sm text-text-muted">No clans with players to move to this team.</p>
+            ) : (
+              <div className="space-y-1">
+                {getMovableClans(clanMoveTargetTeam).map((clan) => (
                   <button
-                    key={t}
+                    key={clan.key}
                     type="button"
-                    onClick={() => { setClanMoveTargetTeam(t); setClanMoveSelectedKey(null); }}
-                    className={`flex-1 rounded-sm border px-4 py-2 text-sm font-medium transition-colors ${
-                      clanMoveTargetTeam === t
-                        ? t === "1" ? "border-blue-500/40 bg-blue-500/10 text-blue-400" : "border-red-500/40 bg-red-500/10 text-red-400"
-                        : "border-border bg-bg-tertiary text-text-muted hover:text-text-primary"
+                    onClick={() => setClanMoveSelectedKey(clan.key)}
+                    className={`flex w-full items-center justify-between rounded-sm border px-3 py-2 text-sm transition-colors ${
+                      clanMoveSelectedKey === clan.key
+                        ? "border-accent/40 bg-accent/10 text-accent"
+                        : "border-border bg-bg-tertiary text-text-secondary hover:bg-bg-tertiary/80 hover:text-text-primary"
                     }`}
                   >
-                    Team {t}
+                    <span>[{clan.tag}]</span>
+                    <span className="text-xs text-text-muted">{clan.count} player{clan.count !== 1 ? "s" : ""}</span>
                   </button>
                 ))}
               </div>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium tracking-wide text-text-muted uppercase">Select Clan</label>
-              {getMovableClans(clanMoveTargetTeam).length === 0 ? (
-                <p className="text-sm text-text-muted">No clans with players to move to this team.</p>
-              ) : (
-                <div className="space-y-1">
-                  {getMovableClans(clanMoveTargetTeam).map((clan) => (
-                    <button
-                      key={clan.key}
-                      type="button"
-                      onClick={() => setClanMoveSelectedKey(clan.key)}
-                      className={`flex w-full items-center justify-between rounded-sm border px-3 py-2 text-sm transition-colors ${
-                        clanMoveSelectedKey === clan.key
-                          ? "border-accent/40 bg-accent/10 text-accent"
-                          : "border-border bg-bg-tertiary text-text-secondary hover:bg-bg-tertiary/80 hover:text-text-primary"
-                      }`}
-                    >
-                      <span>[{clan.tag}]</span>
-                      <span className="text-xs text-text-muted">{clan.count} player{clan.count !== 1 ? "s" : ""}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            )}
           </div>
-        </ActionModal>
-      )}
+        </div>
+        <div className="mt-4 flex justify-end gap-3">
+          <button
+            onClick={() => { setClanMoveModalOpen(false); setClanMoveSelectedKey(null); }}
+            className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSwitchClan}
+            disabled={!clanMoveSelectedKey}
+            className="rounded-sm bg-warning px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-warning/80 disabled:opacity-40"
+          >
+            {clanMoveSelectedKey ? `Move ${getMovableClans(clanMoveTargetTeam).find((c) => c.key === clanMoveSelectedKey)?.count || 0} players` : "Select a clan"}
+          </button>
+        </div>
+      </Modal>
 
       {/* Main grid: Players + Chat */}
       <div className="grid gap-6 lg:grid-cols-3">
@@ -987,12 +787,12 @@ export default function LiveServerPage() {
                   searchValue={team1Search}
                   onSearchChange={setTeam1Search}
                   faction={getFaction(team1All, serverInfo?.team1Faction)}
-                  onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
-                  onKick={(p) => { setKickTarget(p); setKickReason(""); }}
+                  onWarn={onWarnPlayer}
+                  onKick={onKickPlayer}
                   onSwitchTeam={handleSwitchTeam}
                   onDisbandSquad={handleDisbandSquad}
-                  onSwitchSquad={(name, players) => setSwitchSquadTarget({ squadName: name, players })}
-                  onSelectPlayer={setSelectedPlayer}
+                  onSwitchSquad={onSwitchSquadCallback}
+                  onSelectPlayer={onSelectPlayer}
                   formatPlaytime={formatPlaytime}
                   teamId="1"
                 />
@@ -1005,12 +805,12 @@ export default function LiveServerPage() {
                   searchValue={team2Search}
                   onSearchChange={setTeam2Search}
                   faction={getFaction(team2All, serverInfo?.team2Faction)}
-                  onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
-                  onKick={(p) => { setKickTarget(p); setKickReason(""); }}
+                  onWarn={onWarnPlayer}
+                  onKick={onKickPlayer}
                   onSwitchTeam={handleSwitchTeam}
                   onDisbandSquad={handleDisbandSquad}
-                  onSwitchSquad={(name, players) => setSwitchSquadTarget({ squadName: name, players })}
-                  onSelectPlayer={setSelectedPlayer}
+                  onSwitchSquad={onSwitchSquadCallback}
+                  onSelectPlayer={onSelectPlayer}
                   formatPlaytime={formatPlaytime}
                   teamId="2"
                 />
@@ -1025,12 +825,12 @@ export default function LiveServerPage() {
                   players={unassigned}
                   totalCount={unassigned.length}
                   showActions={canManage}
-                  onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
-                  onKick={(p) => { setKickTarget(p); setKickReason(""); }}
+                  onWarn={onWarnPlayer}
+                  onKick={onKickPlayer}
                   onSwitchTeam={handleSwitchTeam}
                   onDisbandSquad={handleDisbandSquad}
-                  onSwitchSquad={(name, players) => setSwitchSquadTarget({ squadName: name, players })}
-                  onSelectPlayer={setSelectedPlayer}
+                  onSwitchSquad={onSwitchSquadCallback}
+                  onSelectPlayer={onSelectPlayer}
                   formatPlaytime={formatPlaytime}
                 />
               </div>
@@ -1225,85 +1025,113 @@ export default function LiveServerPage() {
       </div>
 
       {/* Warn modal */}
-      {warnTarget && (
-        <ActionModal
-          title={`Warn ${warnTarget.name}`}
-          onConfirm={handleWarn}
-          onCancel={() => setWarnTarget(null)}
-          confirmLabel="Send Warning"
-          confirmDisabled={!warnMsg.trim()}
-        >
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-1.5">
-              {WARN_TEMPLATES.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setWarnMsg(t)}
-                  className={`rounded-sm border px-2 py-1 text-xs transition-colors ${
-                    warnMsg === t
-                      ? "border-warning/30 bg-warning/10 text-warning"
-                      : "border-border text-text-muted hover:border-warning/20 hover:text-text-secondary"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-            <input
-              type="text"
-              value={warnMsg}
-              onChange={(e) => setWarnMsg(e.target.value)}
-              placeholder="Warning message..."
-              className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-              autoFocus
-            />
+      <Modal open={!!warnTarget} onClose={() => setWarnTarget(null)} className="max-w-md bg-bg-secondary p-6">
+        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
+          Warn {warnTarget?.name}
+        </h3>
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-1.5">
+            {WARN_TEMPLATES.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setWarnMsg(t)}
+                className={`rounded-sm border px-2 py-1 text-xs transition-colors ${
+                  warnMsg === t
+                    ? "border-warning/30 bg-warning/10 text-warning"
+                    : "border-border text-text-muted hover:border-warning/20 hover:text-text-secondary"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
           </div>
-        </ActionModal>
-      )}
-
-      {/* Kick modal */}
-      {kickTarget && (
-        <ActionModal
-          title={`Kick ${kickTarget.name}`}
-          onConfirm={handleKick}
-          onCancel={() => setKickTarget(null)}
-          confirmLabel="Kick Player"
-          confirmClass="bg-danger hover:bg-danger/80"
-        >
           <input
             type="text"
-            value={kickReason}
-            onChange={(e) => setKickReason(e.target.value)}
-            placeholder="Reason (optional)..."
+            value={warnMsg}
+            onChange={(e) => setWarnMsg(e.target.value)}
+            placeholder="Warning message..."
             className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
             autoFocus
           />
-        </ActionModal>
-      )}
+        </div>
+        <div className="mt-4 flex justify-end gap-3">
+          <button
+            onClick={() => setWarnTarget(null)}
+            className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleWarn}
+            disabled={!warnMsg.trim()}
+            className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-40"
+          >
+            Send Warning
+          </button>
+        </div>
+      </Modal>
+
+      {/* Kick modal */}
+      <Modal open={!!kickTarget} onClose={() => setKickTarget(null)} className="max-w-md bg-bg-secondary p-6">
+        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
+          Kick {kickTarget?.name}
+        </h3>
+        <input
+          type="text"
+          value={kickReason}
+          onChange={(e) => setKickReason(e.target.value)}
+          placeholder="Reason (optional)..."
+          className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+          autoFocus
+        />
+        <div className="mt-4 flex justify-end gap-3">
+          <button
+            onClick={() => setKickTarget(null)}
+            className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleKick}
+            className="rounded-sm bg-danger px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-danger/80 disabled:opacity-40"
+          >
+            Kick Player
+          </button>
+        </div>
+      </Modal>
 
       {/* Switch squad modal */}
-      {switchSquadTarget && (
-        <ActionModal
-          title={`Switch Squad: ${switchSquadTarget.squadName}`}
-          onConfirm={handleSwitchSquad}
-          onCancel={() => setSwitchSquadTarget(null)}
-          confirmLabel={`Switch ${switchSquadTarget.players.length} Players`}
-          confirmClass="bg-warning hover:bg-warning/80"
-        >
-          <div className="space-y-3 text-sm">
-            <div className="rounded-sm border border-warning/20 bg-warning/5 px-3 py-2 text-warning">
-              This is a force team switch. It may exceed the 50-player team cap.
-            </div>
-            <p className="text-text-secondary">
-              All {switchSquadTarget.players.length} players in this squad will be moved to the other team individually.
-            </p>
-            <p className="text-xs text-text-muted">
-              A queue-based switch system is planned for a future update.
-            </p>
+      <Modal open={!!switchSquadTarget} onClose={() => setSwitchSquadTarget(null)} className="max-w-md bg-bg-secondary p-6">
+        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
+          Switch Squad: {switchSquadTarget?.squadName}
+        </h3>
+        <div className="space-y-3 text-sm">
+          <div className="rounded-sm border border-warning/20 bg-warning/5 px-3 py-2 text-warning">
+            This is a force team switch. It may exceed the 50-player team cap.
           </div>
-        </ActionModal>
-      )}
+          <p className="text-text-secondary">
+            All {switchSquadTarget?.players.length} players in this squad will be moved to the other team individually.
+          </p>
+          <p className="text-xs text-text-muted">
+            A queue-based switch system is planned for a future update.
+          </p>
+        </div>
+        <div className="mt-4 flex justify-end gap-3">
+          <button
+            onClick={() => setSwitchSquadTarget(null)}
+            className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSwitchSquad}
+            className="rounded-sm bg-warning px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-warning/80 disabled:opacity-40"
+          >
+            Switch {switchSquadTarget?.players.length} Players
+          </button>
+        </div>
+      </Modal>
 
       {/* Player card */}
       {selectedPlayer && (
@@ -1311,492 +1139,12 @@ export default function LiveServerPage() {
           player={selectedPlayer}
           showActions={canManage}
           onClose={() => setSelectedPlayer(null)}
-          onWarn={(p) => { setWarnTarget(p); setWarnMsg(""); }}
-          onKick={(p) => { setKickTarget(p); setKickReason(""); }}
+          onWarn={onWarnPlayer}
+          onKick={onKickPlayer}
           onSwitchTeam={handleSwitchTeam}
           formatPlaytime={formatPlaytime}
         />
       )}
     </div>
-  );
-}
-
-// ============================================================
-// SUB COMPONENTS
-// ============================================================
-
-const THUMBNAILS_BASE =
-  "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/maps/thumbnails";
-
-function getMapThumbnailUrls(layer: string): string[] {
-  const cleaned = layer
-    .replace(/^SEC_?\d*_?/, "")
-    .replace(/\s+/g, "_");
-
-  const m = cleaned.match(/^(.+_v)(\d+)$/);
-  if (m) {
-    const prefix = m[1];
-    const num = m[2];
-    const padded = num.padStart(2, "0");
-    if (padded !== num) {
-      return [
-        `${THUMBNAILS_BASE}/${prefix}${num}.jpg`,
-        `${THUMBNAILS_BASE}/${prefix}${padded}.jpg`,
-      ];
-    }
-  }
-  return [`${THUMBNAILS_BASE}/${cleaned}.jpg`];
-}
-
-function MapImg({ urls, alt, className }: { urls: string[]; alt: string; className?: string }) {
-  const [idx, setIdx] = useState(0);
-  if (idx >= urls.length) return null;
-  return (
-    <img
-      src={urls[idx]}
-      alt={alt}
-      className={className}
-      onError={() => setIdx((i) => i + 1)}
-    />
-  );
-}
-
-function InfoCell({ label, value, children }: { label: string; value: string; children?: React.ReactNode }) {
-  return (
-    <div className="relative min-h-[56px] overflow-hidden rounded-sm">
-      {children && <div className="absolute inset-0">{children}</div>}
-      <div className="relative flex h-full flex-col justify-end p-1">
-        <div className="text-[10px] font-medium uppercase tracking-[0.15em] text-text-muted">
-          {label}
-        </div>
-        <div className="mt-0.5 truncate text-sm font-semibold text-text-primary">
-          {value}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Sparkline({ data, color, height = 48, fixedMax }: { data: number[]; color: string; height?: number; fixedMax?: number }) {
-  if (data.length < 2) return null;
-  const width = 120;
-  const max = fixedMax ?? Math.max(...data, 1);
-  const min = 0;
-  const range = max - min || 1;
-  const coords = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * width;
-    const y = height - ((v - min) / range) * (height - 4) - 2;
-    return { x, y };
-  });
-  const linePoints = coords.map((c) => `${c.x},${c.y}`).join(" ");
-  // Closed polygon for area fill: line points + bottom-right + bottom-left
-  const areaPoints = `${linePoints} ${width},${height} 0,${height}`;
-
-  return (
-    <svg width={width} height={height} className="h-full w-full" preserveAspectRatio="none" viewBox={`0 0 ${width} ${height}`}>
-      <polygon fill={color} fillOpacity="0.15" points={areaPoints} />
-      <polyline fill="none" stroke={color} strokeWidth="1.5" points={linePoints} />
-    </svg>
-  );
-}
-
-function TeamColumn({
-  label,
-  players,
-  totalCount,
-  className = "",
-  showActions = false,
-  searchValue,
-  onSearchChange,
-  faction,
-  onWarn,
-  onKick,
-  onSwitchTeam,
-  onDisbandSquad,
-  onSwitchSquad,
-  onSelectPlayer,
-  formatPlaytime,
-  teamId,
-}: {
-  label: string;
-  players: Player[];
-  totalCount: number;
-  className?: string;
-  showActions?: boolean;
-  searchValue?: string;
-  onSearchChange?: (v: string) => void;
-  faction?: { name: string; flag: string } | null;
-  onWarn: (p: Player) => void;
-  onKick: (p: Player) => void;
-  onSwitchTeam: (p: Player) => void;
-  onDisbandSquad: (teamID: string, squadID: string) => void;
-  onSwitchSquad: (squadName: string, players: Player[]) => void;
-  onSelectPlayer: (p: Player) => void;
-  formatPlaytime: (s?: number) => string;
-  teamId?: string;
-}) {
-  // Group by squad
-  const squads = new Map<string, Player[]>();
-  const noSquad: Player[] = [];
-
-  for (const p of players) {
-    if (p.squadID && p.squad) {
-      const key = `${p.teamID}-${p.squadID}`;
-      if (!squads.has(key)) squads.set(key, []);
-      squads.get(key)!.push(p);
-    } else {
-      noSquad.push(p);
-    }
-  }
-
-  // Sort SLs to top within each squad
-  for (const members of squads.values()) {
-    members.sort((a, b) => (a.isLeader === b.isLeader ? 0 : a.isLeader ? -1 : 1));
-  }
-
-  return (
-    <div className={className}>
-      <div className="flex items-center justify-between border-b border-border/50 px-4 py-2">
-        <div className="flex items-center gap-2">
-          {faction?.flag && (
-            <img src={faction.flag} alt={faction.name} className="h-4 w-4 object-contain" />
-          )}
-          <div className="flex flex-col">
-            <span className="text-xs font-medium tracking-wide text-text-muted uppercase">
-              {label} ({totalCount})
-            </span>
-            {faction && (
-              <span className="text-[10px] text-text-muted/70">{faction.name}</span>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {onSearchChange && (
-            <div className="relative">
-              <input
-                type="text"
-                value={searchValue || ""}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search..."
-                className="w-28 rounded-sm border border-border/50 bg-bg-tertiary px-2 py-0.5 pr-5 text-[10px] text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-              />
-              {searchValue && (
-                <button
-                  onClick={() => onSearchChange("")}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
-                >
-                  <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="flex-1 overflow-auto">
-        {Array.from(squads.entries()).map(([key, members]) => (
-          <div key={key}>
-            <div className="flex items-center justify-between bg-bg-tertiary/50 px-4 py-1">
-              <span className="text-[10px] font-medium tracking-wide text-accent uppercase">
-                {members[0].squad?.squadName || `Squad ${members[0].squadID}`} ({members.length})
-              </span>
-              {showActions && members[0].squadID && (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => onSwitchSquad(members[0].squad?.squadName || `Squad ${members[0].squadID}`, members)}
-                    className="rounded-sm px-1.5 py-0.5 text-[9px] text-warning/70 transition-colors hover:bg-warning/10 hover:text-warning"
-                    title="Switch entire squad to the other team"
-                  >
-                    Switch
-                  </button>
-                  <button
-                    onClick={() => onDisbandSquad(String(members[0].teamID), String(members[0].squadID))}
-                    className="rounded-sm px-1.5 py-0.5 text-[9px] text-danger/70 transition-colors hover:bg-danger/10 hover:text-danger"
-                  >
-                    Disband
-                  </button>
-                </div>
-              )}
-            </div>
-            {members.map((p) => (
-              <PlayerRow key={p.steamID || p.eosID} player={p} showActions={showActions} onWarn={onWarn} onKick={onKick} onSwitchTeam={onSwitchTeam} onSelect={onSelectPlayer} formatPlaytime={formatPlaytime} />
-            ))}
-          </div>
-        ))}
-        {noSquad.length > 0 && (
-          <div>
-            {squads.size > 0 && (
-              <div className="bg-bg-tertiary/50 px-4 py-1 text-[10px] font-medium tracking-wide text-text-muted uppercase">
-                Unassigned ({noSquad.length})
-              </div>
-            )}
-            {noSquad.map((p) => (
-              <PlayerRow key={p.steamID || p.eosID} player={p} showActions={showActions} onWarn={onWarn} onKick={onKick} onSwitchTeam={onSwitchTeam} onSelect={onSelectPlayer} formatPlaytime={formatPlaytime} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function formatRole(role: string): string {
-  if (!role || typeof role !== "string") return role ? String(role) : "Unknown";
-  // SquadJS roles: "USA_Rifleman_01", "RUS_Medic_02", "CAF_SL_01", etc.
-  const parts = role.split("_");
-  if (parts.length < 2) return role;
-  // Remove faction prefix and trailing number
-  const filtered = parts.slice(1).filter((p) => !/^\d+$/.test(p));
-  return filtered.join(" ") || role;
-}
-
-function PlayerRow({
-  player,
-  showActions = false,
-  onWarn,
-  onKick,
-  onSwitchTeam,
-  onSelect,
-  formatPlaytime,
-}: {
-  player: Player;
-  showActions?: boolean;
-  onWarn: (p: Player) => void;
-  onKick: (p: Player) => void;
-  onSwitchTeam: (p: Player) => void;
-  onSelect: (p: Player) => void;
-  formatPlaytime: (s?: number) => string;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const pt = formatPlaytime(player.playtime);
-
-  return (
-    <div
-      className="group flex items-center justify-between border-b border-border/30 px-4 py-1.5 transition-colors hover:bg-bg-tertiary/30"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div className="flex items-center gap-2 overflow-hidden">
-        {typeof player.role === "string" && player.role.includes("_Cmd_") ? (
-          <svg className="h-3 w-3 flex-shrink-0 text-accent" fill="currentColor" viewBox="0 0 20 20">
-            <title>Commander</title>
-            <path d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
-          </svg>
-        ) : player.isLeader ? (
-          <svg className="h-3 w-3 flex-shrink-0 text-warning" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-          </svg>
-        ) : null}
-        <button
-          onClick={() => onSelect(player)}
-          className="truncate text-xs text-text-primary hover:text-accent hover:underline"
-        >
-          {player.name}
-        </button>
-        {player.role && (
-          <span className="flex-shrink-0 text-[10px] text-text-muted">{formatRole(player.role)}</span>
-        )}
-        {pt && (
-          <span className="flex-shrink-0 rounded-sm bg-bg-tertiary px-1 py-0.5 text-[9px] text-text-muted">{pt}</span>
-        )}
-      </div>
-      {showActions && hovered && (
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => onSwitchTeam(player)}
-            className="rounded-sm border border-transparent px-1.5 py-0.5 text-[10px] text-accent transition-all hover:border-accent/30 hover:bg-accent/10"
-            title="Switch team"
-          >
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-            </svg>
-          </button>
-          <button
-            onClick={() => onWarn(player)}
-            className="rounded-sm border border-transparent px-1.5 py-0.5 text-[10px] text-warning transition-all hover:border-warning/30 hover:bg-warning/10"
-          >
-            Warn
-          </button>
-          <button
-            onClick={() => onKick(player)}
-            className="rounded-sm border border-transparent px-1.5 py-0.5 text-[10px] text-danger transition-all hover:border-danger/30 hover:bg-danger/10"
-          >
-            Kick
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ActionModal({
-  title,
-  onConfirm,
-  onCancel,
-  confirmLabel,
-  confirmDisabled,
-  confirmClass,
-  children,
-}: {
-  title: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-  confirmLabel: string;
-  confirmDisabled?: boolean;
-  confirmClass?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/50" onClick={onCancel} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-sm border border-border bg-bg-secondary p-6">
-          <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
-            {title}
-          </h3>
-          {children}
-          <div className="mt-4 flex justify-end gap-3">
-            <button
-              onClick={onCancel}
-              className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onConfirm}
-              disabled={confirmDisabled}
-              className={`rounded-sm px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors disabled:opacity-40 ${
-                confirmClass || "bg-accent hover:bg-accent-muted"
-              }`}
-            >
-              {confirmLabel}
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-
-function CopyableField({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false);
-  const truncated = value.length > 20 ? value.slice(0, 12) + "..." : value;
-
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-[10px] text-text-muted">{label}</span>
-      <button
-        onClick={() => { navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-        className="flex items-center gap-1 text-xs text-text-secondary hover:text-accent"
-        title={value}
-      >
-        <code>{truncated}</code>
-        <span className="text-[9px] text-text-muted">{copied ? "Copied!" : "Copy"}</span>
-      </button>
-    </div>
-  );
-}
-
-function PlayerCard({
-  player,
-  showActions,
-  onClose,
-  onWarn,
-  onKick,
-  onSwitchTeam,
-  formatPlaytime,
-}: {
-  player: Player;
-  showActions: boolean;
-  onClose: () => void;
-  onWarn: (p: Player) => void;
-  onKick: (p: Player) => void;
-  onSwitchTeam: (p: Player) => void;
-  formatPlaytime: (s?: number) => string;
-}) {
-  const pt = formatPlaytime(player.playtime);
-
-  return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-xs rounded-sm border border-border bg-bg-secondary p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-text-primary">{player.name}</span>
-                {typeof player.role === "string" && player.role.includes("_Cmd_") ? (
-                  <svg className="h-3 w-3 text-accent" fill="currentColor" viewBox="0 0 20 20">
-                    <title>Commander</title>
-                    <path d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" />
-                  </svg>
-                ) : player.isLeader ? (
-                  <svg className="h-3 w-3 text-warning" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ) : null}
-              </div>
-              {player.role && (
-                <span className="text-[10px] text-text-muted">{formatRole(player.role)}</span>
-              )}
-            </div>
-            <button onClick={onClose} className="text-text-muted hover:text-text-primary">x</button>
-          </div>
-
-          <div className="mb-3 space-y-1.5 rounded-sm border border-border/50 bg-bg-tertiary/50 p-2">
-            {player.steamID && <CopyableField label="Steam ID" value={player.steamID} />}
-            {player.eosID && <CopyableField label="EOS ID" value={player.eosID} />}
-            {pt && (
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-text-muted">Playtime</span>
-                <span className="text-xs text-text-secondary">{pt}</span>
-              </div>
-            )}
-            {player.squad && (
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-text-muted">Squad</span>
-                <span className="text-xs text-text-secondary">
-                  {player.squad.squadName}
-                  {player.squad.creatorName && (
-                    <span className="text-text-muted"> (by {player.squad.creatorName})</span>
-                  )}
-                </span>
-              </div>
-            )}
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-text-muted">Team</span>
-              <span className={`text-xs font-medium ${String(player.teamID) === "1" ? "text-blue-400" : String(player.teamID) === "2" ? "text-red-400" : "text-text-muted"}`}>
-                Team {player.teamID}
-              </span>
-            </div>
-          </div>
-
-          {showActions && (
-            <div className="flex gap-2">
-              <button
-                onClick={() => { onSwitchTeam(player); onClose(); }}
-                className="flex-1 rounded-sm border border-accent/20 py-1.5 text-xs text-accent transition-colors hover:bg-accent/10"
-              >
-                Switch Team
-              </button>
-              <button
-                onClick={() => { onWarn(player); onClose(); }}
-                className="flex-1 rounded-sm border border-warning/20 py-1.5 text-xs text-warning transition-colors hover:bg-warning/10"
-              >
-                Warn
-              </button>
-              <button
-                onClick={() => { onKick(player); onClose(); }}
-                className="flex-1 rounded-sm border border-danger/20 py-1.5 text-xs text-danger transition-colors hover:bg-danger/10"
-              >
-                Kick
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </>
   );
 }

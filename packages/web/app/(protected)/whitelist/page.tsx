@@ -21,6 +21,9 @@ import {
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
+import { Modal } from "@/components/modal";
+import { SearchInput } from "@/components/search-input";
+import { formatDate } from "@/lib/format";
 import type { WhitelistEntry, WhitelistCandidate, AdminGroup, Clan, ServerConfig } from "shared";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -609,12 +612,11 @@ function EntriesTab({
     <>
       {/* Actions bar */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <input
-          type="text"
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           placeholder="Search by Steam ID, name, clan, group..."
-          className="flex-1 rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+          className="flex-1"
         />
         <button
           onClick={handleReviewCfg}
@@ -745,7 +747,7 @@ function EntriesTab({
                         )}
                       </td>
                       <td className="px-4 py-3 text-text-secondary text-xs">
-                        {new Date(entry.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(entry.createdAt)}
                       </td>
                       {canManage && (
                         <td className="px-4 py-3">
@@ -773,118 +775,112 @@ function EntriesTab({
       </div>
 
       {/* Review admins.cfg Modal */}
-      {showCfgModal && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setShowCfgModal(false)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="flex w-full max-w-3xl flex-col rounded-sm border border-border bg-bg-secondary" style={{ maxHeight: "80vh" }}>
-              <div className="flex items-center justify-between border-b border-border px-6 py-4">
-                <h2 className="font-display text-lg font-semibold tracking-wide">admins.cfg ({activeServer})</h2>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={handleCopyCfg}
-                    className="rounded-sm border border-border px-4 py-1.5 text-xs font-medium tracking-wide text-text-secondary transition-colors hover:border-accent/40 hover:text-accent"
-                  >
-                    {cfgCopied ? "Copied!" : "Copy"}
-                  </button>
-                  <button onClick={() => setShowCfgModal(false)} className="text-text-muted transition-colors hover:text-text-primary">x</button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-auto p-6">
-                <pre className="whitespace-pre font-mono text-xs leading-relaxed text-text-secondary">{cfgContent}</pre>
-              </div>
-            </div>
+      <Modal
+        open={showCfgModal}
+        onClose={() => setShowCfgModal(false)}
+        className="flex max-w-3xl flex-col bg-bg-secondary"
+      >
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <h2 className="font-display text-lg font-semibold tracking-wide">admins.cfg ({activeServer})</h2>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleCopyCfg}
+              className="rounded-sm border border-border px-4 py-1.5 text-xs font-medium tracking-wide text-text-secondary transition-colors hover:border-accent/40 hover:text-accent"
+            >
+              {cfgCopied ? "Copied!" : "Copy"}
+            </button>
+            <button onClick={() => setShowCfgModal(false)} className="text-text-muted transition-colors hover:text-text-primary">x</button>
           </div>
-        </>
-      )}
+        </div>
+        <div className="max-h-[70vh] flex-1 overflow-auto p-6">
+          <pre className="whitespace-pre font-mono text-xs leading-relaxed text-text-secondary">{cfgContent}</pre>
+        </div>
+      </Modal>
 
       {/* Import Modal */}
-      {showImportModal && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setShowImportModal(false)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-3xl rounded-sm border border-border bg-bg-secondary p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-display text-lg font-semibold tracking-wide">Import Whitelist ({activeServer})</h2>
-                <button onClick={() => setShowImportModal(false)} className="text-text-muted transition-colors hover:text-text-primary">x</button>
-              </div>
+      <Modal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        className="max-w-3xl bg-bg-secondary p-6"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-display text-lg font-semibold tracking-wide">Import Whitelist ({activeServer})</h2>
+          <button onClick={() => setShowImportModal(false)} className="text-text-muted transition-colors hover:text-text-primary">x</button>
+        </div>
 
-              {importStep === "paste" && (
-                <div>
-                  <p className="mb-3 text-sm text-text-secondary">Paste entries in the format:</p>
-                  <code className="mb-3 block rounded-sm bg-bg-tertiary px-3 py-2 text-xs text-text-secondary">
-                    Admin=76561197960957079:SuperAdmin // Ole
-                  </code>
-                  <textarea
-                    value={importText}
-                    onChange={(e) => setImportText(e.target.value)}
-                    placeholder="Paste entries here, one per line..."
-                    rows={10}
-                    className="mb-4 w-full rounded-sm border border-border bg-bg-tertiary px-4 py-3 font-mono text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-                  />
-                  <div className="flex justify-end gap-3">
-                    <button onClick={() => setShowImportModal(false)} className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary">Cancel</button>
-                    <button onClick={parseImportText} disabled={!importText.trim()} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">Parse</button>
-                  </div>
-                </div>
-              )}
-
-              {importStep === "review" && (
-                <div>
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm text-text-secondary">Review parsed entries before importing.</p>
-                    {importRows.length > 1 && importRows[0] && (importRows[0].clanId || importRows[0].groupId) && (
-                      <button
-                        type="button"
-                        onClick={() => setImportRows((prev) => {
-                          const first = prev[0];
-                          return prev.map((r, i) => i === 0 ? r : { ...r, clanId: first.clanId, groupId: first.groupId });
-                        })}
-                        className="rounded-sm border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-accent"
-                      >
-                        Apply first row to all
-                      </button>
-                    )}
-                  </div>
-                  <div className="mb-4 max-h-96 overflow-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border text-left">
-                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Steam ID</th>
-                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Name</th>
-                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Clan</th>
-                          <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Group</th>
-                          <th className="w-10 px-3 py-2"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {importRows.map((row, i) => (
-                          <tr key={i} className={`border-b border-border/50 ${row.error ? "bg-danger/10" : ""}`}>
-                            <td className="px-3 py-2"><input type="text" value={row.steamId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, steamId: e.target.value, error: false } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none" /></td>
-                            <td className="px-3 py-2"><input type="text" value={row.name} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, name: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" /></td>
-                            <td className="px-3 py-2"><select value={row.clanId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, clanId: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"><option value="">No Clan</option>{clans.map((c) => <option key={c.id} value={c.id}>[{c.tag}] {c.name}</option>)}</select></td>
-                            <td className="px-3 py-2"><select value={row.groupId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, groupId: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"><option value="">No group</option>{groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></td>
-                            <td className="px-3 py-2"><button onClick={() => setImportRows((prev) => prev.filter((_, j) => j !== i))} className="text-xs text-text-muted transition-colors hover:text-danger">x</button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-text-muted">{importRows.filter((r) => r.steamId.trim()).length} valid entries</span>
-                    <div className="flex gap-3">
-                      <button onClick={() => setImportStep("paste")} className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary">Back</button>
-                      <button onClick={confirmImport} disabled={importing || importRows.filter((r) => r.steamId.trim()).length === 0} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">
-                        {importing ? "Importing..." : "Import"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+        {importStep === "paste" && (
+          <div>
+            <p className="mb-3 text-sm text-text-secondary">Paste entries in the format:</p>
+            <code className="mb-3 block rounded-sm bg-bg-tertiary px-3 py-2 text-xs text-text-secondary">
+              Admin=76561197960957079:SuperAdmin // Ole
+            </code>
+            <textarea
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              placeholder="Paste entries here, one per line..."
+              rows={10}
+              className="mb-4 w-full rounded-sm border border-border bg-bg-tertiary px-4 py-3 font-mono text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+            />
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setShowImportModal(false)} className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary">Cancel</button>
+              <button onClick={parseImportText} disabled={!importText.trim()} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">Parse</button>
             </div>
           </div>
-        </>
-      )}
+        )}
+
+        {importStep === "review" && (
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm text-text-secondary">Review parsed entries before importing.</p>
+              {importRows.length > 1 && importRows[0] && (importRows[0].clanId || importRows[0].groupId) && (
+                <button
+                  type="button"
+                  onClick={() => setImportRows((prev) => {
+                    const first = prev[0];
+                    return prev.map((r, i) => i === 0 ? r : { ...r, clanId: first.clanId, groupId: first.groupId });
+                  })}
+                  className="rounded-sm border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-accent"
+                >
+                  Apply first row to all
+                </button>
+              )}
+            </div>
+            <div className="mb-4 max-h-96 overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left">
+                    <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Steam ID</th>
+                    <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Name</th>
+                    <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Clan</th>
+                    <th className="px-3 py-2 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Group</th>
+                    <th className="w-10 px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.map((row, i) => (
+                    <tr key={i} className={`border-b border-border/50 ${row.error ? "bg-danger/10" : ""}`}>
+                      <td className="px-3 py-2"><input type="text" value={row.steamId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, steamId: e.target.value, error: false } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none" /></td>
+                      <td className="px-3 py-2"><input type="text" value={row.name} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, name: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" /></td>
+                      <td className="px-3 py-2"><select value={row.clanId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, clanId: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"><option value="">No Clan</option>{clans.map((c) => <option key={c.id} value={c.id}>[{c.tag}] {c.name}</option>)}</select></td>
+                      <td className="px-3 py-2"><select value={row.groupId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, groupId: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"><option value="">No group</option>{groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></td>
+                      <td className="px-3 py-2"><button onClick={() => setImportRows((prev) => prev.filter((_, j) => j !== i))} className="text-xs text-text-muted transition-colors hover:text-danger">x</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-muted">{importRows.filter((r) => r.steamId.trim()).length} valid entries</span>
+              <div className="flex gap-3">
+                <button onClick={() => setImportStep("paste")} className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary">Back</button>
+                <button onClick={confirmImport} disabled={importing || importRows.filter((r) => r.steamId.trim()).length === 0} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">
+                  {importing ? "Importing..." : "Import"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </>
   );
 }

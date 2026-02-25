@@ -138,7 +138,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Credits */}
+        {/* About */}
         <div className="facet-border rounded-sm bg-bg-card p-6">
           <h2 className="font-display mb-1 text-base font-semibold tracking-wide">
             About
@@ -151,6 +151,23 @@ export default function SettingsPage() {
               Royal Battalion Web Platform
             </p>
           </div>
+        </div>
+
+        {/* Credits */}
+        <div className="facet-border rounded-sm bg-bg-card p-6">
+          <h2 className="font-display mb-1 text-base font-semibold tracking-wide">
+            Credits
+          </h2>
+          <p className="mb-4 text-sm text-text-secondary">Testers</p>
+          <ul className="space-y-1.5 text-sm">
+            {["Wesley", "Spaghetti", "Quiz", "MadDawg", "Col. Sum"].map(
+              (name) => (
+                <li key={name} className="font-medium text-accent">
+                  {name}
+                </li>
+              )
+            )}
+          </ul>
         </div>
       </div>
     </div>

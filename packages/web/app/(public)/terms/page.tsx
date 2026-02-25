@@ -97,7 +97,20 @@ export default function TermsPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              4. Acceptable Use
+              4. Age Requirement
+            </h2>
+            <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
+              <p>
+                You must be at least 18 years old to use our services. By
+                accessing or using the Royal Battalion website and services, you
+                confirm that you are 18 years of age or older.
+              </p>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
+              5. Acceptable Use
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>You agree not to:</p>
@@ -132,7 +145,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              5. Community Rules
+              6. Community Rules
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
@@ -146,7 +159,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              6. Whitelist Terms
+              7. Whitelist Terms
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
@@ -161,7 +174,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              7. Intellectual Property
+              8. Intellectual Property
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
@@ -176,7 +189,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              8. Disclaimer of Warranties
+              9. Disclaimer of Warranties
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
@@ -192,7 +205,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              9. Limitation of Liability
+              10. Limitation of Liability
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
@@ -208,7 +221,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              10. Modifications
+              11. Modifications
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
@@ -222,7 +235,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              11. Termination
+              12. Termination
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
@@ -236,7 +249,21 @@ export default function TermsPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              12. Contact
+              13. Governing Law
+            </h2>
+            <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
+              <p>
+                These terms are governed by and construed in accordance with the
+                laws of England and Wales. Any disputes arising from these terms
+                or your use of our services shall be subject to the exclusive
+                jurisdiction of the courts of England and Wales.
+              </p>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
+              14. Contact
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>

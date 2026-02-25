@@ -1,7 +1,14 @@
 import Link from "next/link";
 import Image from "next/image";
 
-const TECH_STACK = ["Next.js", "Tailwind CSS", "Hono", "Prisma", "MariaDB", "Bun"];
+const TECH_STACK = [
+  { name: "Next.js", url: "https://nextjs.org" },
+  { name: "Tailwind CSS", url: "https://tailwindcss.com" },
+  { name: "Hono", url: "https://hono.dev" },
+  { name: "Prisma", url: "https://www.prisma.io" },
+  { name: "MariaDB", url: "https://mariadb.org" },
+  { name: "Bun", url: "https://bun.sh" },
+];
 
 export function Footer() {
   return (
@@ -59,16 +66,19 @@ export function Footer() {
           {/* Built With */}
           <div className="flex flex-col gap-3">
             <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
-              Built With
+              Built With &lt;3 Using
             </h3>
             <div className="flex flex-wrap gap-1.5">
               {TECH_STACK.map((tech) => (
-                <span
-                  key={tech}
-                  className="rounded-sm border border-border bg-bg-tertiary px-2 py-0.5 text-[10px] text-text-muted"
+                <a
+                  key={tech.name}
+                  href={tech.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-sm border border-border bg-bg-tertiary px-2 py-0.5 text-[10px] text-text-muted transition-colors hover:border-accent/40 hover:text-accent"
                 >
-                  {tech}
-                </span>
+                  {tech.name}
+                </a>
               ))}
             </div>
           </div>
@@ -80,8 +90,8 @@ export function Footer() {
         {/* Bottom */}
         <div className="flex flex-col items-center gap-3 text-center">
           <p className="text-xs text-text-muted">
-            Made by RB |{" "}
-            <span className="font-semibold text-accent">Ole</span>
+            Made by{" "}
+            <span className="font-semibold text-accent">RB | Ole</span>
           </p>
           <p className="text-xs text-text-muted">
             &copy; 2024 &ndash; 2026 Royal Battalion. All rights reserved.

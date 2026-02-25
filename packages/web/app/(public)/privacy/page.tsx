@@ -47,8 +47,13 @@ export default function PrivacyPage() {
         <h1 className="font-display mb-8 text-3xl font-bold tracking-wide">
           Privacy Policy
         </h1>
-        <p className="mb-10 text-sm text-text-muted">
+        <p className="mb-6 text-sm text-text-muted">
           Last updated: February 25, 2026
+        </p>
+        <p className="mb-10 text-sm leading-relaxed text-text-secondary">
+          Royal Battalion is the data controller for your personal data. We are
+          a volunteer-run gaming community based in the United Kingdom, operating
+          under the UK Data Protection Act 2018 and UK GDPR.
         </p>
 
         <div className="space-y-10">
@@ -117,7 +122,37 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              3. Cookies and Local Storage
+              3. Legal Basis for Processing
+            </h2>
+            <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
+              <p>
+                Under the UK GDPR, we process your personal data on the
+                following legal bases:
+              </p>
+              <ul className="list-disc space-y-2 pl-6">
+                <li>
+                  <strong className="text-text-primary">Legitimate Interest</strong>{" "}
+                  &mdash; Server administration, whitelist management, match
+                  tracking, and community safety. These are core to running the
+                  community and servers.
+                </li>
+                <li>
+                  <strong className="text-text-primary">Contract Performance</strong>{" "}
+                  &mdash; Providing the services you signed up for, including
+                  whitelist access and dashboard functionality.
+                </li>
+                <li>
+                  <strong className="text-text-primary">Consent</strong>{" "}
+                  &mdash; When you sign in via Discord OAuth, you actively
+                  choose to share your Discord account data with us.
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
+              4. Cookies and Local Storage
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>We use the following cookies and local storage items:</p>
@@ -144,7 +179,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              4. Third-Party Services
+              5. Third-Party Services
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>We integrate with the following third-party services:</p>
@@ -167,7 +202,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              5. Data Retention
+              6. Data Retention
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <ul className="list-disc space-y-2 pl-6">
@@ -192,26 +227,55 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              6. Your Rights
+              7. Children&apos;s Privacy
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
-              <p>You have the right to:</p>
-              <ul className="list-disc space-y-2 pl-6">
-                <li>Request access to your personal data</li>
-                <li>Request correction of inaccurate data</li>
-                <li>Request deletion of your personal data</li>
-                <li>Withdraw consent for non-essential data processing</li>
-              </ul>
               <p>
-                To exercise any of these rights, please contact us through the
-                Royal Battalion Discord server.
+                Our services are intended for users aged 18 and over. We do not
+                knowingly collect personal data from anyone under the age of 18.
+                If we become aware that we have collected data from a minor, we
+                will take steps to delete that information promptly.
               </p>
             </div>
           </section>
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              7. Data Security
+              8. Your Rights
+            </h2>
+            <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
+              <p>Under the UK GDPR, you have the right to:</p>
+              <ul className="list-disc space-y-2 pl-6">
+                <li>Request access to your personal data</li>
+                <li>Request correction of inaccurate data</li>
+                <li>Request deletion of your personal data</li>
+                <li>Request portability of your data</li>
+                <li>Object to processing of your personal data</li>
+                <li>Withdraw consent for non-essential data processing</li>
+              </ul>
+              <p>
+                To exercise any of these rights, please contact us through the
+                Royal Battalion Discord server.
+              </p>
+              <p>
+                You also have the right to lodge a complaint with the UK
+                Information Commissioner&apos;s Office (ICO) at{" "}
+                <a
+                  href="https://ico.org.uk"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent underline-offset-2 hover:underline"
+                >
+                  ico.org.uk
+                </a>
+                .
+              </p>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
+              9. Data Security
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
@@ -225,7 +289,22 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              8. Changes to This Policy
+              10. International Data Transfers
+            </h2>
+            <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
+              <p>
+                As an international community, your data may be processed on
+                servers located outside the United Kingdom. Where this occurs, we
+                take reasonable steps to ensure your data is treated securely and
+                in accordance with this privacy policy and applicable data
+                protection laws.
+              </p>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
+              11. Changes to This Policy
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
@@ -239,7 +318,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              9. Contact
+              12. Contact
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>

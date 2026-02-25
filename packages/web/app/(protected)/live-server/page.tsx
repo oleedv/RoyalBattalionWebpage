@@ -159,6 +159,8 @@ export default function LiveServerPage() {
   const [consoleFilters, setConsoleFilters] = useState<Set<ConsoleEntry["type"]>>(new Set(CONSOLE_TYPES));
   const [consoleFilterOpen, setConsoleFilterOpen] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [activity, setActivity] = useState(false);
+  const activityTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Server management actions
   const [endMatchConfirm, setEndMatchConfirm] = useState(false);
@@ -199,6 +201,10 @@ export default function LiveServerPage() {
   }, [connected]);
 
   const handleMessage = useCallback((event: MessageEvent) => {
+    if (activityTimeout.current) clearTimeout(activityTimeout.current);
+    setActivity(true);
+    activityTimeout.current = setTimeout(() => setActivity(false), 150);
+
     try {
       const msg: WSMessage = JSON.parse(event.data);
 
@@ -632,13 +638,13 @@ export default function LiveServerPage() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <div
-              className={`h-2 w-2 rounded-full ${
+              className={`h-2 w-2 rounded-full transition-all duration-150 ${
                 connected && squadjsConnected
                   ? "bg-success"
                   : connected
                     ? "bg-warning"
                     : "bg-danger"
-              }`}
+              } ${activity ? "scale-150 brightness-150" : ""}`}
             />
             <span className="text-xs text-text-muted">
               {connected && squadjsConnected

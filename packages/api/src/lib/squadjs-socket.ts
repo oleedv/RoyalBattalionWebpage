@@ -539,7 +539,11 @@ class SquadJSSocketManager {
       const timeout = setTimeout(() => reject(new Error("RCON timeout")), 10000);
       state.socket.emit(`rcon.${method}`, ...args, (result: unknown) => {
         clearTimeout(timeout);
-        resolve(result);
+        if (result && typeof result === 'object' && 'error' in result) {
+          reject(new Error((result as { error: string }).error));
+        } else {
+          resolve(result);
+        }
       });
     });
   }

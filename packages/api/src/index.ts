@@ -461,7 +461,7 @@ async function handleAdminAction(
           ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing team or squad ID" }));
           return;
         }
-        await squadjsSocket.executeRcon(serverKey, "disbandSquad", msg.teamID, msg.squadID);
+        await squadjsSocket.executeRcon(serverKey, "execute", `AdminDisbandSquad ${msg.teamID} ${msg.squadID}`);
         auditDirect(ws.data.userId, ws.data.userName, "rcon.disband", "LiveServer", serverKey, { teamID: msg.teamID, squadID: msg.squadID });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "disband" }));
         break;

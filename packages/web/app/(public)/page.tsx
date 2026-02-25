@@ -370,40 +370,6 @@ export default function HomePage() {
           </a>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="border-t border-border py-10">
-        <div className="mx-auto max-w-7xl px-6">
-          <div className="flex flex-col items-center gap-5">
-            <Image
-              src="/img/rb_newlion2024_4_RS.png"
-              alt="Royal Battalion"
-              width={28}
-              height={28}
-              className="opacity-40"
-            />
-            <p className="text-sm text-text-muted">
-              Royal Battalion. All rights reserved.
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-text-muted">
-              <span>Built with</span>
-              {["Next.js", "Tailwind CSS", "Hono", "Prisma", "MariaDB", "Bun"].map(
-                (tech) => (
-                  <span
-                    key={tech}
-                    className="rounded-sm border border-border bg-bg-tertiary px-2 py-0.5"
-                  >
-                    {tech}
-                  </span>
-                )
-              )}
-            </div>
-            <p className="text-xs text-text-muted">
-              Built by Ole
-            </p>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

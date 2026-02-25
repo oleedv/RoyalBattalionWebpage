@@ -89,12 +89,12 @@ app.get("/admins.cfg", async (c) => {
 });
 
 app.get("/health", async (c) => {
+  let dbOk = false;
   try {
     await prisma.$queryRaw`SELECT 1`;
-    return c.json({ status: "ok" });
-  } catch {
-    return c.json({ status: "degraded", database: "unreachable" }, 503);
-  }
+    dbOk = true;
+  } catch {}
+  return c.json({ status: dbOk ? "ok" : "degraded", database: dbOk ? "connected" : "unreachable" });
 });
 app.get("/live-server/health", (c) => c.json(squadjsSocket.getStatus()));
 

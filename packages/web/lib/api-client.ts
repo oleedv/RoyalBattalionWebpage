@@ -22,6 +22,7 @@ import type {
   BotStatus,
   AuditLogEntry,
   Paginated,
+  TicketTimeout,
 } from "shared";
 
 const BASE_URL =
@@ -640,6 +641,36 @@ export function getBotLogs(
   if (params.to) qs.set("to", params.to);
   const q = qs.toString();
   return request<Paginated<BotLog>>(`/discord-bot/logs${q ? `?${q}` : ""}`, {
+    headers: authHeaders(token),
+  });
+}
+
+// Ticket Timeouts
+export function getTicketTimeouts(
+  token: string
+): Promise<ApiResponse<TicketTimeout[]>> {
+  return request<TicketTimeout[]>("/discord-bot/timeouts", {
+    headers: authHeaders(token),
+  });
+}
+
+export function createTicketTimeout(
+  token: string,
+  data: { userId: string; hours: number }
+): Promise<ApiResponse<{ created: true }>> {
+  return request<{ created: true }>("/discord-bot/timeouts", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function expireTicketTimeout(
+  token: string,
+  id: number
+): Promise<ApiResponse<{ updated: true }>> {
+  return request<{ updated: true }>(`/discord-bot/timeouts/${id}/expire`, {
+    method: "POST",
     headers: authHeaders(token),
   });
 }

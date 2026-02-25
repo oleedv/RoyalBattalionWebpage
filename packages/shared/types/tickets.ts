@@ -88,3 +88,11 @@ export interface ProspectVote {
   reason: string | null;
   createdAt: string;
 }
+
+export interface TicketTimeout {
+  id: number;
+  userId: string;
+  timedOutBy: string;
+  expiresAt: string;
+  createdAt: string;
+}

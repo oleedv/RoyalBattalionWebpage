@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { ApiResponse, DiscordBotOverview, SeedingConfig, SeedingSession, BotMessage, BotLog, BotStatus, Paginated } from "shared";
+import type { ApiResponse, DiscordBotOverview, SeedingConfig, SeedingSession, BotMessage, BotLog, BotStatus, Paginated, TicketTimeout } from "shared";
 import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission, getAllowedTicketTiers } from "../middleware/permissions";
@@ -452,6 +452,81 @@ discordBot.get(
       console.error("discord-bot/logs error:", err);
       return c.json<ApiResponse<never>>({ success: false, error: "Failed to query logs" }, 500);
     }
+  }
+);
+
+// GET /discord-bot/timeouts
+discordBot.get(
+  "/timeouts",
+  requirePermission("view:discord-bot", "manage:discord-bot"),
+  async (c) => {
+    try {
+      const rows: any[] = await getSecretaryDb().$queryRawUnsafe(
+        `SELECT id, user_id, timed_out_by, expires_at, created_at
+         FROM ticket_timeouts
+         WHERE expires_at > NOW()
+         ORDER BY expires_at ASC`
+      );
+
+      const timeouts: TicketTimeout[] = rows.map((r) => ({
+        id: Number(r.id),
+        userId: r.user_id,
+        timedOutBy: r.timed_out_by,
+        expiresAt: new Date(r.expires_at).toISOString(),
+        createdAt: new Date(r.created_at).toISOString(),
+      }));
+
+      return c.json<ApiResponse<TicketTimeout[]>>({ success: true, data: timeouts });
+    } catch (err: any) {
+      console.error("discord-bot/timeouts error:", err);
+      return c.json<ApiResponse<never>>({ success: false, error: "Failed to query timeouts" }, 500);
+    }
+  }
+);
+
+// POST /discord-bot/timeouts
+discordBot.post(
+  "/timeouts",
+  requirePermission("manage:discord-bot"),
+  async (c) => {
+    const { userId, hours } = await c.req.json<{ userId: string; hours: number }>();
+
+    if (!userId || typeof userId !== "string" || userId.length < 1 || userId.length > 20) {
+      return c.json<ApiResponse<never>>({ success: false, error: "Invalid user ID" }, 400);
+    }
+    if (!hours || hours < 1 || hours > 8760) {
+      return c.json<ApiResponse<never>>({ success: false, error: "Hours must be between 1 and 8760" }, 400);
+    }
+
+    const actorId = c.get("userId") as string;
+    const db = getSecretaryDb();
+
+    await db.$queryRawUnsafe(
+      `INSERT INTO ticket_timeouts (user_id, timed_out_by, expires_at)
+       VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? HOUR))`,
+      userId, actorId, hours
+    );
+
+    await audit(c, "discord_bot.create_ticket_timeout", "ticket_timeout", undefined, { userId, hours });
+    return c.json<ApiResponse<{ created: true }>>({ success: true, data: { created: true } });
+  }
+);
+
+// POST /discord-bot/timeouts/:id/expire
+discordBot.post(
+  "/timeouts/:id/expire",
+  requirePermission("manage:discord-bot"),
+  async (c) => {
+    const id = Number(c.req.param("id"));
+    const db = getSecretaryDb();
+
+    await db.$queryRawUnsafe(
+      `UPDATE ticket_timeouts SET expires_at = NOW() WHERE id = ?`,
+      id
+    );
+
+    await audit(c, "discord_bot.expire_ticket_timeout", "ticket_timeout", String(id));
+    return c.json<ApiResponse<{ updated: true }>>({ success: true, data: { updated: true } });
   }
 );
 

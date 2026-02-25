@@ -8,8 +8,9 @@ import ProspectsTab from "./components/ProspectsTab";
 import SeedingTab from "./components/SeedingTab";
 import MessagesTab from "./components/MessagesTab";
 import LogsTab from "./components/LogsTab";
+import TimeoutsTab from "./components/TimeoutsTab";
 
-type Tab = "overview" | "tickets" | "prospects" | "seeding" | "messages" | "logs";
+type Tab = "overview" | "tickets" | "prospects" | "seeding" | "messages" | "logs" | "timeouts";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
@@ -18,6 +19,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "seeding", label: "Seeding" },
   { key: "messages", label: "Messages" },
   { key: "logs", label: "Logs" },
+  { key: "timeouts", label: "Timeouts" },
 ];
 
 export default function DiscordBotPage() {
@@ -63,6 +65,7 @@ export default function DiscordBotPage() {
       {tab === "seeding" && <SeedingTab apiToken={apiToken} canManage={canManage} />}
       {tab === "messages" && <MessagesTab apiToken={apiToken} />}
       {tab === "logs" && <LogsTab apiToken={apiToken} />}
+      {tab === "timeouts" && <TimeoutsTab apiToken={apiToken} canManage={canManage} />}
     </div>
   );
 }

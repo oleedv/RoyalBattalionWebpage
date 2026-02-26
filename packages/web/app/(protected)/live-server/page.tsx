@@ -491,7 +491,7 @@ export default function LiveServerPage() {
   }
 
   return (
-    <div className="flex flex-col lg:h-[calc(100vh-4rem)] lg:overflow-hidden">
+    <div className="flex flex-col lg:h-[calc(100vh-3rem)] lg:overflow-hidden">
       <div className="shrink-0">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
@@ -767,7 +767,7 @@ export default function LiveServerPage() {
       <div className="grid gap-4 lg:grid-cols-3 flex-1 min-h-0">
         {/* Player list - 2 cols */}
         <div className="lg:col-span-2 flex flex-col min-h-0">
-          <div className="facet-border flex flex-1 flex-col rounded-sm bg-bg-card">
+          <div className="facet-border flex flex-1 flex-col min-h-0 rounded-sm bg-bg-card">
             <div className="border-b border-border px-4 py-3">
               <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
                 Players ({players.length})

@@ -95,6 +95,7 @@ interface ServerState {
   connected: boolean;
   reconnectErrorCount: number;
   lastRcon: Map<string, number>;
+  lastEventTime: number;
 }
 
 // Parse env: SQUADJS_SERVERS="staging|ws://ip:4001|token,production|ws://ip:4000|token"
@@ -131,6 +132,20 @@ class SquadJSSocketManager {
     for (const cfg of configs) {
       this.connectServer(cfg.key, cfg.url, cfg.token);
     }
+
+    // Watchdog: detect zombie connections every 60s
+    setInterval(() => {
+      const now = Date.now();
+      for (const [key, state] of this.servers) {
+        if (!state.connected) continue;
+        const staleSec = (now - state.lastEventTime) / 1000;
+        if (staleSec > 120) {
+          logger.warn("squadjs", `${key}: no events for ${Math.round(staleSec)}s, forcing reconnect`);
+          state.socket.disconnect();
+          state.socket.connect();
+        }
+      }
+    }, 60_000);
   }
 
   private connectServer(key: string, url: string, token: string) {
@@ -157,6 +172,7 @@ class SquadJSSocketManager {
       connected: false,
       reconnectErrorCount: 0,
       lastRcon: new Map(),
+      lastEventTime: Date.now(),
     };
 
     this.servers.set(key, state);
@@ -201,6 +217,7 @@ class SquadJSSocketManager {
   private requestInitialState(key: string, state: ServerState) {
     // Request current player list
     state.socket.emit("players", (data: SquadJSPlayer[]) => {
+      state.lastEventTime = Date.now();
       if (Array.isArray(data)) {
         state.players = data;
         this.broadcast(key, "SNAPSHOT_PLAYERS", data);
@@ -243,14 +260,19 @@ class SquadJSSocketManager {
 
     // Fallback: publish partial info after 10s if not all acks arrive
     const infoTimeout = setTimeout(() => {
-      if (!infoPublished && received > 0) {
-        logger.warn("squadjs", `${key}: only ${received}/${infoKeys.length} info acks received, publishing partial data`);
+      if (!infoPublished) {
+        if (received === 0) {
+          logger.warn("squadjs", `${key}: no info acks received after 10s, publishing empty state and starting poll`);
+        } else {
+          logger.warn("squadjs", `${key}: only ${received}/${infoKeys.length} info acks received, publishing partial data`);
+        }
         publishInfo();
       }
     }, 10_000);
 
     for (const infoKey of infoKeys) {
       state.socket.emit(infoKey, (value: unknown) => {
+        state.lastEventTime = Date.now();
         (info as Record<string, unknown>)[infoKey] = value;
         received++;
         if (received === infoKeys.length) {
@@ -265,6 +287,7 @@ class SquadJSSocketManager {
     state.pollInterval = setInterval(() => {
       if (!state.connected) return;
       state.socket.emit("players", (data: SquadJSPlayer[]) => {
+        state.lastEventTime = Date.now();
         if (Array.isArray(data)) {
           state.players = data;
           if (state.serverInfo) state.serverInfo.playerCount = data.length;
@@ -298,6 +321,7 @@ class SquadJSSocketManager {
   }
 
   private handleEvent(key: string, state: ServerState, event: string, data: unknown) {
+    state.lastEventTime = Date.now();
     switch (event) {
       case "UPDATED_PLAYER_INFORMATION":
         if (Array.isArray(data)) {

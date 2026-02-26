@@ -491,9 +491,10 @@ export default function LiveServerPage() {
   }
 
   return (
-    <div>
+    <div className="flex flex-col lg:h-[calc(100vh-4rem)] lg:overflow-hidden">
+      <div className="shrink-0">
       {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="font-display text-3xl font-bold tracking-wide">
             Live Server
@@ -563,7 +564,7 @@ export default function LiveServerPage() {
 
       {/* Server info bar */}
       {serverInfo && (
-        <div className="facet-border mb-6 grid grid-cols-2 gap-3 rounded-sm bg-bg-card p-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="facet-border mb-4 grid grid-cols-2 gap-3 rounded-sm bg-bg-card p-3 sm:grid-cols-3 lg:grid-cols-6">
           <InfoCell label="Players" value={`${serverInfo.playerCount} / ${serverInfo.maxPlayers}`}>
             <Sparkline data={metricHistory.map((s) => s.playerCount)} color="var(--color-accent)" fixedMax={serverInfo.maxPlayers || 100} />
           </InfoCell>
@@ -597,7 +598,7 @@ export default function LiveServerPage() {
 
       {/* Admin Controls */}
       {canManage && serverInfo && connected && (
-        <div className="facet-border mb-6 flex flex-wrap items-center gap-3 rounded-sm bg-bg-card p-3">
+        <div className="facet-border mb-4 flex flex-wrap items-center gap-3 rounded-sm bg-bg-card p-3">
           {/* End Match */}
           <button
             onClick={() => setEndMatchConfirm(true)}
@@ -669,6 +670,7 @@ export default function LiveServerPage() {
           </button>
         </div>
       )}
+      </div>{/* end shrink-0 */}
 
       {/* End Match confirmation */}
       <Modal open={endMatchConfirm} onClose={() => setEndMatchConfirm(false)} className="max-w-md bg-bg-secondary p-6">
@@ -762,9 +764,9 @@ export default function LiveServerPage() {
       </Modal>
 
       {/* Main grid: Players + Chat */}
-      <div className="grid gap-6 lg:grid-cols-3 lg:max-h-[calc(100vh-16rem)]">
+      <div className="grid gap-4 lg:grid-cols-3 flex-1 min-h-0">
         {/* Player list - 2 cols */}
-        <div className="lg:col-span-2 flex flex-col">
+        <div className="lg:col-span-2 flex flex-col min-h-0">
           <div className="facet-border flex flex-1 flex-col rounded-sm bg-bg-card">
             <div className="border-b border-border px-4 py-3">
               <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
@@ -778,7 +780,7 @@ export default function LiveServerPage() {
               </div>
             ) : (
               <>
-              <div className="grid gap-0 md:grid-cols-2 overflow-y-auto" style={{ maxHeight: "calc(100vh - 300px)" }}>
+              <div className="grid gap-0 md:grid-cols-2 overflow-y-auto flex-1 min-h-0">
                 <TeamColumn
                   label="Team 1"
                   players={team1}
@@ -839,7 +841,7 @@ export default function LiveServerPage() {
         </div>
 
         {/* Chat + Broadcast */}
-        <div className="flex flex-col gap-4 lg:min-h-0 lg:overflow-hidden">
+        <div className="flex flex-col gap-4 min-h-0 overflow-hidden">
           {/* Broadcast */}
           {canManage && (
             <form

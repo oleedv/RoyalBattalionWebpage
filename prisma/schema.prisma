@@ -81,26 +81,39 @@ model Clan {
 }
 
 model WhitelistEntry {
-  id        String      @id @default(cuid())
+  id        String              @id @default(cuid())
   steamId   String
-  server    String      @default("main")
+  server    String              @default("main")
   name      String?
   clan      String?
   clanId    String?
-  clanRef   Clan?       @relation(fields: [clanId], references: [id], onDelete: SetNull)
+  clanRef   Clan?               @relation(fields: [clanId], references: [id], onDelete: SetNull)
   role      String?
   groupId   String?
-  group     AdminGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  group     AdminGroup?         @relation(fields: [groupId], references: [id], onDelete: SetNull)
   addedBy   String
   reason    String?
   expiresAt DateTime?
-  createdAt DateTime    @default(now())
+  createdAt DateTime            @default(now())
+  comments  WhitelistComment[]
 
   @@unique([steamId, server])
   @@index([server])
   @@index([expiresAt])
   @@index([clanId])
   @@index([groupId])
+}
+
+model WhitelistComment {
+  id               String         @id @default(cuid())
+  whitelistEntryId String
+  whitelistEntry   WhitelistEntry @relation(fields: [whitelistEntryId], references: [id], onDelete: Cascade)
+  authorId         String
+  authorName       String
+  text             String         @db.Text
+  createdAt        DateTime       @default(now())
+
+  @@index([whitelistEntryId])
 }
 
 model ServerConfig {

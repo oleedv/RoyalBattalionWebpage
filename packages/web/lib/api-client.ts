@@ -3,6 +3,8 @@ import type {
   AuthSyncResponse,
   AuthMeResponse,
   WhitelistEntry,
+  WhitelistEntryWithComments,
+  WhitelistComment,
   WhitelistCandidate,
   AdminGroup,
   Clan,
@@ -144,6 +146,61 @@ export function getWhitelistCandidates(
   const qs = server ? `?server=${encodeURIComponent(server)}` : "";
   return request<WhitelistCandidate[]>(`/whitelist/candidates${qs}`, {
     headers: authHeaders(token),
+  });
+}
+
+export function getWhitelistEntry(
+  token: string,
+  id: string,
+): Promise<ApiResponse<WhitelistEntryWithComments>> {
+  return request<WhitelistEntryWithComments>(`/whitelist/${id}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function addWhitelistComment(
+  token: string,
+  entryId: string,
+  text: string,
+): Promise<ApiResponse<WhitelistComment>> {
+  return request<WhitelistComment>(`/whitelist/${entryId}/comments`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ text }),
+  });
+}
+
+export function deleteWhitelistComment(
+  token: string,
+  entryId: string,
+  commentId: string,
+): Promise<ApiResponse<{ deleted: true }>> {
+  return request<{ deleted: true }>(`/whitelist/${entryId}/comments/${commentId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export function bulkUpdateWhitelist(
+  token: string,
+  ids: string[],
+  data: { clanId?: string | null; groupId?: string | null; expiresAt?: string | null },
+): Promise<ApiResponse<{ updated: number }>> {
+  return request<{ updated: number }>("/whitelist/bulk-update", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ ids, data }),
+  });
+}
+
+export function bulkDeleteWhitelist(
+  token: string,
+  ids: string[],
+): Promise<ApiResponse<{ deleted: number }>> {
+  return request<{ deleted: number }>("/whitelist/bulk-delete", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ ids }),
   });
 }
 
@@ -603,13 +660,14 @@ export function expireTicketTimeout(
 // Audit Logs
 export function getAuditLogs(
   token: string,
-  params: { page?: number; limit?: number; action?: string; resource?: string; userId?: string; from?: string; to?: string } = {}
+  params: { page?: number; limit?: number; action?: string; resource?: string; resourceId?: string; userId?: string; from?: string; to?: string } = {}
 ): Promise<ApiResponse<Paginated<AuditLogEntry>>> {
   const qs = new URLSearchParams();
   if (params.page) qs.set("page", String(params.page));
   if (params.limit) qs.set("limit", String(params.limit));
   if (params.action) qs.set("action", params.action);
   if (params.resource) qs.set("resource", params.resource);
+  if (params.resourceId) qs.set("resourceId", params.resourceId);
   if (params.userId) qs.set("userId", params.userId);
   if (params.from) qs.set("from", params.from);
   if (params.to) qs.set("to", params.to);

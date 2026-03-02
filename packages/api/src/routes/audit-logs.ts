@@ -14,6 +14,7 @@ auditLogs.get("/", async (c) => {
   const action = c.req.query("action") || undefined;
   const resource = c.req.query("resource") || undefined;
   const userId = c.req.query("userId") || undefined;
+  const resourceId = c.req.query("resourceId") || undefined;
   const from = c.req.query("from") || undefined;
   const to = c.req.query("to") || undefined;
 
@@ -27,6 +28,9 @@ auditLogs.get("/", async (c) => {
   }
   if (userId) {
     where.userId = userId;
+  }
+  if (resourceId) {
+    where.resourceId = resourceId;
   }
   if (from || to) {
     const createdAt: Record<string, Date> = {};

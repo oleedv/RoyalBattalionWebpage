@@ -8,6 +8,11 @@ import {
   deleteWhitelistEntry,
   bulkAddWhitelist,
   getWhitelistCandidates,
+  getWhitelistEntry,
+  addWhitelistComment,
+  deleteWhitelistComment,
+  bulkUpdateWhitelist,
+  bulkDeleteWhitelist,
   getAdminGroups,
   createAdminGroup,
   updateAdminGroup,
@@ -18,13 +23,14 @@ import {
   deleteClan,
   getServerConfigs,
   toggleServerSync,
+  getAuditLogs,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
 import { Modal } from "@/components/modal";
 import { SearchInput } from "@/components/search-input";
-import { formatDate } from "@/lib/format";
-import type { WhitelistEntry, WhitelistCandidate, AdminGroup, Clan, ServerConfig } from "shared";
+import { formatDate, formatRelativeTime, formatDateTime } from "@/lib/format";
+import type { WhitelistEntry, WhitelistEntryWithComments, WhitelistComment, WhitelistCandidate, AdminGroup, Clan, ServerConfig, AuditLogEntry } from "shared";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -35,7 +41,7 @@ const SQUAD_PERMISSIONS = [
   "clientdemos",
 ];
 
-type Tab = "entries" | "requests" | "groups" | "clans";
+type Tab = "entries" | "requests" | "groups" | "clans" | "activity";
 
 // --- Import modal types ---
 interface ParsedImportRow {
@@ -71,10 +77,40 @@ function getStoredDefaultServer(): string {
   return localStorage.getItem("rb-default-server") || "";
 }
 
+// --- Helper components ---
+
+function CopyableId({ value, label }: { value: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  function handleCopy(e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <button onClick={handleCopy} title={value} className="group flex items-center gap-1.5 text-left">
+      <code className="text-text-secondary">{label ?? value}</code>
+      <span className="text-[10px] text-text-muted opacity-0 transition-opacity group-hover:opacity-100">
+        {copied ? "Copied!" : "Copy"}
+      </span>
+    </button>
+  );
+}
+
+function InfoField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-text-muted">{label}</div>
+      <div className="text-sm text-text-primary">{children}</div>
+    </div>
+  );
+}
+
 export default function WhitelistPage() {
   const { apiToken, hasPermission } = usePermissions();
   const canManage = hasPermission("manage:whitelist");
   const canSync = hasPermission("manage:whitelist-sync");
+  const canViewAudit = hasPermission("view:audit-logs");
 
   const [tab, setTab] = useState<Tab>("entries");
   const [entries, setEntries] = useState<WhitelistEntry[]>([]);
@@ -194,6 +230,10 @@ export default function WhitelistPage() {
   const pendingCandidates = candidates.filter((c) => !dismissed.has(c.userId));
   const currentConfig = serverConfigs.find((c) => c.server === activeServer);
 
+  const visibleTabs: Tab[] = canViewAudit
+    ? ["entries", "requests", "groups", "clans", "activity"]
+    : ["entries", "requests", "groups", "clans"];
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -240,7 +280,7 @@ export default function WhitelistPage() {
 
       {/* Tabs */}
       <div className="mb-6 flex gap-1 border-b border-border">
-        {(["entries", "requests", "groups", "clans"] as Tab[]).map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -303,6 +343,9 @@ export default function WhitelistPage() {
           canManage={canManage}
         />
       )}
+      {tab === "activity" && (
+        <ActivityTab apiToken={apiToken} />
+      )}
     </div>
   );
 }
@@ -339,8 +382,13 @@ function EntriesTab({
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
-  // Edit state
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // Duplicate warnings
+  const [warnings, setWarnings] = useState<string[]>([]);
+
+  // Profile modal
+  const [selectedEntry, setSelectedEntry] = useState<WhitelistEntryWithComments | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [editSteamId, setEditSteamId] = useState("");
   const [editName, setEditName] = useState("");
   const [editClanId, setEditClanId] = useState("");
@@ -348,6 +396,20 @@ function EntriesTab({
   const [editReason, setEditReason] = useState("");
   const [editExpiresAt, setEditExpiresAt] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
+  const [commentText, setCommentText] = useState("");
+  const [commentSaving, setCommentSaving] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<AuditLogEntry[]>([]);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [activityLoading, setActivityLoading] = useState(false);
+
+  // Bulk selection
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<"group" | "clan" | "expiry" | "delete" | null>(null);
+  const [bulkGroupId, setBulkGroupId] = useState("");
+  const [bulkClanId, setBulkClanId] = useState("");
+  const [bulkExpiresAt, setBulkExpiresAt] = useState("");
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   // Review cfg modal
   const [showCfgModal, setShowCfgModal] = useState(false);
@@ -362,6 +424,197 @@ function EntriesTab({
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
+  // --- Open profile modal ---
+  async function openProfile(entry: WhitelistEntry) {
+    if (!apiToken) return;
+    const res = await getWhitelistEntry(apiToken, entry.id);
+    if (res.success && res.data) {
+      setSelectedEntry(res.data);
+      setEditing(false);
+      setConfirmingDelete(false);
+      setEditError(null);
+      setCommentText("");
+      setActivityLogs([]);
+      setActivityOpen(false);
+    }
+  }
+
+  function closeProfile() {
+    setSelectedEntry(null);
+    setEditing(false);
+    setConfirmingDelete(false);
+    setEditError(null);
+    setCommentText("");
+    setActivityLogs([]);
+    setActivityOpen(false);
+  }
+
+  function startEdit() {
+    if (!selectedEntry) return;
+    setEditSteamId(selectedEntry.steamId);
+    setEditName(selectedEntry.name || "");
+    setEditClanId(selectedEntry.clanId || "");
+    setEditGroupId(selectedEntry.groupId || "");
+    setEditReason(selectedEntry.reason || "");
+    setEditExpiresAt(selectedEntry.expiresAt ? selectedEntry.expiresAt.slice(0, 16) : "");
+    setEditError(null);
+    setEditing(true);
+    setConfirmingDelete(false);
+  }
+
+  async function saveEdit() {
+    if (!apiToken || !selectedEntry) return;
+    setEditError(null);
+
+    const selectedClan = clans.find((c) => c.id === editClanId);
+    const res = await updateWhitelistEntry(apiToken, selectedEntry.id, {
+      steamId: editSteamId.trim(),
+      name: editName.trim() || undefined,
+      clanId: editClanId || null,
+      clan: selectedClan?.tag || undefined,
+      groupId: editGroupId || null,
+      reason: editReason.trim() || undefined,
+      expiresAt: editExpiresAt ? new Date(editExpiresAt).toISOString() : null,
+    });
+
+    if (res.success && res.data) {
+      setEntries((prev) => prev.map((e) => (e.id === selectedEntry.id ? res.data! : e)));
+      // Refresh profile
+      const refreshed = await getWhitelistEntry(apiToken, selectedEntry.id);
+      if (refreshed.success && refreshed.data) setSelectedEntry(refreshed.data);
+      setEditing(false);
+    } else {
+      setEditError(res.error || "Failed to update entry");
+    }
+  }
+
+  async function handleDeleteFromModal() {
+    if (!apiToken || !selectedEntry) return;
+    const res = await deleteWhitelistEntry(apiToken, selectedEntry.id);
+    if (res.success) {
+      setEntries((prev) => prev.filter((e) => e.id !== selectedEntry.id));
+      closeProfile();
+    }
+  }
+
+  async function handleAddComment() {
+    if (!apiToken || !selectedEntry || !commentText.trim()) return;
+    setCommentSaving(true);
+    const res = await addWhitelistComment(apiToken, selectedEntry.id, commentText.trim());
+    if (res.success && res.data) {
+      setSelectedEntry((prev) => prev ? { ...prev, comments: [res.data!, ...prev.comments] } : prev);
+      setCommentText("");
+    }
+    setCommentSaving(false);
+  }
+
+  async function handleDeleteComment(commentId: string) {
+    if (!apiToken || !selectedEntry) return;
+    const res = await deleteWhitelistComment(apiToken, selectedEntry.id, commentId);
+    if (res.success) {
+      setSelectedEntry((prev) => prev ? { ...prev, comments: prev.comments.filter((c) => c.id !== commentId) } : prev);
+    }
+  }
+
+  async function loadActivity() {
+    if (!apiToken || !selectedEntry) return;
+    setActivityLoading(true);
+    const res = await getAuditLogs(apiToken, { resource: "WhitelistEntry", resourceId: selectedEntry.id, limit: 50 });
+    if (res.success && res.data) {
+      setActivityLogs(res.data.items);
+    }
+    setActivityLoading(false);
+  }
+
+  function toggleActivity() {
+    if (!activityOpen) {
+      setActivityOpen(true);
+      loadActivity();
+    } else {
+      setActivityOpen(false);
+    }
+  }
+
+  function getActionVerb(action: string): string {
+    switch (action) {
+      case "whitelist.add": return "added this entry";
+      case "whitelist.update": return "updated entry";
+      case "whitelist.delete": return "removed entry";
+      case "whitelist.comment.add": return "added a comment";
+      case "whitelist.comment.delete": return "deleted a comment";
+      case "whitelist.bulk_update": return "bulk updated";
+      case "whitelist.bulk_add": return "bulk added";
+      case "whitelist.bulk_delete": return "bulk deleted";
+      default: return action;
+    }
+  }
+
+  // --- Bulk actions ---
+  function toggleBulkMode() {
+    setBulkMode((prev) => !prev);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((e) => e.id)));
+    }
+  }
+
+  async function executeBulkAction() {
+    if (!apiToken || selectedIds.size === 0) return;
+    setBulkProcessing(true);
+
+    const ids = Array.from(selectedIds);
+
+    if (bulkAction === "delete") {
+      const res = await bulkDeleteWhitelist(apiToken, ids);
+      if (res.success) {
+        setEntries((prev) => prev.filter((e) => !selectedIds.has(e.id)));
+        setSelectedIds(new Set());
+        setBulkAction(null);
+      }
+    } else if (bulkAction === "group") {
+      const res = await bulkUpdateWhitelist(apiToken, ids, { groupId: bulkGroupId || null });
+      if (res.success) {
+        const wlRes = await getWhitelist(apiToken, activeServer);
+        if (wlRes.success && wlRes.data) setEntries(wlRes.data);
+        setSelectedIds(new Set());
+        setBulkAction(null);
+      }
+    } else if (bulkAction === "clan") {
+      const res = await bulkUpdateWhitelist(apiToken, ids, { clanId: bulkClanId || null });
+      if (res.success) {
+        const wlRes = await getWhitelist(apiToken, activeServer);
+        if (wlRes.success && wlRes.data) setEntries(wlRes.data);
+        setSelectedIds(new Set());
+        setBulkAction(null);
+      }
+    } else if (bulkAction === "expiry") {
+      const res = await bulkUpdateWhitelist(apiToken, ids, { expiresAt: bulkExpiresAt ? new Date(bulkExpiresAt).toISOString() : null });
+      if (res.success) {
+        const wlRes = await getWhitelist(apiToken, activeServer);
+        if (wlRes.success && wlRes.data) setEntries(wlRes.data);
+        setSelectedIds(new Set());
+        setBulkAction(null);
+      }
+    }
+
+    setBulkProcessing(false);
+  }
+
+  // --- Add entry ---
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!apiToken || !newSteamId.trim()) return;
@@ -385,54 +638,15 @@ function EntriesTab({
       setNewClanId("");
       setNewGroupId("");
       setNewExpiresAt("");
+      const data = res.data as WhitelistEntry & { warnings?: string[] };
+      if (data.warnings?.length) setWarnings(data.warnings);
     } else {
       setAddError(res.error || "Failed to add entry");
     }
     setAdding(false);
   }
 
-  function startEdit(entry: WhitelistEntry) {
-    setEditingId(entry.id);
-    setEditSteamId(entry.steamId);
-    setEditName(entry.name || "");
-    setEditClanId(entry.clanId || "");
-    setEditGroupId(entry.groupId || "");
-    setEditReason(entry.reason || "");
-    setEditExpiresAt(entry.expiresAt ? entry.expiresAt.slice(0, 16) : "");
-    setEditError(null);
-  }
-
-  async function saveEdit(id: string) {
-    if (!apiToken) return;
-    setEditError(null);
-
-    const selectedClan = clans.find((c) => c.id === editClanId);
-    const res = await updateWhitelistEntry(apiToken, id, {
-      steamId: editSteamId.trim(),
-      name: editName.trim() || undefined,
-      clanId: editClanId || null,
-      clan: selectedClan?.tag || undefined,
-      groupId: editGroupId || null,
-      reason: editReason.trim() || undefined,
-      expiresAt: editExpiresAt ? new Date(editExpiresAt).toISOString() : null,
-    });
-
-    if (res.success && res.data) {
-      setEntries((prev) => prev.map((e) => (e.id === id ? res.data! : e)));
-      setEditingId(null);
-    } else {
-      setEditError(res.error || "Failed to update entry");
-    }
-  }
-
-  async function handleDelete(id: string) {
-    if (!apiToken) return;
-    const res = await deleteWhitelistEntry(apiToken, id);
-    if (res.success) {
-      setEntries((prev) => prev.filter((e) => e.id !== id));
-    }
-  }
-
+  // --- CFG generation ---
   function generateCfgContent(): string {
     const lines: string[] = [];
     const now = new Date();
@@ -619,6 +833,18 @@ function EntriesTab({
           placeholder="Search by Steam ID, name, clan, group..."
           className="flex-1"
         />
+        {canManage && (
+          <button
+            onClick={toggleBulkMode}
+            className={`rounded-sm border px-4 py-2 text-sm transition-colors ${
+              bulkMode
+                ? "border-accent/40 bg-accent/10 text-accent"
+                : "border-border bg-bg-tertiary text-text-secondary hover:border-accent/40 hover:text-text-primary"
+            }`}
+          >
+            {bulkMode ? "Cancel Select" : "Select"}
+          </button>
+        )}
         <button
           onClick={handleReviewCfg}
           className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
@@ -640,6 +866,16 @@ function EntriesTab({
           </button>
         )}
       </div>
+
+      {/* Duplicate warnings */}
+      {warnings.length > 0 && (
+        <div className="mb-4 rounded-sm border border-warning/20 bg-warning/5 px-4 py-2.5 text-sm text-warning">
+          {warnings.map((w, i) => (
+            <div key={i}>{w}</div>
+          ))}
+          <button onClick={() => setWarnings([])} className="ml-3 text-text-muted hover:text-text-primary">x</button>
+        </div>
+      )}
 
       {importStatus && (
         <div className="mb-4 rounded-sm border border-accent/20 bg-accent/5 px-4 py-2.5 text-sm text-accent">
@@ -675,71 +911,77 @@ function EntriesTab({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left">
+                {bulkMode && (
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                      onChange={toggleSelectAll}
+                      className="accent-accent"
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Steam ID</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Name</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Clan</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Group</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Expires</th>
                 <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Added</th>
-                {canManage && <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={canManage ? 7 : 6} className="px-4 py-8 text-center text-text-muted">
+                  <td colSpan={bulkMode ? 8 : 7} className="px-4 py-8 text-center text-text-muted">
                     {search ? "No entries match your search" : "No whitelist entries yet"}
                   </td>
                 </tr>
               ) : (
                 filtered.map((entry) => {
                   const expiry = formatExpiry(entry.expiresAt);
-                  const isEditing = editingId === entry.id;
 
                   return (
-                    <tr key={entry.id} className={`border-b border-border/50 transition-colors hover:bg-bg-tertiary/50 ${expiry?.expired ? "opacity-50" : ""}`}>
+                    <tr
+                      key={entry.id}
+                      onClick={() => {
+                        if (bulkMode) {
+                          toggleSelect(entry.id);
+                        } else {
+                          openProfile(entry);
+                        }
+                      }}
+                      className={`border-b border-border/50 transition-colors hover:bg-bg-tertiary/50 ${expiry?.expired ? "opacity-50" : ""} ${
+                        bulkMode && selectedIds.has(entry.id) ? "bg-accent/5" : ""
+                      } ${bulkMode ? "cursor-pointer" : "cursor-pointer"}`}
+                    >
+                      {bulkMode && (
+                        <td className="w-10 px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(entry.id)}
+                            onChange={() => toggleSelect(entry.id)}
+                            className="accent-accent"
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3">
-                        {isEditing ? (
-                          <input type="text" value={editSteamId} onChange={(e) => setEditSteamId(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none" />
-                        ) : (
-                          <code className="text-accent">{entry.steamId}</code>
-                        )}
+                        <code className="text-accent">{entry.steamId}</code>
                       </td>
                       <td className="px-4 py-3 text-text-secondary">
-                        {isEditing ? (
-                          <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" placeholder="Name" />
-                        ) : (
-                          entry.name || <span className="text-text-muted">--</span>
-                        )}
+                        {entry.name || <span className="text-text-muted">--</span>}
                       </td>
                       <td className="px-4 py-3 text-text-secondary">
-                        {isEditing ? (
-                          <select value={editClanId} onChange={(e) => setEditClanId(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none">
-                            <option value="">No Clan</option>
-                            {clans.map((c) => <option key={c.id} value={c.id}>[{c.tag}] {c.name}</option>)}
-                          </select>
-                        ) : (
-                          entry.clanName || entry.clan || <span className="text-text-muted">--</span>
-                        )}
+                        {entry.clanName || entry.clan || <span className="text-text-muted">--</span>}
                       </td>
                       <td className="px-4 py-3 text-text-secondary">
-                        {isEditing ? (
-                          <select value={editGroupId} onChange={(e) => setEditGroupId(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none">
-                            <option value="">None</option>
-                            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                          </select>
+                        {entry.groupName ? (
+                          <span className="rounded-sm border border-accent/20 bg-accent/5 px-2 py-0.5 text-xs text-accent">{entry.groupName}</span>
                         ) : (
-                          entry.groupName ? (
-                            <span className="rounded-sm border border-accent/20 bg-accent/5 px-2 py-0.5 text-xs text-accent">{entry.groupName}</span>
-                          ) : (
-                            entry.role ? <span className="text-text-secondary">{entry.role}</span> : <span className="text-text-muted">--</span>
-                          )
+                          entry.role ? <span className="text-text-secondary">{entry.role}</span> : <span className="text-text-muted">--</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {isEditing ? (
-                          <input type="datetime-local" value={editExpiresAt} onChange={(e) => setEditExpiresAt(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" />
-                        ) : expiry ? (
+                        {expiry ? (
                           <span className={`rounded-sm px-2 py-0.5 text-xs font-medium ${expiry.expired ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning"}`}>
                             {expiry.label}
                           </span>
@@ -750,22 +992,6 @@ function EntriesTab({
                       <td className="px-4 py-3 text-text-secondary text-xs">
                         {formatDate(entry.createdAt)}
                       </td>
-                      {canManage && (
-                        <td className="px-4 py-3">
-                          {isEditing ? (
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => saveEdit(entry.id)} className="text-xs text-success transition-colors hover:text-success/80">Save</button>
-                              <button onClick={() => setEditingId(null)} className="text-xs text-text-muted transition-colors hover:text-text-primary">Cancel</button>
-                              {editError && <span className="text-xs text-danger">{editError}</span>}
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => startEdit(entry)} className="text-xs text-text-muted transition-colors hover:text-accent">Edit</button>
-                              <button onClick={() => handleDelete(entry.id)} className="text-xs text-text-muted transition-colors hover:text-danger">Delete</button>
-                            </div>
-                          )}
-                        </td>
-                      )}
                     </tr>
                   );
                 })
@@ -774,6 +1000,332 @@ function EntriesTab({
           </table>
         </div>
       </div>
+
+      {/* Bulk floating action bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-bg-card px-6 py-3 shadow-lg">
+          <div className="mx-auto flex max-w-7xl items-center justify-between">
+            <span className="text-sm font-medium text-text-primary">{selectedIds.size} selected</span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { setBulkAction("group"); setBulkGroupId(""); }}
+                className="rounded-sm border border-border bg-bg-tertiary px-4 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+              >
+                Change Group
+              </button>
+              <button
+                onClick={() => { setBulkAction("clan"); setBulkClanId(""); }}
+                className="rounded-sm border border-border bg-bg-tertiary px-4 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+              >
+                Change Clan
+              </button>
+              <button
+                onClick={() => { setBulkAction("expiry"); setBulkExpiresAt(""); }}
+                className="rounded-sm border border-border bg-bg-tertiary px-4 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+              >
+                Set Expiry
+              </button>
+              <button
+                onClick={() => setBulkAction("delete")}
+                className="rounded-sm border border-danger/30 bg-danger/10 px-4 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/20"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk action modal */}
+      <Modal
+        open={bulkAction !== null}
+        onClose={() => setBulkAction(null)}
+        className="max-w-md bg-bg-secondary p-6"
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-display text-lg font-semibold tracking-wide">
+            {bulkAction === "group" && "Change Group"}
+            {bulkAction === "clan" && "Change Clan"}
+            {bulkAction === "expiry" && "Set Expiry"}
+            {bulkAction === "delete" && "Delete Entries"}
+          </h2>
+          <button onClick={() => setBulkAction(null)} className="text-text-muted transition-colors hover:text-text-primary">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <p className="mb-4 text-sm text-text-secondary">
+          This will affect {selectedIds.size} selected {selectedIds.size === 1 ? "entry" : "entries"}.
+        </p>
+
+        {bulkAction === "group" && (
+          <select value={bulkGroupId} onChange={(e) => setBulkGroupId(e.target.value)} className="mb-4 w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none">
+            <option value="">No group</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+        )}
+
+        {bulkAction === "clan" && (
+          <select value={bulkClanId} onChange={(e) => setBulkClanId(e.target.value)} className="mb-4 w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none">
+            <option value="">No Clan</option>
+            {clans.map((c) => <option key={c.id} value={c.id}>[{c.tag}] {c.name}</option>)}
+          </select>
+        )}
+
+        {bulkAction === "expiry" && (
+          <input type="datetime-local" value={bulkExpiresAt} onChange={(e) => setBulkExpiresAt(e.target.value)} className="mb-4 w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none" />
+        )}
+
+        {bulkAction === "delete" && (
+          <p className="mb-4 text-sm text-danger">
+            Are you sure you want to permanently delete {selectedIds.size} {selectedIds.size === 1 ? "entry" : "entries"}? This cannot be undone.
+          </p>
+        )}
+
+        <div className="flex justify-end gap-3">
+          <button onClick={() => setBulkAction(null)} className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary">
+            Cancel
+          </button>
+          <button
+            onClick={executeBulkAction}
+            disabled={bulkProcessing}
+            className={`rounded-sm px-5 py-2 text-sm font-semibold tracking-wide transition-colors disabled:opacity-50 ${
+              bulkAction === "delete"
+                ? "bg-danger text-white hover:bg-danger/80"
+                : "bg-accent text-bg-primary hover:bg-accent-muted"
+            }`}
+          >
+            {bulkProcessing ? "Processing..." : "Confirm"}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Profile Modal */}
+      <Modal
+        open={selectedEntry !== null}
+        onClose={closeProfile}
+        className="flex max-w-2xl flex-col bg-bg-secondary"
+      >
+        {selectedEntry && (
+          <>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+              <div>
+                <h2 className="font-display text-lg font-semibold tracking-wide text-text-primary">
+                  {selectedEntry.name || "Unnamed"}
+                </h2>
+                <div className="text-xs text-text-muted">{selectedEntry.steamId}</div>
+              </div>
+              <button onClick={closeProfile} className="text-text-muted transition-colors hover:text-text-primary">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            {/* Info grid */}
+            <div className="grid grid-cols-2 gap-4 border-b border-border px-6 py-4">
+              <InfoField label="Steam ID">
+                <CopyableId value={selectedEntry.steamId} />
+              </InfoField>
+              <InfoField label="Name">
+                {editing ? (
+                  <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" placeholder="Name" />
+                ) : (
+                  selectedEntry.name || <span className="text-text-muted">--</span>
+                )}
+              </InfoField>
+              <InfoField label="Clan">
+                {editing ? (
+                  <select value={editClanId} onChange={(e) => setEditClanId(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none">
+                    <option value="">No Clan</option>
+                    {clans.map((c) => <option key={c.id} value={c.id}>[{c.tag}] {c.name}</option>)}
+                  </select>
+                ) : (
+                  selectedEntry.clanName || selectedEntry.clan || <span className="text-text-muted">--</span>
+                )}
+              </InfoField>
+              <InfoField label="Group">
+                {editing ? (
+                  <select value={editGroupId} onChange={(e) => setEditGroupId(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none">
+                    <option value="">None</option>
+                    {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                ) : (
+                  selectedEntry.groupName ? (
+                    <span className="rounded-sm border border-accent/20 bg-accent/5 px-2 py-0.5 text-xs text-accent">{selectedEntry.groupName}</span>
+                  ) : (
+                    <span className="text-text-muted">--</span>
+                  )
+                )}
+              </InfoField>
+              <InfoField label="Reason">
+                {editing ? (
+                  <input type="text" value={editReason} onChange={(e) => setEditReason(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" placeholder="Reason" />
+                ) : (
+                  selectedEntry.reason || <span className="text-text-muted">--</span>
+                )}
+              </InfoField>
+              <InfoField label="Expires">
+                {editing ? (
+                  <input type="datetime-local" value={editExpiresAt} onChange={(e) => setEditExpiresAt(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" />
+                ) : (
+                  (() => {
+                    const exp = formatExpiry(selectedEntry.expiresAt);
+                    if (!exp) return <span className="text-text-muted">Permanent</span>;
+                    return (
+                      <span className={`rounded-sm px-2 py-0.5 text-xs font-medium ${exp.expired ? "bg-danger/10 text-danger" : "bg-warning/10 text-warning"}`}>
+                        {exp.label}
+                      </span>
+                    );
+                  })()
+                )}
+              </InfoField>
+              <InfoField label="Added By">
+                {selectedEntry.addedByName || selectedEntry.addedBy}
+              </InfoField>
+              <InfoField label="Added">
+                {formatDate(selectedEntry.createdAt)}
+              </InfoField>
+            </div>
+
+            {/* Comments */}
+            <div className="border-b border-border px-6 py-4">
+              <h3 className="mb-3 text-xs font-medium uppercase tracking-[0.15em] text-text-muted">
+                Comments ({selectedEntry.comments.length})
+              </h3>
+              {selectedEntry.comments.length > 0 && (
+                <div className="mb-3 max-h-48 space-y-2 overflow-y-auto">
+                  {selectedEntry.comments.map((comment) => (
+                    <div key={comment.id} className="rounded-sm bg-bg-tertiary px-3 py-2">
+                      <div className="mb-1 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-accent">{comment.authorName}</span>
+                          <span className="text-[10px] text-text-muted">{formatRelativeTime(comment.createdAt)}</span>
+                        </div>
+                        {canManage && (
+                          <button onClick={() => handleDeleteComment(comment.id)} className="text-[10px] text-text-muted transition-colors hover:text-danger">
+                            delete
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-sm text-text-secondary">{comment.text}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {canManage && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    placeholder="Add a comment..."
+                    className="flex-1 rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+                    onKeyDown={(e) => { if (e.key === "Enter") handleAddComment(); }}
+                  />
+                  <button
+                    onClick={handleAddComment}
+                    disabled={commentSaving || !commentText.trim()}
+                    className="rounded-sm bg-accent px-4 py-1.5 text-xs font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50"
+                  >
+                    {commentSaving ? "..." : "Add"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Activity (collapsible) */}
+            <div className="border-b border-border px-6 py-4">
+              <button
+                onClick={toggleActivity}
+                className="flex w-full items-center justify-between text-xs font-medium uppercase tracking-[0.15em] text-text-muted transition-colors hover:text-text-secondary"
+              >
+                <span>Activity</span>
+                <svg
+                  className={`h-4 w-4 transition-transform ${activityOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {activityOpen && (
+                <div className="mt-3">
+                  {activityLoading ? (
+                    <div className="text-xs text-text-muted">Loading activity...</div>
+                  ) : activityLogs.length === 0 ? (
+                    <div className="text-xs text-text-muted">No activity recorded.</div>
+                  ) : (
+                    <div className="max-h-48 space-y-1.5 overflow-y-auto">
+                      {activityLogs.map((log) => (
+                        <div key={log.id} className="text-xs text-text-secondary">
+                          <span className="font-medium text-text-primary">{log.userName}</span>
+                          {" "}{getActionVerb(log.action)}
+                          <span className="ml-1.5 text-text-muted">{formatRelativeTime(log.createdAt)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Actions footer */}
+            {canManage && (
+              <div className="px-6 py-4">
+                {editing ? (
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={saveEdit}
+                      className="rounded-sm bg-accent px-4 py-1.5 text-xs font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => { setEditing(false); setEditError(null); }}
+                      className="text-xs text-text-muted transition-colors hover:text-text-primary"
+                    >
+                      Cancel
+                    </button>
+                    {editError && <span className="text-xs text-danger">{editError}</span>}
+                  </div>
+                ) : confirmingDelete ? (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-danger">Delete this entry?</span>
+                    <button
+                      onClick={handleDeleteFromModal}
+                      className="rounded-sm bg-danger px-4 py-1.5 text-xs font-semibold tracking-wide text-white transition-colors hover:bg-danger/80"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => setConfirmingDelete(false)}
+                      className="text-xs text-text-muted transition-colors hover:text-text-primary"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={startEdit}
+                      className="rounded-sm border border-border bg-bg-tertiary px-4 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-accent"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setConfirmingDelete(true)}
+                      className="rounded-sm border border-danger/30 bg-danger/10 px-4 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/20"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </Modal>
 
       {/* Review admins.cfg Modal */}
       <Modal
@@ -1323,6 +1875,231 @@ function ClansTab({
               </div>
             );
           })}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ============================================================
+// ACTIVITY TAB
+// ============================================================
+
+function ActivityTab({
+  apiToken,
+}: {
+  apiToken: string | null;
+}) {
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [actionFilter, setActionFilter] = useState("");
+  const [userSearch, setUserSearch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const PAGE_SIZE = 50;
+
+  const fetchLogs = useCallback(async () => {
+    if (!apiToken) return;
+    setLoading(true);
+    const res = await getAuditLogs(apiToken, {
+      page,
+      limit: PAGE_SIZE,
+      resource: "WhitelistEntry",
+      action: actionFilter || undefined,
+      userId: userSearch || undefined,
+      from: fromDate || undefined,
+      to: toDate || undefined,
+    });
+    if (res.success && res.data) {
+      setLogs(res.data.items);
+      setTotal(res.data.total);
+    }
+    setLoading(false);
+  }, [apiToken, page, actionFilter, userSearch, fromDate, toDate]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  useAutoRefresh(fetchLogs, 20_000, !!apiToken);
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  const ACTION_OPTIONS = [
+    { value: "", label: "All actions" },
+    { value: "whitelist.add", label: "Add" },
+    { value: "whitelist.update", label: "Update" },
+    { value: "whitelist.delete", label: "Delete" },
+    { value: "whitelist.bulk_add", label: "Bulk Add" },
+    { value: "whitelist.bulk_update", label: "Bulk Update" },
+    { value: "whitelist.bulk_delete", label: "Bulk Delete" },
+    { value: "whitelist.comment.add", label: "Comment Add" },
+    { value: "whitelist.comment.delete", label: "Comment Delete" },
+  ];
+
+  function getActionBadge(action: string): string {
+    if (action.includes("delete")) return "bg-red-500/15 text-red-400";
+    if (action.includes("add") || action.includes("comment.add")) return "bg-green-500/15 text-green-400";
+    if (action.includes("update")) return "bg-amber-500/15 text-amber-400";
+    return "bg-blue-500/15 text-blue-400";
+  }
+
+  function getActionLabel(action: string): string {
+    const parts = action.split(".");
+    return parts[parts.length - 1];
+  }
+
+  function getDetailSummary(log: AuditLogEntry): string {
+    const detail = (log.detail || {}) as Record<string, unknown>;
+    switch (log.action) {
+      case "whitelist.add":
+        return `Added ${(detail.name as string) || (detail.steamId as string) || "entry"}${detail.server ? ` on ${detail.server}` : ""}`;
+      case "whitelist.update": {
+        const changes = detail.changes as Record<string, unknown> | undefined;
+        if (changes) return `Changed: ${Object.keys(changes).join(", ")}`;
+        return "Updated entry";
+      }
+      case "whitelist.delete":
+        return `Removed ${(detail.name as string) || (detail.steamId as string) || "entry"}${detail.server ? ` from ${detail.server}` : ""}`;
+      case "whitelist.bulk_add":
+        return `Added ${detail.created ?? "?"} entries (${detail.skipped ?? 0} skipped)`;
+      case "whitelist.bulk_update":
+        return `Updated ${detail.count ?? "?"} entries`;
+      case "whitelist.bulk_delete":
+        return `Deleted ${detail.count ?? "?"} entries`;
+      case "whitelist.comment.add":
+        return "Added comment";
+      case "whitelist.comment.delete":
+        return "Deleted comment";
+      default:
+        return log.action;
+    }
+  }
+
+  return (
+    <>
+      {/* Filters */}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <select
+          value={actionFilter}
+          onChange={(e) => { setActionFilter(e.target.value); setPage(1); }}
+          className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+        >
+          {ACTION_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <input
+          type="text"
+          value={userSearch}
+          onChange={(e) => { setUserSearch(e.target.value); setPage(1); }}
+          placeholder="User ID..."
+          className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+        />
+        <input
+          type="date"
+          value={fromDate}
+          onChange={(e) => { setFromDate(e.target.value); setPage(1); }}
+          className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+          title="From date"
+        />
+        <input
+          type="date"
+          value={toDate}
+          onChange={(e) => { setToDate(e.target.value); setPage(1); }}
+          className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+          title="To date"
+        />
+        <span className="ml-auto text-xs text-text-muted">{total} total</span>
+      </div>
+
+      {/* Table */}
+      <div className="facet-border overflow-hidden rounded-sm bg-bg-card">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Time</th>
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">User</th>
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Action</th>
+                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-text-muted">Loading...</td>
+                </tr>
+              ) : logs.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-text-muted">No activity logs found.</td>
+                </tr>
+              ) : (
+                logs.map((log) => (
+                  <tr
+                    key={log.id}
+                    onClick={() => setExpandedId(expandedId === log.id ? null : log.id)}
+                    className="cursor-pointer border-b border-border/50 transition-colors hover:bg-bg-tertiary/50"
+                  >
+                    <td className="px-4 py-3 text-xs text-text-secondary" title={formatDateTime(log.createdAt)}>
+                      {formatRelativeTime(log.createdAt)}
+                    </td>
+                    <td className="px-4 py-3 text-text-primary text-xs font-medium">
+                      {log.userName}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-sm px-2 py-0.5 text-[10px] font-medium tracking-wide ${getActionBadge(log.action)}`}>
+                        {getActionLabel(log.action)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-text-secondary">
+                      {getDetailSummary(log)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Expanded detail (below table for clicked row) */}
+      {expandedId && (() => {
+        const log = logs.find((l) => l.id === expandedId);
+        if (!log || !log.detail) return null;
+        return (
+          <div className="facet-border mt-3 rounded-sm bg-bg-card p-4">
+            <h3 className="mb-2 text-xs font-medium uppercase tracking-[0.15em] text-text-muted">Raw Detail</h3>
+            <pre className="max-h-48 overflow-auto whitespace-pre-wrap font-mono text-xs text-text-secondary">
+              {JSON.stringify(log.detail, null, 2)}
+            </pre>
+          </div>
+        );
+      })()}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <span className="text-xs text-text-muted">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            className="rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary disabled:opacity-50"
+          >
+            Next
+          </button>
         </div>
       )}
     </>

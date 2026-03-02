@@ -66,6 +66,20 @@ export interface ServerConfig {
   syncEnabled: boolean;
 }
 
+export interface WhitelistComment {
+  id: string;
+  whitelistEntryId: string;
+  authorId: string;
+  authorName: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface WhitelistEntryWithComments extends WhitelistEntry {
+  comments: WhitelistComment[];
+  addedByName: string | null;
+}
+
 export interface WhitelistCandidate {
   userId: string;
   discordName: string;

@@ -7,6 +7,8 @@ import { findOrThrow, success, fail } from "../lib/crud-helpers";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { audit } from "../lib/audit";
+import { triggerSftpDeploy } from "../lib/sftp-deploy";
+import { logger } from "../lib/logger";
 
 const clans = new Hono();
 
@@ -61,6 +63,18 @@ clans.put("/:id", zValidator("json", updateClanSchema), async (c) => {
         ...(body.tag !== undefined && { tag: body.tag }),
       },
     });
+
+    // Propagate tag change to all whitelist entries referencing this clan
+    if (body.tag !== undefined) {
+      await prisma.whitelistEntry.updateMany({
+        where: { clanId: id },
+        data: { clan: body.tag },
+      });
+      triggerSftpDeploy().catch((err) =>
+        logger.error("sftp", "Deploy failed after clan tag update", err)
+      );
+    }
+
     await audit(c, "clan.update", "clan", id, { changes: body });
     return success(c, toClan(clan));
   } catch {

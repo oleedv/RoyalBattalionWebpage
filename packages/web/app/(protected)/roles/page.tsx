@@ -259,6 +259,9 @@ export default function RolesPage() {
   // Delete confirmation
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Accordion – only one role expanded at a time
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   // Whitelist grant toggle
   const [togglingWl, setTogglingWl] = useState<string | null>(null);
 
@@ -620,80 +623,62 @@ export default function RolesPage() {
           {roles.map((role) => {
             const effectivePerms = getEffectivePerms(role);
             const changed = hasPendingChanges(role);
+            const isExpanded = expandedId === role.id;
+            const permCount = effectivePerms.length;
 
             return (
               <div
                 key={role.id}
                 className="facet-border rounded-sm bg-bg-card"
               >
-                {/* Role header - sticky */}
-                <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-sm bg-bg-card p-5 pb-4">
-                  <div>
-                    <h3 className="font-display text-lg font-semibold tracking-wide text-text-primary">
-                      {role.name}
-                    </h3>
-                    <div className="text-xs text-text-muted">
-                      Discord Role ID:{" "}
-                      <code className="text-text-secondary">
-                        {role.discordRoleId}
-                      </code>
+                {/* Role header - clickable to expand/collapse */}
+                <div
+                  onClick={() => setExpandedId(isExpanded ? null : role.id)}
+                  className="flex cursor-pointer items-center justify-between p-5 pb-4 transition-colors hover:bg-bg-tertiary/30"
+                >
+                  <div className="flex items-center gap-3">
+                    {/* Chevron */}
+                    <svg
+                      className={`h-4 w-4 shrink-0 text-text-muted transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <h3 className="font-display text-lg font-semibold tracking-wide text-text-primary">
+                          {role.name}
+                        </h3>
+                        {changed && (
+                          <span className="rounded-sm bg-warning/15 px-2 py-0.5 text-[10px] font-medium tracking-wide text-warning">
+                            unsaved
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-text-muted">
+                        <span>
+                          ID: <code className="text-text-secondary">{role.discordRoleId}</code>
+                        </span>
+                        <span className="text-text-muted/40">|</span>
+                        <span>
+                          {permCount > 0
+                            ? `${permCount} permission${permCount !== 1 ? "s" : ""}`
+                            : "No permissions"}
+                        </span>
+                        {role.grantsWhitelist && (
+                          <>
+                            <span className="text-text-muted/40">|</span>
+                            <span className="text-success">Grants Whitelist</span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    {canManage && (
-                      <button
-                        onClick={() => toggleWhitelistGrant(role)}
-                        disabled={togglingWl === role.id}
-                        className="mt-1.5 inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide transition-all"
-                      >
-                        <span
-                          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                            role.grantsWhitelist
-                              ? "bg-success"
-                              : "bg-text-muted/30"
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                              role.grantsWhitelist
-                                ? "translate-x-[18px]"
-                                : "translate-x-[3px]"
-                            }`}
-                          />
-                        </span>
-                        <span
-                          className={
-                            role.grantsWhitelist
-                              ? "text-success"
-                              : "text-text-muted"
-                          }
-                        >
-                          {role.grantsWhitelist
-                            ? "Grants Whitelist"
-                            : "No Whitelist"}
-                        </span>
-                      </button>
-                    )}
                   </div>
                   {canManage && (
-                    <div className="flex items-center gap-2">
-                      {changed && (
-                        <>
-                          <button
-                            onClick={() => savePermissions(role.id)}
-                            disabled={savingId === role.id}
-                            className="rounded-sm bg-accent px-4 py-1.5 text-xs font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50"
-                          >
-                            {savingId === role.id
-                              ? "Saving..."
-                              : "Save Permissions"}
-                          </button>
-                          <button
-                            onClick={() => discardChanges(role.id)}
-                            className="text-xs text-text-muted transition-colors hover:text-text-primary"
-                          >
-                            Discard
-                          </button>
-                        </>
-                      )}
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {deletingId === role.id ? (
                         <div className="flex items-center gap-2">
                           <button
@@ -721,22 +706,84 @@ export default function RolesPage() {
                   )}
                 </div>
 
-                {saveError && savingId === null && (
-                  <div className="mx-5 mb-3 text-sm text-danger">
-                    {saveError}
-                  </div>
-                )}
+                {/* Expanded: permissions + actions */}
+                {isExpanded && (
+                  <>
+                    {/* Whitelist grant toggle + Save/Discard */}
+                    {canManage && (
+                      <div className="flex items-center justify-between border-t border-border/50 px-5 py-3">
+                        <button
+                          onClick={() => toggleWhitelistGrant(role)}
+                          disabled={togglingWl === role.id}
+                          className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide transition-all"
+                        >
+                          <span
+                            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                              role.grantsWhitelist
+                                ? "bg-success"
+                                : "bg-text-muted/30"
+                            }`}
+                          >
+                            <span
+                              className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                                role.grantsWhitelist
+                                  ? "translate-x-[18px]"
+                                  : "translate-x-[3px]"
+                              }`}
+                            />
+                          </span>
+                          <span
+                            className={
+                              role.grantsWhitelist
+                                ? "text-success"
+                                : "text-text-muted"
+                            }
+                          >
+                            {role.grantsWhitelist
+                              ? "Grants Whitelist"
+                              : "No Whitelist"}
+                          </span>
+                        </button>
+                        {changed && (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => savePermissions(role.id)}
+                              disabled={savingId === role.id}
+                              className="rounded-sm bg-accent px-4 py-1.5 text-xs font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50"
+                            >
+                              {savingId === role.id
+                                ? "Saving..."
+                                : "Save Permissions"}
+                            </button>
+                            <button
+                              onClick={() => discardChanges(role.id)}
+                              className="text-xs text-text-muted transition-colors hover:text-text-primary"
+                            >
+                              Discard
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                {/* Permission groups */}
-                <div
-                  className={`space-y-2 px-5 pb-5 ${
-                    !canManage ? "pointer-events-none opacity-70" : ""
-                  }`}
-                >
-                  {PERMISSION_GROUPS.map((group) =>
-                    renderGroup(role.id, group, effectivePerms)
-                  )}
-                </div>
+                    {saveError && savingId === null && (
+                      <div className="mx-5 mb-3 text-sm text-danger">
+                        {saveError}
+                      </div>
+                    )}
+
+                    {/* Permission groups */}
+                    <div
+                      className={`space-y-2 px-5 pb-5 ${
+                        !canManage ? "pointer-events-none opacity-70" : ""
+                      }`}
+                    >
+                      {PERMISSION_GROUPS.map((group) =>
+                        renderGroup(role.id, group, effectivePerms)
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             );
           })}

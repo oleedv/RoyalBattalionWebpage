@@ -372,6 +372,8 @@ function EntriesTab({
   activeServer: string;
 }) {
   const [search, setSearch] = useState("");
+  const [filterClan, setFilterClan] = useState("");
+  const [filterGroup, setFilterGroup] = useState("");
 
   // Add form
   const [newSteamId, setNewSteamId] = useState("");
@@ -811,17 +813,22 @@ function EntriesTab({
     setImporting(false);
   }
 
-  const filtered = search
-    ? entries.filter(
-        (e) =>
-          e.steamId.includes(search) ||
-          e.addedBy.toLowerCase().includes(search.toLowerCase()) ||
-          e.name?.toLowerCase().includes(search.toLowerCase()) ||
-          e.clan?.toLowerCase().includes(search.toLowerCase()) ||
-          e.groupName?.toLowerCase().includes(search.toLowerCase()) ||
-          e.reason?.toLowerCase().includes(search.toLowerCase())
-      )
-    : entries;
+  const filtered = entries.filter((e) => {
+    if (filterClan && e.clanId !== filterClan) return false;
+    if (filterGroup && e.groupId !== filterGroup) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      return (
+        e.steamId.includes(search) ||
+        e.addedBy.toLowerCase().includes(s) ||
+        e.name?.toLowerCase().includes(s) ||
+        e.clan?.toLowerCase().includes(s) ||
+        e.groupName?.toLowerCase().includes(s) ||
+        e.reason?.toLowerCase().includes(s)
+      );
+    }
+    return true;
+  });
 
   return (
     <>
@@ -833,6 +840,26 @@ function EntriesTab({
           placeholder="Search by Steam ID, name, clan, group..."
           className="flex-1"
         />
+        <select
+          value={filterClan}
+          onChange={(e) => setFilterClan(e.target.value)}
+          className="rounded-sm border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+        >
+          <option value="">All Clans</option>
+          {clans.map((c) => (
+            <option key={c.id} value={c.id}>[{c.tag}] {c.name}</option>
+          ))}
+        </select>
+        <select
+          value={filterGroup}
+          onChange={(e) => setFilterGroup(e.target.value)}
+          className="rounded-sm border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+        >
+          <option value="">All Groups</option>
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>{g.name}</option>
+          ))}
+        </select>
         {canManage && (
           <button
             onClick={toggleBulkMode}

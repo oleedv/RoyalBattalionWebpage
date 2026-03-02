@@ -144,7 +144,7 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
       } catch {
         // Silently fail - the next navigation or tab focus will retry
       }
-    }, 30 * 60 * 1000); // every 30 minutes
+    }, 2 * 60 * 1000); // every 2 minutes
     return () => clearInterval(interval);
   }, [apiToken, session?.accessToken, session?.error]);
 

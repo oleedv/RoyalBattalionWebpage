@@ -18,7 +18,7 @@ const syncSchema = z.object({
 
 const getSecret = () => new TextEncoder().encode(env.JWT_SECRET);
 
-const SYNC_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const SYNC_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 const syncCache = new Map<string, { data: ApiResponse<AuthSyncResponse>; expiry: number }>();
 
 auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {

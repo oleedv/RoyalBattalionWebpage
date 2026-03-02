@@ -4,6 +4,7 @@ import type {
   ApiResponse,
   Ticket,
   Prospect,
+  LegacyTicket,
 } from "shared";
 import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
@@ -106,6 +107,50 @@ tickets.get("/by-uuid/prospect/:uuid", rateLimit(30), async (c) => {
   };
 
   return c.json<ApiResponse<Prospect>>({ success: true, data: prospect });
+});
+
+// --- Public route: lookup legacy ticket by UUID ---
+tickets.get("/by-uuid/legacy/:uuid", rateLimit(30), async (c) => {
+  const uuid = c.req.param("uuid");
+
+  const ticketRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, uuid, thread_number, user_id, username, nickname, previous_threads, started_at, closed_at
+     FROM legacy_tickets WHERE uuid = ${uuid}`
+  );
+
+  if (ticketRows.length === 0) {
+    return c.json<ApiResponse<never>>({ success: false, error: "Legacy ticket not found" }, 404);
+  }
+
+  const r = ticketRows[0];
+  const id = r.id;
+
+  const messageRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, ticket_id, type, author, content, created_at
+     FROM legacy_ticket_messages WHERE ticket_id = ${id} ORDER BY created_at ASC`
+  );
+
+  const ticket: LegacyTicket = {
+    id: r.id,
+    uuid: r.uuid,
+    threadNumber: r.thread_number,
+    userId: r.user_id,
+    username: r.username,
+    nickname: r.nickname,
+    previousThreads: r.previous_threads,
+    startedAt: new Date(r.started_at).toISOString(),
+    closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
+    messages: messageRows.map((m) => ({
+      id: m.id,
+      ticketId: m.ticket_id,
+      type: m.type,
+      author: m.author,
+      content: m.content,
+      createdAt: new Date(m.created_at).toISOString(),
+    })),
+  };
+
+  return c.json<ApiResponse<LegacyTicket>>({ success: true, data: ticket });
 });
 
 // --- Public route: lookup ticket by UUID ---
@@ -263,6 +308,71 @@ tickets.get("/:id", rateLimit(30), requirePermission("view:tickets", "manage:tic
   };
 
   return c.json<ApiResponse<Ticket>>({ success: true, data: ticket });
+});
+
+// GET /tickets/legacy - list all legacy tickets
+tickets.get("/legacy", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer"), async (c) => {
+  const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, uuid, thread_number, user_id, username, nickname, previous_threads, started_at, closed_at
+    FROM legacy_tickets ORDER BY started_at DESC`
+  );
+
+  const result: LegacyTicket[] = rows.map((r) => ({
+    id: r.id,
+    uuid: r.uuid,
+    threadNumber: r.thread_number,
+    userId: r.user_id,
+    username: r.username,
+    nickname: r.nickname,
+    previousThreads: r.previous_threads,
+    startedAt: new Date(r.started_at).toISOString(),
+    closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
+  }));
+
+  return c.json<ApiResponse<LegacyTicket[]>>({ success: true, data: result });
+});
+
+// GET /tickets/legacy/:id - get legacy ticket with messages
+tickets.get("/legacy/:id", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer"), async (c) => {
+  const id = Number(c.req.param("id"));
+
+  const ticketRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, uuid, thread_number, user_id, username, nickname, previous_threads, started_at, closed_at
+     FROM legacy_tickets WHERE id = ${id}`
+  );
+
+  if (ticketRows.length === 0) {
+    return c.json<ApiResponse<never>>({ success: false, error: "Legacy ticket not found" }, 404);
+  }
+
+  const r = ticketRows[0];
+
+  const messageRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, ticket_id, type, author, content, created_at
+     FROM legacy_ticket_messages WHERE ticket_id = ${id} ORDER BY created_at ASC`
+  );
+
+  const ticket: LegacyTicket = {
+    id: r.id,
+    uuid: r.uuid,
+    threadNumber: r.thread_number,
+    userId: r.user_id,
+    username: r.username,
+    nickname: r.nickname,
+    previousThreads: r.previous_threads,
+    startedAt: new Date(r.started_at).toISOString(),
+    closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
+    messages: messageRows.map((m) => ({
+      id: m.id,
+      ticketId: m.ticket_id,
+      type: m.type,
+      author: m.author,
+      content: m.content,
+      createdAt: new Date(m.created_at).toISOString(),
+    })),
+  };
+
+  return c.json<ApiResponse<LegacyTicket>>({ success: true, data: ticket });
 });
 
 // GET /tickets/prospects/list - list all prospects

@@ -96,3 +96,25 @@ export interface TicketTimeout {
   expiresAt: string;
   createdAt: string;
 }
+
+export interface LegacyTicket {
+  id: number;
+  uuid: string;
+  threadNumber: number | null;
+  userId: string;
+  username: string;
+  nickname: string | null;
+  previousThreads: number | null;
+  startedAt: string;
+  closedAt: string | null;
+  messages?: LegacyTicketMessage[];
+}
+
+export interface LegacyTicketMessage {
+  id: number;
+  ticketId: number;
+  type: "bot" | "from_user" | "to_user" | "bot_to_user" | "chat" | "command";
+  author: string | null;
+  content: string | null;
+  createdAt: string;
+}

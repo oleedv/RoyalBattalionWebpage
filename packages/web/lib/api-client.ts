@@ -12,6 +12,7 @@ import type {
   MemberComment,
   Ticket,
   Prospect,
+  LegacyTicket,
   DiscordRole,
   Permission,
   Match,
@@ -289,6 +290,30 @@ export function getProspectByUuid(
   uuid: string
 ): Promise<ApiResponse<Prospect>> {
   return request<Prospect>(`/tickets/by-uuid/prospect/${uuid}`);
+}
+
+// Legacy Tickets
+export function getLegacyTickets(
+  token: string
+): Promise<ApiResponse<LegacyTicket[]>> {
+  return request<LegacyTicket[]>("/tickets/legacy", {
+    headers: authHeaders(token),
+  });
+}
+
+export function getLegacyTicket(
+  token: string,
+  id: number
+): Promise<ApiResponse<LegacyTicket>> {
+  return request<LegacyTicket>(`/tickets/legacy/${id}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function getLegacyTicketByUuid(
+  uuid: string
+): Promise<ApiResponse<LegacyTicket>> {
+  return request<LegacyTicket>(`/tickets/by-uuid/legacy/${uuid}`);
 }
 
 export function getProspects(

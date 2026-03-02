@@ -85,7 +85,7 @@ app.get("/admins.cfg", async (c) => {
   }
   const server = c.req.query("server");
   const cfg = await generateAdminsCfg(server || undefined);
-  return c.text(cfg, 200, { "Content-Type": "text/plain" });
+  return c.text(cfg, 200, { "Content-Type": "text/plain; charset=utf-8" });
 });
 
 app.get("/health", async (c) => {

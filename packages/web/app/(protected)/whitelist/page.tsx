@@ -29,9 +29,10 @@ import type { WhitelistEntry, WhitelistCandidate, AdminGroup, Clan, ServerConfig
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 const SQUAD_PERMISSIONS = [
-  "reserve", "pause", "kick", "ban", "changemap", "chat",
-  "config", "immune", "cameraman", "forceteamchange", "teamchange", "debug",
-  "clientdemos", "cheat", "featuretest",
+  "startvote", "cheat", "private", "config", "manageserver", "featuretest",
+  "debug", "teamchange", "cameraman", "pause", "kick", "ban", "changemap",
+  "chat", "balance", "reserve", "immune", "forceteamchange", "canseeadminchat",
+  "clientdemos",
 ];
 
 type Tab = "entries" | "requests" | "groups" | "clans";

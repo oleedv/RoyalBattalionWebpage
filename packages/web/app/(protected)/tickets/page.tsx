@@ -207,11 +207,15 @@ function TierBadge({ tier }: { tier: string }) {
     normal: "Normal",
     community_officer: "Community Officer",
     admin_officer: "Admin Officer",
+    comp_team: "Comp Team",
+    whitelist: "Whitelist",
   };
   const colors: Record<string, string> = {
     normal: "text-text-secondary",
     community_officer: "text-accent",
     admin_officer: "text-danger",
+    comp_team: "text-blue-400",
+    whitelist: "text-emerald-400",
   };
   return (
     <span className={`text-xs ${colors[tier] || "text-text-muted"}`}>
@@ -803,11 +807,13 @@ function ProspectRow({ prospect, onExpand, expanded, detail, displayName }: {
   );
 }
 
-const ALL_TIERS = ["normal", "community_officer", "admin_officer"] as const;
+const ALL_TIERS = ["normal", "community_officer", "admin_officer", "comp_team", "whitelist"] as const;
 const TIER_LABELS: Record<string, string> = {
   normal: "Normal",
   community_officer: "Community Officer",
   admin_officer: "Admin Officer",
+  comp_team: "Comp Team",
+  whitelist: "Whitelist",
 };
 
 function getVisibleTiers(permissions: Permission[]): string[] {
@@ -822,6 +828,8 @@ function getVisibleTiers(permissions: Permission[]): string[] {
   if (permissions.includes("view:tickets:normal")) tiers.push("normal");
   if (permissions.includes("view:tickets:community_officer")) tiers.push("community_officer");
   if (permissions.includes("view:tickets:admin_officer")) tiers.push("admin_officer");
+  if (permissions.includes("view:tickets:comp_team")) tiers.push("comp_team");
+  if (permissions.includes("view:tickets:whitelist")) tiers.push("whitelist");
   return tiers;
 }
 

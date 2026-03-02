@@ -5,6 +5,8 @@ const TIER_PERMISSION_MAP: Record<string, Permission> = {
   normal: "view:tickets:normal",
   community_officer: "view:tickets:community_officer",
   admin_officer: "view:tickets:admin_officer",
+  comp_team: "view:tickets:comp_team",
+  whitelist: "view:tickets:whitelist",
 };
 
 /**

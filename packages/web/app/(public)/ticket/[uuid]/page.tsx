@@ -72,6 +72,8 @@ function TierBadge({ tier }: { tier: string }) {
     normal: "Normal",
     community_officer: "Community Officer",
     admin_officer: "Admin Officer",
+    comp_team: "Comp Team",
+    whitelist: "Whitelist",
   };
   return (
     <span className="rounded-sm border border-border bg-bg-tertiary px-2.5 py-1 text-xs text-text-secondary">

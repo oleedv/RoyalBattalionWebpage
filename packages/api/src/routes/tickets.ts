@@ -213,7 +213,7 @@ tickets.get("/by-uuid/:uuid", rateLimit(30), async (c) => {
 });
 
 // GET /tickets - list all tickets
-tickets.get("/", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer"), async (c) => {
+tickets.get("/", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer", "view:tickets:comp_team", "view:tickets:whitelist"), async (c) => {
   const userPermissions = c.get("permissions") as Permission[];
   const allowedTiers = getAllowedTicketTiers(userPermissions);
 
@@ -246,7 +246,7 @@ tickets.get("/", rateLimit(30), requirePermission("view:tickets", "manage:ticket
 });
 
 // GET /tickets/:id - get ticket with events and messages
-tickets.get("/:id", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer"), async (c) => {
+tickets.get("/:id", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer", "view:tickets:comp_team", "view:tickets:whitelist"), async (c) => {
   const id = Number(c.req.param("id"));
 
   const ticketRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
@@ -311,7 +311,7 @@ tickets.get("/:id", rateLimit(30), requirePermission("view:tickets", "manage:tic
 });
 
 // GET /tickets/legacy - list all legacy tickets
-tickets.get("/legacy", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer"), async (c) => {
+tickets.get("/legacy", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer", "view:tickets:comp_team", "view:tickets:whitelist"), async (c) => {
   const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
     SELECT id, uuid, thread_number, user_id, username, nickname, previous_threads, started_at, closed_at
     FROM legacy_tickets ORDER BY started_at DESC`
@@ -333,7 +333,7 @@ tickets.get("/legacy", rateLimit(30), requirePermission("view:tickets", "manage:
 });
 
 // GET /tickets/legacy/:id - get legacy ticket with messages
-tickets.get("/legacy/:id", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer"), async (c) => {
+tickets.get("/legacy/:id", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer", "view:tickets:comp_team", "view:tickets:whitelist"), async (c) => {
   const id = Number(c.req.param("id"));
 
   const ticketRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`

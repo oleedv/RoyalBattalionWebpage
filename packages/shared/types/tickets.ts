@@ -4,7 +4,7 @@ export interface Ticket {
   channelId: string;
   userId: string;
   status: "open" | "closed";
-  tier: "normal" | "community_officer" | "admin_officer";
+  tier: "normal" | "community_officer" | "admin_officer" | "comp_team" | "whitelist";
   createdAt: string;
   closedAt: string | null;
   closedBy: string | null;

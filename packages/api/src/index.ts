@@ -39,8 +39,6 @@ app.use("*", secureHeaders());
 app.use("*", globalRateLimit(200));
 
 const origins = [
-  "https://royalbattalion.com",
-  "https://www.royalbattalion.com",
   "https://royalbattalion.xyz",
   "https://www.royalbattalion.xyz",
   "https://stg.royalbattalion.xyz",

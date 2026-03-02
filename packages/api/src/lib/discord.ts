@@ -44,7 +44,11 @@ export async function fetchGuildRoles(accessToken: string, guildId: string) {
 
   if (!res.ok) {
     const body = await res.text();
-    logger.error("discord", `Guild member fetch failed: ${res.status} - ${body}`);
+    logger.warn("discord", `Guild member fetch failed: ${res.status} - ${body}`);
+    // Missing guilds.members.read scope or user not in guild — return empty roles
+    if (res.status === 403 || res.status === 401) {
+      return [];
+    }
     throw new Error(`Discord guild member fetch failed: ${res.status}`);
   }
 

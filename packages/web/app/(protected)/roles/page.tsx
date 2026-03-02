@@ -115,6 +115,16 @@ const PERMISSION_GROUPS: PermGroup[] = [
             label: "Admin Officer Tier",
             description: "Sensitive admin-only tickets",
           },
+          {
+            perm: "view:tickets:comp_team",
+            label: "Comp Team Tier",
+            description: "Competitive team related tickets",
+          },
+          {
+            perm: "view:tickets:whitelist",
+            label: "Whitelist Tier",
+            description: "Whitelist request tickets",
+          },
         ],
       },
     ],
@@ -191,6 +201,18 @@ const PERMISSION_GROUPS: PermGroup[] = [
         perm: "manage:discord-bot",
         label: "Manage Discord Bot",
         description: "Configure messages, seeding, and tickets",
+      },
+    ],
+  },
+  {
+    id: "audit-logs",
+    label: "Audit Logs",
+    description: "Activity and change history",
+    entries: [
+      {
+        perm: "view:audit-logs",
+        label: "View Audit Logs",
+        description: "Browse audit trail of all system actions",
       },
     ],
   },

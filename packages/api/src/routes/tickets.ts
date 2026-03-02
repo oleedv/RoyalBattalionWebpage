@@ -245,71 +245,6 @@ tickets.get("/", rateLimit(30), requirePermission("view:tickets", "manage:ticket
   return c.json<ApiResponse<Ticket[]>>({ success: true, data: result });
 });
 
-// GET /tickets/:id - get ticket with events and messages
-tickets.get("/:id", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer", "view:tickets:comp_team", "view:tickets:whitelist"), async (c) => {
-  const id = Number(c.req.param("id"));
-
-  const ticketRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
-    SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by
-     FROM tickets WHERE id = ${id}`
-  );
-
-  if (ticketRows.length === 0) {
-    return c.json<ApiResponse<never>>({ success: false, error: "Ticket not found" }, 404);
-  }
-
-  const r = ticketRows[0];
-
-  // Check tier-level access
-  const userPermissions = c.get("permissions") as Permission[];
-  const allowedTiers = getAllowedTicketTiers(userPermissions);
-  if (allowedTiers !== null && !allowedTiers.includes(r.tier)) {
-    return c.json<ApiResponse<never>>({ success: false, error: "Insufficient permissions" }, 403);
-  }
-
-  const eventRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
-    SELECT id, ticket_id, event_type, actor_id, detail, created_at
-     FROM ticket_events WHERE ticket_id = ${id} ORDER BY created_at ASC`
-  );
-
-  const messageRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
-    SELECT id, ticket_id, author_id, author_tag, content, attachments, is_staff, created_at
-     FROM ticket_messages WHERE ticket_id = ${id} ORDER BY created_at ASC`
-  );
-
-  const ticket: Ticket = {
-    id: r.id,
-    uuid: r.uuid,
-    channelId: r.channel_id,
-    userId: r.user_id,
-    status: r.status,
-    tier: r.tier,
-    createdAt: new Date(r.created_at).toISOString(),
-    closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
-    closedBy: r.closed_by,
-    events: eventRows.map((e) => ({
-      id: e.id,
-      ticketId: e.ticket_id,
-      eventType: e.event_type,
-      actorId: e.actor_id,
-      detail: e.detail,
-      createdAt: new Date(e.created_at).toISOString(),
-    })),
-    messages: messageRows.map((m) => ({
-      id: m.id,
-      ticketId: m.ticket_id,
-      authorId: m.author_id,
-      authorTag: m.author_tag,
-      content: m.content,
-      attachments: m.attachments,
-      isStaff: Boolean(m.is_staff),
-      createdAt: new Date(m.created_at).toISOString(),
-    })),
-  };
-
-  return c.json<ApiResponse<Ticket>>({ success: true, data: ticket });
-});
-
 // GET /tickets/legacy - list all legacy tickets
 tickets.get("/legacy", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer", "view:tickets:comp_team", "view:tickets:whitelist"), async (c) => {
   const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
@@ -373,6 +308,71 @@ tickets.get("/legacy/:id", rateLimit(30), requirePermission("view:tickets", "man
   };
 
   return c.json<ApiResponse<LegacyTicket>>({ success: true, data: ticket });
+});
+
+// GET /tickets/:id - get ticket with events and messages
+tickets.get("/:id", rateLimit(30), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer", "view:tickets:comp_team", "view:tickets:whitelist"), async (c) => {
+  const id = Number(c.req.param("id"));
+
+  const ticketRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, uuid, channel_id, user_id, status, tier, created_at, closed_at, closed_by
+     FROM tickets WHERE id = ${id}`
+  );
+
+  if (ticketRows.length === 0) {
+    return c.json<ApiResponse<never>>({ success: false, error: "Ticket not found" }, 404);
+  }
+
+  const r = ticketRows[0];
+
+  // Check tier-level access
+  const userPermissions = c.get("permissions") as Permission[];
+  const allowedTiers = getAllowedTicketTiers(userPermissions);
+  if (allowedTiers !== null && !allowedTiers.includes(r.tier)) {
+    return c.json<ApiResponse<never>>({ success: false, error: "Insufficient permissions" }, 403);
+  }
+
+  const eventRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, ticket_id, event_type, actor_id, detail, created_at
+     FROM ticket_events WHERE ticket_id = ${id} ORDER BY created_at ASC`
+  );
+
+  const messageRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, ticket_id, author_id, author_tag, content, attachments, is_staff, created_at
+     FROM ticket_messages WHERE ticket_id = ${id} ORDER BY created_at ASC`
+  );
+
+  const ticket: Ticket = {
+    id: r.id,
+    uuid: r.uuid,
+    channelId: r.channel_id,
+    userId: r.user_id,
+    status: r.status,
+    tier: r.tier,
+    createdAt: new Date(r.created_at).toISOString(),
+    closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
+    closedBy: r.closed_by,
+    events: eventRows.map((e) => ({
+      id: e.id,
+      ticketId: e.ticket_id,
+      eventType: e.event_type,
+      actorId: e.actor_id,
+      detail: e.detail,
+      createdAt: new Date(e.created_at).toISOString(),
+    })),
+    messages: messageRows.map((m) => ({
+      id: m.id,
+      ticketId: m.ticket_id,
+      authorId: m.author_id,
+      authorTag: m.author_tag,
+      content: m.content,
+      attachments: m.attachments,
+      isStaff: Boolean(m.is_staff),
+      createdAt: new Date(m.created_at).toISOString(),
+    })),
+  };
+
+  return c.json<ApiResponse<Ticket>>({ success: true, data: ticket });
 });
 
 // GET /tickets/prospects/list - list all prospects

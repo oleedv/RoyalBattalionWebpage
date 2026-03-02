@@ -833,6 +833,16 @@ function getVisibleTiers(permissions: Permission[]): string[] {
   return tiers;
 }
 
+const PAGE_SIZE_KEY = "rb-tickets-page-size";
+const PAGE_SIZES = [10, 20, 50, 100, 500, 1000] as const;
+
+function getStoredPageSize(): number {
+  if (typeof window === "undefined") return 10;
+  const stored = localStorage.getItem(PAGE_SIZE_KEY);
+  const n = Number(stored);
+  return PAGE_SIZES.includes(n as any) ? n : 10;
+}
+
 export default function TicketsPage() {
   const { apiToken, permissions } = usePermissions();
   const visibleTiers = getVisibleTiers(permissions);
@@ -841,6 +851,8 @@ export default function TicketsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [tierFilter, setTierFilter] = useState("all");
+  const [pageSize, setPageSize] = useState(getStoredPageSize);
+  const [page, setPage] = useState(0);
 
   // Tickets state
   const [tickets, setTicketsState] = useState<Ticket[]>([]);
@@ -1048,6 +1060,28 @@ export default function TicketsPage() {
     });
   }, [prospects, search, statusFilter]);
 
+  // Reset page when filters change
+  useEffect(() => { setPage(0); }, [search, statusFilter, tierFilter, tab]);
+
+  const activeList = tab === "tickets" ? filteredUnifiedTickets : filteredProspects;
+  const totalPages = Math.max(1, Math.ceil(activeList.length / pageSize));
+  const safePage = Math.min(page, totalPages - 1);
+
+  const paginatedTickets = useMemo(
+    () => filteredUnifiedTickets.slice(safePage * pageSize, (safePage + 1) * pageSize),
+    [filteredUnifiedTickets, safePage, pageSize],
+  );
+  const paginatedProspects = useMemo(
+    () => filteredProspects.slice(safePage * pageSize, (safePage + 1) * pageSize),
+    [filteredProspects, safePage, pageSize],
+  );
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size);
+    localStorage.setItem(PAGE_SIZE_KEY, String(size));
+    setPage(0);
+  }
+
   const statusOptions = tab === "tickets"
     ? ["all", "open", "closed"]
     : ["all", "open", "closed", "accepted", "denied"];
@@ -1140,7 +1174,7 @@ export default function TicketsPage() {
               {tickets.length === 0 && legacyTickets.length === 0 ? "No tickets found" : "No tickets match your search"}
             </div>
           ) : (
-            filteredUnifiedTickets.map((item) =>
+            paginatedTickets.map((item) =>
               item.kind === "current" ? (
                 <TicketRow
                   key={`current-${item.data.id}`}
@@ -1171,7 +1205,7 @@ export default function TicketsPage() {
               {prospects.length === 0 ? "No prospect applications found" : "No prospects match your search"}
             </div>
           ) : (
-            filteredProspects.map((p) => (
+            paginatedProspects.map((p) => (
               <ProspectRow
                 key={p.id}
                 prospect={p}
@@ -1182,6 +1216,59 @@ export default function TicketsPage() {
               />
             ))
           )}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {activeList.length > 0 && (
+        <div className="mt-6 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs text-text-muted">
+            <span>
+              {safePage * pageSize + 1}--{Math.min((safePage + 1) * pageSize, activeList.length)} of {activeList.length}
+            </span>
+            <select
+              value={pageSize}
+              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+              className="rounded-sm border border-border bg-bg-tertiary/50 px-2 py-1 text-xs text-text-primary focus:border-accent/50 focus:outline-none"
+            >
+              {PAGE_SIZES.map((s) => (
+                <option key={s} value={s}>{s} per page</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(0)}
+              disabled={safePage === 0}
+              className="rounded-sm border border-border px-2.5 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-card-hover disabled:opacity-30 disabled:pointer-events-none"
+            >
+              First
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={safePage === 0}
+              className="rounded-sm border border-border px-2.5 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-card-hover disabled:opacity-30 disabled:pointer-events-none"
+            >
+              Prev
+            </button>
+            <span className="px-3 text-xs text-text-muted">
+              {safePage + 1} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={safePage >= totalPages - 1}
+              className="rounded-sm border border-border px-2.5 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-card-hover disabled:opacity-30 disabled:pointer-events-none"
+            >
+              Next
+            </button>
+            <button
+              onClick={() => setPage(totalPages - 1)}
+              disabled={safePage >= totalPages - 1}
+              className="rounded-sm border border-border px-2.5 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-card-hover disabled:opacity-30 disabled:pointer-events-none"
+            >
+              Last
+            </button>
+          </div>
         </div>
       )}
     </div>

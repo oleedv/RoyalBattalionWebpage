@@ -657,6 +657,70 @@ export function expireTicketTimeout(
   });
 }
 
+// Ticket Actions (queued for bot)
+export function closeTicket(
+  token: string,
+  id: number
+): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>(`/discord-bot/ticket-actions/${id}/close`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export function escalateTicket(
+  token: string,
+  id: number,
+  tier: string
+): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>(`/discord-bot/ticket-actions/${id}/escalate`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ tier }),
+  });
+}
+
+export function reopenTicket(
+  token: string,
+  id: number
+): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>(`/discord-bot/ticket-actions/${id}/reopen`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export function forceCloseTicket(
+  token: string,
+  id: number
+): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>(`/discord-bot/ticket-actions/${id}/force-close`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+// Prospect Mentor Management
+export function reassignMentor(
+  token: string,
+  prospectId: number,
+  mentorId: string
+): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>(`/discord-bot/prospects/${prospectId}/reassign-mentor`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ mentorId }),
+  });
+}
+
+export function getMentorGroups(
+  token: string
+): Promise<ApiResponse<import("shared").MentorGroup[]>> {
+  return request<import("shared").MentorGroup[]>("/discord-bot/prospects/mentors", {
+    headers: authHeaders(token),
+  });
+}
+
 // Audit Logs
 export function getAuditLogs(
   token: string,

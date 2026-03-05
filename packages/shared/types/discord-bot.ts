@@ -69,6 +69,26 @@ export interface BotStatus {
   startedAt: string | null;
 }
 
+export interface MentorProspect {
+  id: number;
+  uuid: string;
+  userId: string;
+  alias: string;
+  nationality: string;
+  squadHours: number;
+  preferredRoles: string;
+  steamId: string;
+  mentorId: string | null;
+  pausedAt: string | null;
+  extraDays: number;
+  createdAt: string;
+}
+
+export interface MentorGroup {
+  mentorId: string | null;
+  prospects: MentorProspect[];
+}
+
 export interface DiscordBotOverview {
   tickets: {
     openByTier: { normal: number; community_officer: number; admin_officer: number };

@@ -3,7 +3,7 @@ export interface Ticket {
   uuid: string;
   channelId: string;
   userId: string;
-  status: "open" | "closed";
+  status: "open" | "closing" | "closed";
   tier: "normal" | "community_officer" | "admin_officer" | "comp_team" | "whitelist";
   createdAt: string;
   closedAt: string | null;
@@ -15,7 +15,7 @@ export interface Ticket {
 export interface TicketEvent {
   id: number;
   ticketId: number;
-  eventType: "created" | "escalated" | "closed";
+  eventType: "created" | "escalated" | "closed" | "reopened";
   actorId: string;
   detail: string | null;
   createdAt: string;

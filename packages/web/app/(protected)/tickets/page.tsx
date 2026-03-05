@@ -9,6 +9,10 @@ import {
   getProspects,
   getProspect,
   resolveDiscordNames,
+  closeTicket,
+  escalateTicket,
+  reopenTicket,
+  forceCloseTicket,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -183,6 +187,7 @@ function MessageAttachments({ attachments }: { attachments: string | null }) {
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     open: "bg-accent/15 text-accent border-accent/30",
+    closing: "bg-warning/15 text-warning border-warning/30",
     closed: "bg-text-muted/15 text-text-secondary border-text-muted/30",
     accepted: "bg-success/15 text-success border-success/30",
     denied: "bg-danger/15 text-danger border-danger/30",
@@ -316,7 +321,20 @@ function LegacyTicketDetail({ ticket }: { ticket: LegacyTicket }) {
   );
 }
 
-function TicketDetail({ ticket, displayName }: { ticket: Ticket; displayName: (id: string | null) => string }) {
+const ESCALATION_TIERS = [
+  { value: "community_officer", label: "Community Officer" },
+  { value: "admin_officer", label: "Admin Officer" },
+  { value: "comp_team", label: "Comp Team" },
+  { value: "whitelist", label: "Whitelist" },
+] as const;
+
+function TicketDetail({ ticket, displayName, canManage, actionLoading, onAction }: {
+  ticket: Ticket;
+  displayName: (id: string | null) => string;
+  canManage: boolean;
+  actionLoading: boolean;
+  onAction: (action: string, payload?: Record<string, string>) => Promise<void>;
+}) {
   return (
     <div className="border-t border-border/50 px-5 pb-5 pt-4">
       <div className="mb-4 flex items-start justify-between">
@@ -344,6 +362,59 @@ function TicketDetail({ ticket, displayName }: { ticket: Ticket; displayName: (i
         </div>
         <DownloadButton text={exportTicketText(ticket)} filename={`ticket-${ticket.id}.txt`} />
       </div>
+
+      {/* Ticket Actions */}
+      {canManage && (
+        <div className="mb-5 flex flex-wrap items-center gap-3 border-t border-border/50 pt-4">
+          {ticket.status === "open" && (
+            <>
+              <button
+                onClick={() => onAction("close")}
+                disabled={actionLoading}
+                className="rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary disabled:opacity-50"
+              >
+                Close Ticket
+              </button>
+              {ticket.tier === "normal" && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-text-muted">Escalate:</span>
+                  {ESCALATION_TIERS.map((t) => (
+                    <button
+                      key={t.value}
+                      onClick={() => onAction("escalate", { tier: t.value })}
+                      disabled={actionLoading}
+                      className="rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary disabled:opacity-50"
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+          {ticket.status === "closing" && (
+            <>
+              <button
+                onClick={() => onAction("reopen")}
+                disabled={actionLoading}
+                className="rounded-sm border border-success/30 bg-success/10 px-3 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success/20 disabled:opacity-50"
+              >
+                Reopen Ticket
+              </button>
+              <button
+                onClick={() => onAction("force-close")}
+                disabled={actionLoading}
+                className="rounded-sm border border-danger/30 bg-danger/10 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/20 disabled:opacity-50"
+              >
+                Force Close
+              </button>
+            </>
+          )}
+          {actionLoading && (
+            <span className="text-xs text-text-muted">Processing...</span>
+          )}
+        </div>
+      )}
       {/* Events timeline */}
       {ticket.events && ticket.events.length > 0 && (
         <div className="mb-5">
@@ -582,12 +653,15 @@ function ProspectDetail({ prospect, displayName }: { prospect: Prospect; display
   );
 }
 
-function TicketRow({ ticket, onExpand, expanded, detail, displayName }: {
+function TicketRow({ ticket, onExpand, expanded, detail, displayName, canManage, actionLoading, onAction }: {
   ticket: Ticket;
   onExpand: () => void;
   expanded: boolean;
   detail: Ticket | null;
   displayName: (id: string | null) => string;
+  canManage: boolean;
+  actionLoading: boolean;
+  onAction: (action: string, payload?: Record<string, string>) => Promise<void>;
 }) {
   return (
     <div className="facet-border rounded-sm bg-bg-card transition-all">
@@ -647,7 +721,7 @@ function TicketRow({ ticket, onExpand, expanded, detail, displayName }: {
           </svg>
         </a>
       </div>
-      {expanded && detail && <TicketDetail ticket={detail} displayName={displayName} />}
+      {expanded && detail && <TicketDetail ticket={detail} displayName={displayName} canManage={canManage} actionLoading={actionLoading} onAction={onAction} />}
       {expanded && !detail && (
         <div className="border-t border-border/50 px-5 py-6 text-center text-sm text-text-muted">
           Loading details...
@@ -846,8 +920,10 @@ function getStoredPageSize(): number {
 export default function TicketsPage() {
   const { apiToken, permissions } = usePermissions();
   const visibleTiers = getVisibleTiers(permissions);
+  const canManage = permissions.includes("admin") || permissions.includes("manage:tickets");
   const [tab, setTab] = useState<Tab>("tickets");
   const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [tierFilter, setTierFilter] = useState("all");
@@ -998,6 +1074,41 @@ export default function TicketsPage() {
     }
   }
 
+  async function handleTicketAction(ticketId: number, action: string, payload?: Record<string, string>) {
+    if (!apiToken) return;
+    setActionLoading(true);
+    try {
+      let res;
+      switch (action) {
+        case "close":
+          res = await closeTicket(apiToken, ticketId);
+          break;
+        case "escalate":
+          res = await escalateTicket(apiToken, ticketId, payload?.tier || "");
+          break;
+        case "reopen":
+          res = await reopenTicket(apiToken, ticketId);
+          break;
+        case "force-close":
+          res = await forceCloseTicket(apiToken, ticketId);
+          break;
+      }
+      if (res?.success) {
+        // Refresh ticket data after a short delay for the bot to process
+        setTimeout(async () => {
+          const detailRes = await getTicket(apiToken, ticketId);
+          if (detailRes.success && detailRes.data) {
+            setTicketDetails((prev) => ({ ...prev, [ticketId]: detailRes.data! }));
+            setTicketsState((prev) => prev.map((t) =>
+              t.id === ticketId ? { ...t, status: detailRes.data!.status } : t
+            ));
+          }
+        }, 2000);
+      }
+    } catch { /* silent */ }
+    setActionLoading(false);
+  }
+
   const filteredUnifiedTickets = useMemo(() => {
     const q = search.toLowerCase();
 
@@ -1083,7 +1194,7 @@ export default function TicketsPage() {
   }
 
   const statusOptions = tab === "tickets"
-    ? ["all", "open", "closed"]
+    ? ["all", "open", "closing", "closed"]
     : ["all", "open", "closed", "accepted", "denied"];
 
   if (!apiToken) {
@@ -1183,6 +1294,9 @@ export default function TicketsPage() {
                   detail={ticketDetails[item.data.id] || null}
                   onExpand={() => handleExpandTicket(item.data.id)}
                   displayName={displayName}
+                  canManage={canManage}
+                  actionLoading={actionLoading}
+                  onAction={(action, payload) => handleTicketAction(item.data.id, action, payload)}
                 />
               ) : (
                 <LegacyTicketRow

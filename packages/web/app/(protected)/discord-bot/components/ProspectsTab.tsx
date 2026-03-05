@@ -8,9 +8,12 @@ import {
   pauseProspect,
   unpauseProspect,
   extendProspect,
+  getMentorGroups,
+  reassignMentor,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { Prospect } from "shared";
+import type { MentorGroup } from "shared";
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleString();
@@ -107,6 +110,11 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
   const [nameMap, setNameMap] = useState<Record<string, string>>({});
   const [actionLoading, setActionLoading] = useState(false);
   const [extendDays, setExtendDays] = useState<Record<number, number>>({});
+  const [viewMode, setViewMode] = useState<"list" | "mentor">("list");
+  const [mentorGroups, setMentorGroups] = useState<MentorGroup[]>([]);
+  const [mentorLoading, setMentorLoading] = useState(false);
+  const [reassigning, setReassigning] = useState<number | null>(null);
+  const [selectedMentor, setSelectedMentor] = useState<string>("");
 
   async function resolveNames(ids: string[]) {
     const unknown = ids.filter((id) => id && !nameMap[id]);
@@ -142,7 +150,25 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
     } catch { /* silent */ }
   }, [apiToken]);
 
-  useAutoRefresh(refreshProspects, 20_000, !actionLoading);
+  const refreshMentorGroups = useCallback(async () => {
+    try {
+      const res = await getMentorGroups(apiToken);
+      if (res.success && res.data) {
+        setMentorGroups(res.data);
+        const ids = res.data.flatMap((g) => [g.mentorId, ...g.prospects.map((p) => p.userId)].filter(Boolean) as string[]);
+        resolveNames(ids);
+      }
+    } catch { /* silent */ }
+  }, [apiToken]);
+
+  useEffect(() => {
+    if (viewMode === "mentor") {
+      setMentorLoading(true);
+      refreshMentorGroups().finally(() => setMentorLoading(false));
+    }
+  }, [viewMode, refreshMentorGroups]);
+
+  useAutoRefresh(viewMode === "list" ? refreshProspects : refreshMentorGroups, 20_000, !actionLoading);
 
   async function handleExpand(id: number) {
     if (expandedId === id) { setExpandedId(null); return; }
@@ -212,6 +238,21 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
     URL.revokeObjectURL(url);
   }
 
+  async function handleReassign(prospectId: number, newMentorId: string) {
+    setActionLoading(true);
+    const res = await reassignMentor(apiToken, prospectId, newMentorId);
+    if (res.success) {
+      setReassigning(null);
+      setSelectedMentor("");
+      await refreshMentorGroups();
+    }
+    setActionLoading(false);
+  }
+
+  const allMentorIds = useMemo(() => {
+    return [...new Set(mentorGroups.map((g) => g.mentorId).filter(Boolean) as string[])];
+  }, [mentorGroups]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return prospects.filter((p) => {
@@ -232,32 +273,154 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
 
   return (
     <div>
-      <div className="mb-6 flex gap-3">
-        <div className="relative flex-1">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted">
-            <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
-          </svg>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by alias, nationality, steam ID, UUID..."
-            className="w-full rounded-sm border border-border bg-bg-tertiary/50 py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
-          />
+      <div className="mb-6 flex flex-wrap gap-3">
+        <div className="flex rounded-sm border border-border">
+          <button
+            onClick={() => setViewMode("list")}
+            className={`px-3 py-2 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-accent/15 text-accent" : "text-text-muted hover:text-text-secondary"}`}
+          >
+            List View
+          </button>
+          <button
+            onClick={() => setViewMode("mentor")}
+            className={`border-l border-border px-3 py-2 text-xs font-medium transition-colors ${viewMode === "mentor" ? "bg-accent/15 text-accent" : "text-text-muted hover:text-text-secondary"}`}
+          >
+            Mentor View
+          </button>
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
-        >
-          <option value="all">All Status</option>
-          <option value="open">Open</option>
-          <option value="closed">Closed</option>
-          <option value="accepted">Accepted</option>
-          <option value="denied">Denied</option>
-        </select>
+        {viewMode === "list" && (
+          <>
+            <div className="relative flex-1">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted">
+                <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
+              </svg>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by alias, nationality, steam ID, UUID..."
+                className="w-full rounded-sm border border-border bg-bg-tertiary/50 py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+            >
+              <option value="all">All Status</option>
+              <option value="open">Open</option>
+              <option value="closed">Closed</option>
+              <option value="accepted">Accepted</option>
+              <option value="denied">Denied</option>
+            </select>
+          </>
+        )}
       </div>
 
+      {viewMode === "mentor" ? (
+        mentorLoading ? (
+          <div className="text-text-muted">Loading mentor groups...</div>
+        ) : (
+          <div className="space-y-6">
+            {mentorGroups.length === 0 ? (
+              <div className="facet-border rounded-sm bg-bg-card px-5 py-8 text-center text-text-muted">No open prospects</div>
+            ) : (
+              mentorGroups.map((group) => (
+                <div key={group.mentorId || "unclaimed"} className="facet-border rounded-sm bg-bg-card">
+                  <div className="flex items-center gap-3 border-b border-border/50 px-5 py-3">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-sm border ${group.mentorId ? "border-accent/30 bg-accent/10" : "border-warning/30 bg-warning/10"}`}>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`h-4 w-4 ${group.mentorId ? "text-accent" : "text-warning"}`}>
+                        <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <span className="font-display text-sm font-semibold tracking-wide text-text-primary">
+                        {group.mentorId ? displayName(group.mentorId) : "Unclaimed"}
+                      </span>
+                      <span className="ml-2 text-xs text-text-muted">{group.prospects.length} prospect{group.prospects.length !== 1 ? "s" : ""}</span>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-border/30">
+                    {group.prospects.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-text-primary">{p.alias}</span>
+                              {p.pausedAt && (
+                                <span className="rounded-sm border border-warning/30 bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning">Paused</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-text-muted">
+                              <span>{p.nationality}</span>
+                              <span className="h-1 w-1 rounded-full bg-text-muted" />
+                              <span>{p.squadHours}h</span>
+                              <span className="h-1 w-1 rounded-full bg-text-muted" />
+                              <span>{new Date(p.createdAt).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`/prospect/${p.uuid}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex h-7 w-7 items-center justify-center rounded-sm text-text-muted transition-colors hover:bg-bg-tertiary hover:text-accent"
+                            title="Open detail"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                              <path fillRule="evenodd" d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h5a.75.75 0 010 1.5h-5zm7.25-.75a.75.75 0 01.75-.75h3.5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0V6.31l-5.47 5.47a.75.75 0 01-1.06-1.06l5.47-5.47H12.25a.75.75 0 01-.75-.75z" clipRule="evenodd" />
+                            </svg>
+                          </a>
+                          {canManage && (
+                            reassigning === p.id ? (
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={selectedMentor}
+                                  onChange={(e) => setSelectedMentor(e.target.value)}
+                                  className="rounded-sm border border-border bg-bg-tertiary/50 px-2 py-1 text-xs text-text-primary focus:border-accent/50 focus:outline-none"
+                                >
+                                  <option value="">Select mentor...</option>
+                                  {allMentorIds
+                                    .filter((id) => id !== p.mentorId)
+                                    .map((id) => (
+                                      <option key={id} value={id}>{displayName(id)}</option>
+                                    ))}
+                                </select>
+                                <button
+                                  onClick={() => selectedMentor && handleReassign(p.id, selectedMentor)}
+                                  disabled={!selectedMentor || actionLoading}
+                                  className="rounded-sm bg-accent/15 px-2 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/25 disabled:opacity-50"
+                                >
+                                  Confirm
+                                </button>
+                                <button
+                                  onClick={() => { setReassigning(null); setSelectedMentor(""); }}
+                                  className="rounded-sm px-2 py-1 text-xs text-text-muted transition-colors hover:text-text-secondary"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setReassigning(p.id); setSelectedMentor(""); }}
+                                disabled={actionLoading}
+                                className="rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary disabled:opacity-50"
+                              >
+                                Reassign
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )
+      ) : (
       <div className="space-y-3">
         {filtered.length === 0 ? (
           <div className="facet-border rounded-sm bg-bg-card px-5 py-8 text-center text-text-muted">
@@ -502,6 +665,7 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
           })
         )}
       </div>
+      )}
     </div>
   );
 }

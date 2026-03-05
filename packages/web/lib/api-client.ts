@@ -771,3 +771,34 @@ export function getAuditLogs(
     headers: authHeaders(token),
   });
 }
+
+// Observability
+export function getGracePeriodHistory(
+  token: string,
+  params: { from?: string; to?: string; limit?: number; player?: string } = {}
+): Promise<ApiResponse<{ data: import("shared").GracePeriodEventRow[] }>> {
+  const qs = new URLSearchParams();
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.player) qs.set("player", params.player);
+  const q = qs.toString();
+  return request(`/observability/grace-period${q ? `?${q}` : ""}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function getSwapQueueHistory(
+  token: string,
+  params: { from?: string; to?: string; limit?: number; player?: string } = {}
+): Promise<ApiResponse<{ data: import("shared").SwapQueueActionRow[] }>> {
+  const qs = new URLSearchParams();
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.player) qs.set("player", params.player);
+  const q = qs.toString();
+  return request(`/observability/swap-queue${q ? `?${q}` : ""}`, {
+    headers: authHeaders(token),
+  });
+}

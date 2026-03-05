@@ -66,7 +66,46 @@ const EVENTS_TO_RELAY = [
   "UPDATED_LAYER_INFORMATION",
   "PLAYER_AUTO_KICKED",
   "ROUND_ENDED",
+  "GRACE_PERIOD_STARTED",
+  "GRACE_PERIOD_ENDED",
+  "GRACE_PERIOD_EVENT",
+  "SWAP_QUEUE_EVENT",
 ];
+
+export interface GracePeriodEvent {
+  action: string;
+  playerName?: string | null;
+  eosID?: string | null;
+  squadID?: number | null;
+  squadName?: string | null;
+  teamID?: number | null;
+  attemptNumber?: number | null;
+  reason?: string | null;
+  graceRemainingSeconds?: number | null;
+  gracePeriodSeconds?: number;
+  timestamp: string;
+}
+
+export interface SwapQueueEvent {
+  action: string;
+  player?: { name: string; eosID: string; steamID?: string };
+  playerA?: { name: string; eosID: string };
+  playerB?: { name: string; eosID: string };
+  position?: number;
+  queueSize?: number;
+  priority?: number;
+  currentTeamID?: number;
+  fromTeam?: number;
+  toTeam?: number;
+  waitSeconds?: number;
+  swappedCount?: number;
+  remaining?: number;
+  durationMs?: number;
+  team1Count?: number;
+  team2Count?: number;
+  reason?: string;
+  timestamp: string;
+}
 
 export interface ConsoleEntry {
   time: string;
@@ -96,6 +135,10 @@ interface ServerState {
   reconnectErrorCount: number;
   lastRcon: Map<string, number>;
   lastEventTime: number;
+  gracePeriodEvents: GracePeriodEvent[];
+  swapQueueEvents: SwapQueueEvent[];
+  gracePeriodActive: boolean;
+  gracePeriodEndTime: number | null;
 }
 
 // Parse env: SQUADJS_SERVERS="staging|ws://ip:4001|token,production|ws://ip:4000|token"
@@ -173,6 +216,10 @@ class SquadJSSocketManager {
       reconnectErrorCount: 0,
       lastRcon: new Map(),
       lastEventTime: Date.now(),
+      gracePeriodEvents: [],
+      swapQueueEvents: [],
+      gracePeriodActive: false,
+      gracePeriodEndTime: null,
     };
 
     this.servers.set(key, state);
@@ -495,6 +542,34 @@ class SquadJSSocketManager {
         this.addConsoleEntry(state, "roundend", msg);
         break;
       }
+      case "GRACE_PERIOD_STARTED": {
+        const gps = data as GracePeriodEvent;
+        state.gracePeriodActive = true;
+        state.gracePeriodEndTime = Date.now() + (gps.gracePeriodSeconds || 10) * 1000;
+        state.gracePeriodEvents.push(gps);
+        if (state.gracePeriodEvents.length > 100) state.gracePeriodEvents = state.gracePeriodEvents.slice(-100);
+        break;
+      }
+      case "GRACE_PERIOD_ENDED": {
+        const gpe = data as GracePeriodEvent;
+        state.gracePeriodActive = false;
+        state.gracePeriodEndTime = null;
+        state.gracePeriodEvents.push(gpe);
+        if (state.gracePeriodEvents.length > 100) state.gracePeriodEvents = state.gracePeriodEvents.slice(-100);
+        break;
+      }
+      case "GRACE_PERIOD_EVENT": {
+        const gpev = data as GracePeriodEvent;
+        state.gracePeriodEvents.push(gpev);
+        if (state.gracePeriodEvents.length > 100) state.gracePeriodEvents = state.gracePeriodEvents.slice(-100);
+        break;
+      }
+      case "SWAP_QUEUE_EVENT": {
+        const sqe = data as SwapQueueEvent;
+        state.swapQueueEvents.push(sqe);
+        if (state.swapQueueEvents.length > 100) state.swapQueueEvents = state.swapQueueEvents.slice(-100);
+        break;
+      }
     }
 
     this.broadcast(key, event, data);
@@ -546,6 +621,10 @@ class SquadJSSocketManager {
       consoleLog: state.consoleLog,
       tickRate: state.tickRate,
       metricHistory: state.metricHistory,
+      gracePeriodEvents: state.gracePeriodEvents,
+      swapQueueEvents: state.swapQueueEvents,
+      gracePeriodActive: state.gracePeriodActive,
+      gracePeriodEndTime: state.gracePeriodEndTime,
     };
   }
 

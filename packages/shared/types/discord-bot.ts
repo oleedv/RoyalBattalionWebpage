@@ -25,6 +25,24 @@ export interface SeedingSession {
   completionMessageId: string | null;
 }
 
+export interface SeedingRapportSeeder {
+  playerName: string;
+  steamId: string | null;
+  joinTime: string | null;
+  leaveTime: string | null;
+  seedDurationMinutes: number | null;
+  sessionDurationMinutes: number | null;
+}
+
+export interface SeedingRapport {
+  date: string;
+  totalSeeders: number;
+  totalJoins: number;
+  avgSeedMinutes: number;
+  totalSeedMinutes: number;
+  seeders: SeedingRapportSeeder[];
+}
+
 export interface Paginated<T> {
   items: T[];
   total: number;

@@ -361,6 +361,34 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          {canManage && (
+                            <>
+                              <button
+                                onClick={() => p.pausedAt ? handleUnpause(p.id) : handlePause(p.id)}
+                                disabled={actionLoading}
+                                className="rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary disabled:opacity-50"
+                              >
+                                {p.pausedAt ? "Unpause" : "Pause"}
+                              </button>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={30}
+                                  value={extendDays[p.id] || 7}
+                                  onChange={(e) => setExtendDays((prev) => ({ ...prev, [p.id]: Number(e.target.value) }))}
+                                  className="w-12 rounded-sm border border-border bg-bg-tertiary/50 px-1.5 py-1 text-xs text-text-primary focus:border-accent/50 focus:outline-none"
+                                />
+                                <button
+                                  onClick={() => handleExtend(p.id)}
+                                  disabled={actionLoading}
+                                  className="rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary disabled:opacity-50"
+                                >
+                                  Extend
+                                </button>
+                              </div>
+                            </>
+                          )}
                           <a
                             href={`/prospect/${p.uuid}`}
                             target="_blank"
@@ -546,36 +574,6 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                       <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Why Royal Battalion?</span>
                       <p className="mt-1 whitespace-pre-wrap text-sm text-text-secondary">{detail.whyRb}</p>
                     </div>
-
-                    {/* Admin actions */}
-                    {canManage && detail.status === "open" && (
-                      <div className="mb-5 flex flex-wrap items-center gap-3 border-t border-border/50 pt-4">
-                        <button
-                          onClick={() => detail.pausedAt ? handleUnpause(detail.id) : handlePause(detail.id)}
-                          disabled={actionLoading}
-                          className="rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary disabled:opacity-50"
-                        >
-                          {detail.pausedAt ? "Unpause Period" : "Pause Period"}
-                        </button>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={1}
-                            max={30}
-                            value={extendDays[detail.id] || 7}
-                            onChange={(e) => setExtendDays((prev) => ({ ...prev, [detail.id]: Number(e.target.value) }))}
-                            className="w-16 rounded-sm border border-border bg-bg-tertiary/50 px-2 py-1.5 text-xs text-text-primary focus:border-accent/50 focus:outline-none"
-                          />
-                          <button
-                            onClick={() => handleExtend(detail.id)}
-                            disabled={actionLoading}
-                            className="rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary disabled:opacity-50"
-                          >
-                            Extend Period
-                          </button>
-                        </div>
-                      </div>
-                    )}
 
                     {/* Votes */}
                     {detail.votes && detail.votes.length > 0 && (

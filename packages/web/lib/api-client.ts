@@ -22,6 +22,7 @@ import type {
   DiscordBotOverview,
   SeedingConfig,
   SeedingSession,
+  SeedingRapport,
   BotMessage,
   BotLog,
   BotStatus,
@@ -547,6 +548,36 @@ export function getSeedingSessions(
   const qs = limit ? `?limit=${limit}` : "";
   return request<SeedingSession[]>(`/discord-bot/seeding/sessions${qs}`, {
     headers: authHeaders(token),
+  });
+}
+
+export function sendSeedingNow(
+  token: string
+): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>("/discord-bot/seeding/send-now", {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export function getSeedingRapport(
+  token: string,
+  date: string
+): Promise<ApiResponse<SeedingRapport>> {
+  return request<SeedingRapport>(
+    `/discord-bot/seeding/rapport?date=${encodeURIComponent(date)}`,
+    { headers: authHeaders(token) }
+  );
+}
+
+export function sendSeedingRapport(
+  token: string,
+  date: string
+): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>("/discord-bot/seeding/rapport/send", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ date }),
   });
 }
 

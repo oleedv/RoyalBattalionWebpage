@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { getSeedingConfig, updateSeedingConfig, getSeedingSessions } from "@/lib/api-client";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  getSeedingConfig, updateSeedingConfig, getSeedingSessions,
+  sendSeedingNow, getSeedingRapport, sendSeedingRapport,
+} from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import type { SeedingConfig, SeedingSession } from "shared";
+import type { SeedingConfig, SeedingSession, SeedingRapport as SeedingRapportType } from "shared";
 
 function SessionBadge({ status }: { status: SeedingSession["status"] }) {
   const colors: Record<string, string> = {
@@ -19,6 +22,19 @@ function SessionBadge({ status }: { status: SeedingSession["status"] }) {
   );
 }
 
+function formatMinutes(mins: number | null | undefined): string {
+  if (mins == null) return "--";
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function todayDateString(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export default function SeedingTab({ apiToken, canManage }: { apiToken: string; canManage: boolean }) {
   const [config, setConfig] = useState<SeedingConfig | null>(null);
   const [editConfig, setEditConfig] = useState<SeedingConfig | null>(null);
@@ -27,6 +43,18 @@ export default function SeedingTab({ apiToken, canManage }: { apiToken: string; 
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+
+  // Send Now state
+  const [sendingNow, setSendingNow] = useState(false);
+  const [sendNowMsg, setSendNowMsg] = useState<string | null>(null);
+
+  // Rapport state
+  const [rapportDate, setRapportDate] = useState(todayDateString());
+  const [rapport, setRapport] = useState<SeedingRapportType | null>(null);
+  const [rapportLoading, setRapportLoading] = useState(false);
+  const [rapportError, setRapportError] = useState<string | null>(null);
+  const [sendingRapport, setSendingRapport] = useState(false);
+  const [rapportSendMsg, setRapportSendMsg] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -62,6 +90,11 @@ export default function SeedingTab({ apiToken, canManage }: { apiToken: string; 
 
   useAutoRefresh(refreshSeeding, 20_000, !isDirty && !saving);
 
+  const activeSession = useMemo(
+    () => sessions.find((s) => s.status === "active") || null,
+    [sessions]
+  );
+
   async function handleSave() {
     if (!editConfig) return;
     setSaving(true);
@@ -75,6 +108,48 @@ export default function SeedingTab({ apiToken, canManage }: { apiToken: string; 
       setSaveMsg(res.error || "Save failed");
     }
     setSaving(false);
+  }
+
+  async function handleSendNow() {
+    if (!confirm("Send seeding call now? This will ping the seeder role in Discord.")) return;
+    setSendingNow(true);
+    setSendNowMsg(null);
+    const res = await sendSeedingNow(apiToken);
+    if (res.success) {
+      setSendNowMsg("Queued");
+      setTimeout(() => setSendNowMsg(null), 3000);
+    } else {
+      setSendNowMsg(res.error || "Failed");
+    }
+    setSendingNow(false);
+  }
+
+  async function loadRapport(date: string) {
+    setRapportLoading(true);
+    setRapportError(null);
+    const res = await getSeedingRapport(apiToken, date);
+    if (res.success && res.data) {
+      setRapport(res.data);
+    } else {
+      setRapportError(res.error || "Failed to load rapport");
+      setRapport(null);
+    }
+    setRapportLoading(false);
+  }
+
+  async function handleSendRapport() {
+    if (!rapport) return;
+    if (!confirm(`Send seeding rapport for ${rapport.date} to the Discord seeding channel?`)) return;
+    setSendingRapport(true);
+    setRapportSendMsg(null);
+    const res = await sendSeedingRapport(apiToken, rapport.date);
+    if (res.success) {
+      setRapportSendMsg("Queued");
+      setTimeout(() => setRapportSendMsg(null), 3000);
+    } else {
+      setRapportSendMsg(res.error || "Failed");
+    }
+    setSendingRapport(false);
   }
 
   if (loading) return <div className="text-text-muted">Loading seeding data...</div>;
@@ -218,6 +293,174 @@ export default function SeedingTab({ apiToken, canManage }: { apiToken: string; 
             )}
           </div>
         ) : null}
+      </section>
+
+      {/* Seeding Controls */}
+      <section>
+        <h2 className="mb-4 text-xs font-semibold tracking-[0.15em] text-text-muted uppercase">
+          Seeding Controls
+        </h2>
+
+        <div className="facet-border rounded-sm bg-bg-card p-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Next Scheduled Call */}
+            <div>
+              <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Next Call</label>
+              <div className="text-sm text-text-primary">
+                {config?.dailyTime
+                  ? `${config.dailyTime} ${config.timezone || "UTC"}`
+                  : "Not configured"}
+              </div>
+            </div>
+
+            {/* Active Session */}
+            <div>
+              <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Active Session</label>
+              <div className="text-sm">
+                {activeSession ? (
+                  <span className="text-success">
+                    Active - {activeSession.mapName || activeSession.layerName || "Unknown"} ({activeSession.peakPlayers ?? 0} peak)
+                  </span>
+                ) : (
+                  <span className="text-text-muted">No active session</span>
+                )}
+              </div>
+            </div>
+
+            {/* Send Now */}
+            {canManage && (
+              <div className="flex items-end">
+                <div>
+                  <button
+                    onClick={handleSendNow}
+                    disabled={sendingNow}
+                    className="rounded-sm bg-success px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-success/90 disabled:opacity-50"
+                  >
+                    {sendingNow ? "Sending..." : "Send Seeding Call Now"}
+                  </button>
+                  {sendNowMsg && (
+                    <span className={`ml-2 text-xs font-medium ${sendNowMsg === "Queued" ? "text-success" : "text-danger"}`}>
+                      {sendNowMsg}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Seeding Rapport */}
+      <section>
+        <h2 className="mb-4 text-xs font-semibold tracking-[0.15em] text-text-muted uppercase">
+          Seeding Rapport
+        </h2>
+
+        <div className="facet-border rounded-sm bg-bg-card p-5">
+          {/* Date picker + Load */}
+          <div className="mb-4 flex items-end gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Date</label>
+              <input
+                type="date"
+                value={rapportDate}
+                onChange={(e) => setRapportDate(e.target.value)}
+                className="rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+              />
+            </div>
+            <button
+              onClick={() => loadRapport(rapportDate)}
+              disabled={rapportLoading || !rapportDate}
+              className="rounded-sm bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+            >
+              {rapportLoading ? "Loading..." : "Load Rapport"}
+            </button>
+            {canManage && rapport && (
+              <>
+                <button
+                  onClick={handleSendRapport}
+                  disabled={sendingRapport}
+                  className="rounded-sm border border-success bg-success/10 px-4 py-2 text-sm font-medium text-success transition-colors hover:bg-success/20 disabled:opacity-50"
+                >
+                  {sendingRapport ? "Sending..." : "Send to Discord"}
+                </button>
+                {rapportSendMsg && (
+                  <span className={`text-xs font-medium ${rapportSendMsg === "Queued" ? "text-success" : "text-danger"}`}>
+                    {rapportSendMsg}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+
+          {rapportError && (
+            <div className="mb-4 text-sm text-danger">{rapportError}</div>
+          )}
+
+          {rapport && (
+            <>
+              {/* Summary Cards */}
+              <div className="mb-4 grid gap-3 sm:grid-cols-4">
+                <div className="rounded-sm border border-border/50 bg-bg-tertiary/30 p-3">
+                  <div className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Seeders</div>
+                  <div className="mt-1 text-lg font-semibold text-text-primary">{rapport.totalSeeders}</div>
+                </div>
+                <div className="rounded-sm border border-border/50 bg-bg-tertiary/30 p-3">
+                  <div className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Total Joins</div>
+                  <div className="mt-1 text-lg font-semibold text-text-primary">{rapport.totalJoins}</div>
+                </div>
+                <div className="rounded-sm border border-border/50 bg-bg-tertiary/30 p-3">
+                  <div className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Avg Seed Time</div>
+                  <div className="mt-1 text-lg font-semibold text-text-primary">{formatMinutes(rapport.avgSeedMinutes)}</div>
+                </div>
+                <div className="rounded-sm border border-border/50 bg-bg-tertiary/30 p-3">
+                  <div className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Total Seed Time</div>
+                  <div className="mt-1 text-lg font-semibold text-text-primary">{formatMinutes(rapport.totalSeedMinutes)}</div>
+                </div>
+              </div>
+
+              {/* Seeders Table */}
+              {rapport.seeders.length === 0 ? (
+                <div className="py-6 text-center text-sm text-text-muted">No seeders found for this date</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border/50">
+                        <th className="px-4 py-3 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Player</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Seed Time</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Session</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Joined</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Left</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rapport.seeders.map((s, i) => (
+                        <tr key={i} className="border-b border-border/30 last:border-0">
+                          <td className="px-4 py-3 font-medium text-text-primary">{s.playerName}</td>
+                          <td className="px-4 py-3 text-text-secondary">{formatMinutes(s.seedDurationMinutes)}</td>
+                          <td className="px-4 py-3 text-text-secondary">{formatMinutes(s.sessionDurationMinutes)}</td>
+                          <td className="px-4 py-3 text-text-muted">
+                            {s.joinTime ? new Date(s.joinTime).toLocaleTimeString() : "--"}
+                          </td>
+                          <td className="px-4 py-3 text-text-muted">
+                            {s.leaveTime ? new Date(s.leaveTime).toLocaleTimeString() : "--"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
+          {!rapport && !rapportLoading && !rapportError && (
+            <div className="py-6 text-center text-sm text-text-muted">
+              Select a date and click "Load Rapport" to view seeding data
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Session History */}

@@ -195,6 +195,10 @@ class SquadJSSocketManager {
       if (state.pollInterval) { clearInterval(state.pollInterval); state.pollInterval = null; }
       if (state.metricInterval) { clearInterval(state.metricInterval); state.metricInterval = null; }
       this.broadcast(key, "CONNECTION_STATUS", { connected: false });
+      if (reason === "io server disconnect") {
+        logger.info("squadjs", `${key}: server-initiated disconnect, reconnecting in 5s...`);
+        setTimeout(() => socket.connect(), 5000);
+      }
     });
 
     socket.on("connect_error", (err) => {

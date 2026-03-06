@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { getUsers, updateUser, deleteUser, syncUserRoles, addMemberComment, deleteMemberComment } from "@/lib/api-client";
+import { getUsers, updateUser, deleteUser, syncUserRoles, addMemberComment, deleteMemberComment, getPlaytime } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { DataTable, type Column } from "@/components/data-table";
 import { SearchInput } from "@/components/search-input";
 import { Modal } from "@/components/modal";
 import { formatDate, formatRelativeTime } from "@/lib/format";
-import type { UserWithRolesAndComments } from "shared";
+import type { UserWithRolesAndComments, PlaytimeStats } from "shared";
 
 function CopyableId({ value, label }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -74,6 +74,10 @@ export default function MembersPage() {
   const [commentText, setCommentText] = useState("");
   const [commentSaving, setCommentSaving] = useState(false);
 
+  // Playtime
+  const [playtimeStats, setPlaytimeStats] = useState<PlaytimeStats | null>(null);
+  const [playtimeLoading, setPlaytimeLoading] = useState(false);
+
   const canManage = hasPermission("manage:members");
 
   useEffect(() => {
@@ -118,6 +122,14 @@ export default function MembersPage() {
     setConfirmingDelete(false);
     setEditError(null);
     setCommentText("");
+    setPlaytimeStats(null);
+    if (apiToken && user.steamId) {
+      setPlaytimeLoading(true);
+      const from = user.membershipDate || user.createdAt;
+      getPlaytime(apiToken, user.steamId, from)
+        .then((pt) => { if (pt.success && pt.data) setPlaytimeStats(pt.data); })
+        .finally(() => setPlaytimeLoading(false));
+    }
   }
 
   function closeDetail() {
@@ -481,6 +493,25 @@ export default function MembersPage() {
                 <span className={selectedUser.activity90 > 0 ? "text-text-secondary" : "text-text-muted"}>
                   {selectedUser.activity90} matches
                 </span>
+              </InfoField>
+
+              <InfoField label="Playtime">
+                {playtimeLoading ? (
+                  <span className="text-text-muted">Loading...</span>
+                ) : playtimeStats ? (
+                  <span className="text-text-secondary">{playtimeStats.playtimeHours}h</span>
+                ) : (
+                  <span className="text-text-muted">--</span>
+                )}
+              </InfoField>
+              <InfoField label="Seed Time">
+                {playtimeLoading ? (
+                  <span className="text-text-muted">Loading...</span>
+                ) : playtimeStats ? (
+                  <span className="text-text-secondary">{playtimeStats.seedHours}h</span>
+                ) : (
+                  <span className="text-text-muted">--</span>
+                )}
               </InfoField>
             </div>
 

@@ -29,6 +29,7 @@ import type {
   AuditLogEntry,
   Paginated,
   TicketTimeout,
+  PlaytimeStats,
 } from "shared";
 
 const BASE_URL =
@@ -799,6 +800,21 @@ export function getSwapQueueHistory(
   if (params.player) qs.set("player", params.player);
   const q = qs.toString();
   return request(`/observability/swap-queue${q ? `?${q}` : ""}`, {
+    headers: authHeaders(token),
+  });
+}
+
+// Playtime
+export function getPlaytime(
+  token: string,
+  steamId: string,
+  from?: string,
+  to?: string
+): Promise<ApiResponse<PlaytimeStats>> {
+  const qs = new URLSearchParams({ steamId });
+  if (from) qs.set("from", from);
+  if (to) qs.set("to", to);
+  return request<PlaytimeStats>(`/playtime?${qs.toString()}`, {
     headers: authHeaders(token),
   });
 }

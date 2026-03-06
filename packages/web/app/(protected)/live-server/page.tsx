@@ -1317,6 +1317,7 @@ export default function LiveServerPage() {
         <PlayerCard
           player={selectedPlayer}
           showActions={canManage}
+          apiToken={apiToken}
           onClose={() => setSelectedPlayer(null)}
           onWarn={onWarnPlayer}
           onKick={onKickPlayer}

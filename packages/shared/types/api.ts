@@ -102,6 +102,12 @@ export interface AuditLogEntry {
   createdAt: string;
 }
 
+export interface PlaytimeStats {
+  steamId: string;
+  playtimeHours: number;
+  seedHours: number;
+}
+
 // SquadJS plugin config
 export type SquadJSPluginOptionValue =
   | string

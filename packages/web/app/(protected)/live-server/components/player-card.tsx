@@ -1,12 +1,16 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import type { Player } from "../lib/types";
 import { formatRole } from "../lib/format-role";
 import { CopyableField } from "./copyable-field";
+import { getPlaytime } from "@/lib/api-client";
+import type { PlaytimeStats } from "shared";
 
 interface PlayerCardProps {
   player: Player;
   showActions: boolean;
+  apiToken: string | null;
   onClose: () => void;
   onWarn: (p: Player) => void;
   onKick: (p: Player) => void;
@@ -17,6 +21,7 @@ interface PlayerCardProps {
 export function PlayerCard({
   player,
   showActions,
+  apiToken,
   onClose,
   onWarn,
   onKick,
@@ -24,6 +29,14 @@ export function PlayerCard({
   formatPlaytime,
 }: PlayerCardProps) {
   const pt = formatPlaytime(player.playtime);
+  const [allTimeStats, setAllTimeStats] = useState<PlaytimeStats | null>(null);
+
+  useEffect(() => {
+    if (!apiToken || !player.steamID) return;
+    getPlaytime(apiToken, player.steamID)
+      .then((res) => { if (res.success && res.data) setAllTimeStats(res.data); })
+      .catch(() => {});
+  }, [apiToken, player.steamID]);
 
   return (
     <>
@@ -60,6 +73,18 @@ export function PlayerCard({
                 <span className="text-[10px] text-text-muted">Playtime</span>
                 <span className="text-xs text-text-secondary">{pt}</span>
               </div>
+            )}
+            {allTimeStats && (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-text-muted">All-Time Playtime</span>
+                  <span className="text-xs text-text-secondary">{allTimeStats.playtimeHours}h</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-text-muted">All-Time Seed Time</span>
+                  <span className="text-xs text-text-secondary">{allTimeStats.seedHours}h</span>
+                </div>
+              </>
             )}
             {player.squad && (
               <div className="flex items-center justify-between">

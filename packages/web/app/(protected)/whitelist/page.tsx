@@ -24,13 +24,14 @@ import {
   getServerConfigs,
   toggleServerSync,
   getAuditLogs,
+  getPlaytime,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
 import { Modal } from "@/components/modal";
 import { SearchInput } from "@/components/search-input";
 import { formatDate, formatRelativeTime, formatDateTime } from "@/lib/format";
-import type { WhitelistEntry, WhitelistEntryWithComments, WhitelistComment, WhitelistCandidate, AdminGroup, Clan, ServerConfig, AuditLogEntry } from "shared";
+import type { WhitelistEntry, WhitelistEntryWithComments, WhitelistComment, WhitelistCandidate, AdminGroup, Clan, ServerConfig, AuditLogEntry, PlaytimeStats } from "shared";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -403,6 +404,8 @@ function EntriesTab({
   const [activityLogs, setActivityLogs] = useState<AuditLogEntry[]>([]);
   const [activityOpen, setActivityOpen] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [playtimeStats, setPlaytimeStats] = useState<PlaytimeStats | null>(null);
+  const [playtimeLoading, setPlaytimeLoading] = useState(false);
 
   // Bulk selection
   const [bulkMode, setBulkMode] = useState(false);
@@ -438,6 +441,11 @@ function EntriesTab({
       setCommentText("");
       setActivityLogs([]);
       setActivityOpen(false);
+      setPlaytimeStats(null);
+      setPlaytimeLoading(true);
+      getPlaytime(apiToken, res.data.steamId, res.data.createdAt)
+        .then((pt) => { if (pt.success && pt.data) setPlaytimeStats(pt.data); })
+        .finally(() => setPlaytimeLoading(false));
     }
   }
 
@@ -1211,6 +1219,24 @@ function EntriesTab({
               </InfoField>
               <InfoField label="Added">
                 {formatDate(selectedEntry.createdAt)}
+              </InfoField>
+              <InfoField label="Gameplay Hours">
+                {playtimeLoading ? (
+                  <span className="text-text-muted">Loading...</span>
+                ) : playtimeStats ? (
+                  <span className="text-text-secondary">{playtimeStats.playtimeHours}h</span>
+                ) : (
+                  <span className="text-text-muted">--</span>
+                )}
+              </InfoField>
+              <InfoField label="Seeding Hours">
+                {playtimeLoading ? (
+                  <span className="text-text-muted">Loading...</span>
+                ) : playtimeStats ? (
+                  <span className="text-text-secondary">{playtimeStats.seedHours}h</span>
+                ) : (
+                  <span className="text-text-muted">--</span>
+                )}
               </InfoField>
             </div>
 

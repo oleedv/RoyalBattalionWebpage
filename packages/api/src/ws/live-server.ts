@@ -332,6 +332,15 @@ async function handleAdminAction(
           if (!clanMap[key]) clanMap[key] = { id: "", tag: e.clan, members: [] };
           clanMap[key].members.push({ teamID: player.teamID, steamId: player.steamID, name: player.name });
         }
+        // Deduplicate members by steamId within each clan (player may have entries on multiple servers)
+        for (const clan of Object.values(clanMap)) {
+          const seen = new Set<string>();
+          clan.members = clan.members.filter((m) => {
+            if (seen.has(m.steamId)) return false;
+            seen.add(m.steamId);
+            return true;
+          });
+        }
         ws.send(JSON.stringify({ type: "online_clans", data: clanMap }));
         break;
       }

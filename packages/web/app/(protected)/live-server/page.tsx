@@ -114,6 +114,7 @@ export default function LiveServerPage() {
   const [clanMoveTargetTeam, setClanMoveTargetTeam] = useState<"1" | "2">("1");
   const [clanMoveSelectedKey, setClanMoveSelectedKey] = useState<string | null>(null);
   const [randomizationStatus, setRandomizationStatus] = useState<RandomizationStatus | null>(null);
+  const [randomizeModalOpen, setRandomizeModalOpen] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
@@ -497,11 +498,13 @@ export default function LiveServerPage() {
       : chatLog.filter((m) => m.chat === chatFilter || m.chat === "__DIVIDER__");
 
   // Compute clans that can be moved to a target team
-  function getMovableClans(targetTeam: string): { key: string; tag: string; count: number }[] {
-    const result: { key: string; tag: string; count: number }[] = [];
+  function getMovableClans(targetTeam: string): { key: string; tag: string; count: number; team1: number; team2: number }[] {
+    const result: { key: string; tag: string; count: number; team1: number; team2: number }[] = [];
     for (const [key, clan] of Object.entries(onlineClans)) {
+      const team1 = clan.members.filter((m) => String(m.teamID) === "1").length;
+      const team2 = clan.members.filter((m) => String(m.teamID) === "2").length;
       const toMove = clan.members.filter((m) => m.teamID !== targetTeam).length;
-      if (toMove > 0) result.push({ key, tag: clan.tag, count: toMove });
+      if (toMove > 0) result.push({ key, tag: clan.tag, count: toMove, team1, team2 });
     }
     return result.sort((a, b) => b.count - a.count);
   }
@@ -704,20 +707,12 @@ export default function LiveServerPage() {
                   </button>
                 </div>
               ) : (
-                <>
-                  <button
-                    onClick={() => handleQueueRandomize("all")}
-                    className="rounded-sm border border-purple-500/30 bg-purple-500/5 px-3 py-1.5 text-xs font-medium text-purple-400 transition-colors hover:bg-purple-500/15"
-                  >
-                    Randomize All
-                  </button>
-                  <button
-                    onClick={() => handleQueueRandomize("squad")}
-                    className="rounded-sm border border-purple-500/30 bg-purple-500/5 px-3 py-1.5 text-xs font-medium text-purple-400 transition-colors hover:bg-purple-500/15"
-                  >
-                    Randomize Squads
-                  </button>
-                </>
+                <button
+                  onClick={() => setRandomizeModalOpen(true)}
+                  className="rounded-sm border border-purple-500/30 bg-purple-500/5 px-3 py-1.5 text-xs font-medium text-purple-400 transition-colors hover:bg-purple-500/15"
+                >
+                  Randomize
+                </button>
               )}
             </>
           )}
@@ -792,7 +787,7 @@ export default function LiveServerPage() {
                     }`}
                   >
                     <span>[{clan.tag}]</span>
-                    <span className="text-xs text-text-muted">{clan.count} player{clan.count !== 1 ? "s" : ""}</span>
+                    <span className="text-xs text-text-muted">T1: {clan.team1} / T2: {clan.team2} ({clan.count} to move)</span>
                   </button>
                 ))}
               </div>
@@ -819,6 +814,40 @@ export default function LiveServerPage() {
             className="rounded-sm bg-warning px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-warning/80 disabled:opacity-40"
           >
             {clanMoveSelectedKey ? `Move ${getMovableClans(clanMoveTargetTeam).find((c) => c.key === clanMoveSelectedKey)?.count || 0} players` : "Select a clan"}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Randomize modal */}
+      <Modal open={randomizeModalOpen} onClose={() => setRandomizeModalOpen(false)} className="max-w-md bg-bg-secondary p-6">
+        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
+          Randomize Teams
+        </h3>
+        <p className="mb-4 text-sm text-text-secondary">
+          Randomization will be queued and executed 20 seconds after the next new game starts.
+        </p>
+        <div className="space-y-2">
+          <button
+            onClick={() => { handleQueueRandomize("all"); setRandomizeModalOpen(false); }}
+            className="flex w-full items-center justify-between rounded-sm border border-purple-500/30 bg-purple-500/5 px-4 py-3 text-sm font-medium text-purple-400 transition-colors hover:bg-purple-500/15"
+          >
+            <span>Randomize All</span>
+            <span className="text-xs text-text-muted">Shuffle all players between teams</span>
+          </button>
+          <button
+            onClick={() => { handleQueueRandomize("squad"); setRandomizeModalOpen(false); }}
+            className="flex w-full items-center justify-between rounded-sm border border-purple-500/30 bg-purple-500/5 px-4 py-3 text-sm font-medium text-purple-400 transition-colors hover:bg-purple-500/15"
+          >
+            <span>Randomize Squads</span>
+            <span className="text-xs text-text-muted">Shuffle squads between teams</span>
+          </button>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={() => setRandomizeModalOpen(false)}
+            className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+          >
+            Cancel
           </button>
         </div>
       </Modal>

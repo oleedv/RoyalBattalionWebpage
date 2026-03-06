@@ -101,8 +101,8 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
 
     // Master users: always grant admin (configured via ADMIN_DISCORD_IDS env var)
     const adminIds = env.ADMIN_DISCORD_IDS.split(",").map((s) => s.trim()).filter(Boolean);
-    if (adminIds.includes(discordUser.id) && !permissions.includes("admin")) {
-      permissions.push("admin");
+    if (adminIds.includes(discordUser.id) && !permissions.includes("developer")) {
+      permissions.push("developer");
     }
 
     // Build JWT

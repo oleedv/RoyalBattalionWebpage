@@ -115,6 +115,9 @@ export default function LiveServerPage() {
   const [clanMoveSelectedKey, setClanMoveSelectedKey] = useState<string | null>(null);
   const [randomizationStatus, setRandomizationStatus] = useState<RandomizationStatus | null>(null);
   const [randomizeModalOpen, setRandomizeModalOpen] = useState(false);
+  const [randomizeMode, setRandomizeMode] = useState<"all" | "squad">("all");
+  const [demoteDropdownOpen, setDemoteDropdownOpen] = useState(false);
+  const demoteDropdownRef = useRef<HTMLDivElement>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
@@ -297,6 +300,18 @@ export default function LiveServerPage() {
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [consoleLog]);
 
+  // Close demote dropdown on outside click
+  useEffect(() => {
+    if (!demoteDropdownOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (demoteDropdownRef.current && !demoteDropdownRef.current.contains(e.target as Node)) {
+        setDemoteDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [demoteDropdownOpen]);
+
   function switchServer(key: string) {
     setActiveServer(key);
     setPlayers([]);
@@ -409,6 +424,10 @@ export default function LiveServerPage() {
 
   function handleQueueRandomize(mode: "all" | "squad") {
     sendAction({ action: "queuerandomize", message: mode });
+  }
+
+  function handleRunRandomize(mode: "all" | "squad") {
+    sendAction({ action: "runrandomize", message: mode });
   }
 
   function handleCancelRandomize() {
@@ -647,33 +666,38 @@ export default function LiveServerPage() {
 
           <div className="h-6 w-px bg-border/50" />
 
-          {/* Demote Commander - Team 1 */}
+          {/* Demote Commander */}
           {(() => {
             const cmd1 = getTeamCommander("1");
-            return (
-              <button
-                onClick={() => cmd1 && handleDemoteCommander(cmd1)}
-                disabled={!cmd1}
-                className="rounded-sm border border-warning/30 bg-warning/5 px-3 py-1.5 text-xs font-medium text-warning transition-colors hover:bg-warning/15 disabled:opacity-40"
-                title={cmd1 ? `Demote ${cmd1.name}` : "No T1 commander"}
-              >
-                Demote T1 Cmd{cmd1 ? `: ${cmd1.name}` : ""}
-              </button>
-            );
-          })()}
-
-          {/* Demote Commander - Team 2 */}
-          {(() => {
             const cmd2 = getTeamCommander("2");
+            const commanders = [
+              ...(cmd1 ? [{ team: "1" as const, player: cmd1 }] : []),
+              ...(cmd2 ? [{ team: "2" as const, player: cmd2 }] : []),
+            ];
             return (
-              <button
-                onClick={() => cmd2 && handleDemoteCommander(cmd2)}
-                disabled={!cmd2}
-                className="rounded-sm border border-warning/30 bg-warning/5 px-3 py-1.5 text-xs font-medium text-warning transition-colors hover:bg-warning/15 disabled:opacity-40"
-                title={cmd2 ? `Demote ${cmd2.name}` : "No T2 commander"}
-              >
-                Demote T2 Cmd{cmd2 ? `: ${cmd2.name}` : ""}
-              </button>
+              <div className="relative" ref={demoteDropdownRef}>
+                <button
+                  onClick={() => setDemoteDropdownOpen((v) => !v)}
+                  disabled={commanders.length === 0}
+                  className="rounded-sm border border-warning/30 bg-warning/5 px-3 py-1.5 text-xs font-medium text-warning transition-colors hover:bg-warning/15 disabled:opacity-40"
+                >
+                  Demote Commander
+                </button>
+                {demoteDropdownOpen && commanders.length > 0 && (
+                  <div className="absolute left-0 top-full z-50 mt-1 min-w-[200px] rounded-sm border border-border bg-bg-secondary shadow-lg">
+                    {commanders.map(({ team, player }) => (
+                      <button
+                        key={player.steamID || player.eosID}
+                        onClick={() => { handleDemoteCommander(player); setDemoteDropdownOpen(false); }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-bg-tertiary"
+                      >
+                        <span className={`font-medium ${team === "1" ? "text-blue-400" : "text-red-400"}`}>T{team}</span>
+                        <span className="text-text-primary">{player.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             );
           })()}
 
@@ -793,6 +817,41 @@ export default function LiveServerPage() {
               </div>
             )}
           </div>
+          {clanMoveSelectedKey && onlineClans[clanMoveSelectedKey] && (() => {
+            const members = onlineClans[clanMoveSelectedKey].members;
+            const willMove = members.filter((m) => String(m.teamID) !== clanMoveTargetTeam);
+            const alreadyOn = members.filter((m) => String(m.teamID) === clanMoveTargetTeam);
+            return (
+              <div className="space-y-2">
+                {willMove.length > 0 && (
+                  <div>
+                    <p className="mb-1 text-xs font-medium tracking-wide text-warning uppercase">Will be moved ({willMove.length})</p>
+                    <div className="space-y-0.5">
+                      {willMove.map((m) => (
+                        <div key={m.steamId} className="flex items-center justify-between rounded-sm border border-warning/20 bg-warning/5 px-2.5 py-1">
+                          <span className="text-xs text-text-primary">{m.name}</span>
+                          <span className={`text-[10px] font-medium ${String(m.teamID) === "1" ? "text-blue-400" : "text-red-400"}`}>T{m.teamID}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {alreadyOn.length > 0 && (
+                  <div>
+                    <p className="mb-1 text-xs font-medium tracking-wide text-green-400 uppercase">Already on Team {clanMoveTargetTeam} ({alreadyOn.length})</p>
+                    <div className="space-y-0.5">
+                      {alreadyOn.map((m) => (
+                        <div key={m.steamId} className="flex items-center justify-between rounded-sm border border-green-500/20 bg-green-500/5 px-2.5 py-1">
+                          <span className="text-xs text-text-primary">{m.name}</span>
+                          <span className={`text-[10px] font-medium ${String(m.teamID) === "1" ? "text-blue-400" : "text-red-400"}`}>T{m.teamID}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
         <div className="mt-4 flex justify-end gap-3">
           <button
@@ -823,31 +882,60 @@ export default function LiveServerPage() {
         <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
           Randomize Teams
         </h3>
-        <p className="mb-4 text-sm text-text-secondary">
-          Randomization will be queued and executed 20 seconds after the next new game starts.
-        </p>
-        <div className="space-y-2">
-          <button
-            onClick={() => { handleQueueRandomize("all"); setRandomizeModalOpen(false); }}
-            className="flex w-full items-center justify-between rounded-sm border border-purple-500/30 bg-purple-500/5 px-4 py-3 text-sm font-medium text-purple-400 transition-colors hover:bg-purple-500/15"
-          >
-            <span>Randomize All</span>
-            <span className="text-xs text-text-muted">Shuffle all players between teams</span>
-          </button>
-          <button
-            onClick={() => { handleQueueRandomize("squad"); setRandomizeModalOpen(false); }}
-            className="flex w-full items-center justify-between rounded-sm border border-purple-500/30 bg-purple-500/5 px-4 py-3 text-sm font-medium text-purple-400 transition-colors hover:bg-purple-500/15"
-          >
-            <span>Randomize Squads</span>
-            <span className="text-xs text-text-muted">Shuffle squads between teams</span>
-          </button>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium tracking-wide text-text-muted uppercase">Mode</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setRandomizeMode("all")}
+                className={`flex-1 rounded-sm border px-4 py-2 text-sm font-medium transition-colors ${
+                  randomizeMode === "all"
+                    ? "border-purple-500/40 bg-purple-500/10 text-purple-400"
+                    : "border-border bg-bg-tertiary text-text-muted hover:text-text-primary"
+                }`}
+              >
+                All Players
+              </button>
+              <button
+                type="button"
+                onClick={() => setRandomizeMode("squad")}
+                className={`flex-1 rounded-sm border px-4 py-2 text-sm font-medium transition-colors ${
+                  randomizeMode === "squad"
+                    ? "border-purple-500/40 bg-purple-500/10 text-purple-400"
+                    : "border-border bg-bg-tertiary text-text-muted hover:text-text-primary"
+                }`}
+              >
+                By Squads
+              </button>
+            </div>
+            <p className="mt-1.5 text-xs text-text-muted">
+              {randomizeMode === "all"
+                ? "Shuffles all players individually between teams (breaks squads)."
+                : "Shuffles squads as units between teams (keeps squads together)."}
+            </p>
+          </div>
         </div>
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex justify-end gap-3">
           <button
             onClick={() => setRandomizeModalOpen(false)}
             className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
           >
             Cancel
+          </button>
+          <button
+            onClick={() => { handleQueueRandomize(randomizeMode); setRandomizeModalOpen(false); }}
+            className="rounded-sm border border-purple-500/30 bg-purple-500/5 px-5 py-2 text-sm font-medium text-purple-400 transition-colors hover:bg-purple-500/15"
+            title="Will queue and execute after next game starts"
+          >
+            Queue
+          </button>
+          <button
+            onClick={() => { handleRunRandomize(randomizeMode); setRandomizeModalOpen(false); }}
+            className="rounded-sm bg-purple-500 px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-purple-500/80"
+            title="Will execute immediately"
+          >
+            Run
           </button>
         </div>
       </Modal>

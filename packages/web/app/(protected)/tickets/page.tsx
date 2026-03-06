@@ -892,7 +892,7 @@ const TIER_LABELS: Record<string, string> = {
 
 function getVisibleTiers(permissions: Permission[]): string[] {
   if (
-    permissions.includes("admin") ||
+    permissions.includes("developer") ||
     permissions.includes("view:tickets") ||
     permissions.includes("manage:tickets")
   ) {
@@ -920,7 +920,7 @@ function getStoredPageSize(): number {
 export default function TicketsPage() {
   const { apiToken, permissions } = usePermissions();
   const visibleTiers = getVisibleTiers(permissions);
-  const canManage = permissions.includes("admin") || permissions.includes("manage:tickets");
+  const canManage = permissions.includes("developer") || permissions.includes("manage:tickets");
   const [tab, setTab] = useState<Tab>("tickets");
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);

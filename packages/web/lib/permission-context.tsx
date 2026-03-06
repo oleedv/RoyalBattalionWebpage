@@ -29,7 +29,7 @@ export function PermissionProvider({
   user: UserWithRoles | null;
 }) {
   function hasPermission(perm: Permission): boolean {
-    return permissions.includes("admin") || permissions.includes(perm);
+    return permissions.includes("developer") || permissions.includes(perm);
   }
 
   return (

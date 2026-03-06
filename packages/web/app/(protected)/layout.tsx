@@ -72,7 +72,7 @@ const NAV_ITEMS: NavItem[] = [
 
 function canSeeNavItem(item: NavItem, permissions: Permission[]): boolean {
   if (!item.requiredPermissions) return true;
-  if (permissions.includes("admin")) return true;
+  if (permissions.includes("developer")) return true;
   return item.requiredPermissions.some((p) => permissions.includes(p));
 }
 
@@ -117,7 +117,7 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           setUser(res.data.user);
           // Fetch whitelist candidate count for nav badge
           const perms = res.data.permissions;
-          if (perms.includes("admin") || perms.includes("manage:whitelist")) {
+          if (perms.includes("developer") || perms.includes("manage:whitelist")) {
             // Count candidates across all servers (no server filter)
             getWhitelistCandidates(res.data.token).then((r) => {
               if (r.success && r.data) setCandidateCount(r.data.length);

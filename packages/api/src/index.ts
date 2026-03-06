@@ -128,7 +128,7 @@ async function verifyToken(token: string): Promise<WSData | null> {
     const userId = payload.userId as string;
     const permissions = payload.permissions as Permission[];
     if (!userId || !permissions) return null;
-    const isAdmin = permissions.includes("admin");
+    const isAdmin = permissions.includes("developer");
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { discordName: true, avatarUrl: true } });
     return {
       wsType: "live-server" as const,

@@ -111,7 +111,7 @@ export function handleLiveServerClose(ws: ServerWebSocket<WSData>) {
 }
 
 function hasPermission(ws: ServerWebSocket<WSData>, perm: Permission): boolean {
-  return ws.data.permissions.includes("admin") || ws.data.permissions.includes(perm);
+  return ws.data.permissions.includes("developer") || ws.data.permissions.includes(perm);
 }
 
 async function handleAdminAction(
@@ -409,6 +409,25 @@ async function handleAdminAction(
         }
         auditDirect(ws.data.userId, ws.data.userName, "rcon.queuerandomize", "LiveServer", serverKey, { mode: msg.message });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "queuerandomize", data: qrResult }));
+        break;
+      }
+
+      case "runrandomize": {
+        if (!hasPermission(ws, "manage:randomize")) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "manage:randomize permission required" }));
+          return;
+        }
+        if (!msg.message || (msg.message !== "all" && msg.message !== "squad")) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Invalid mode. Use 'all' or 'squad'" }));
+          return;
+        }
+        const rrResult = await squadjsSocket.callMethod(serverKey, "runRandomization", msg.message, ws.data.userName) as { success?: boolean; error?: string };
+        if (rrResult?.success === false) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: rrResult.error || "Run failed" }));
+          return;
+        }
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.runrandomize", "LiveServer", serverKey, { mode: msg.message });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "runrandomize", data: rrResult }));
         break;
       }
 

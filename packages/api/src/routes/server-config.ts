@@ -54,7 +54,7 @@ const upsertSchema = z.object({
   syncEnabled: z.boolean().optional(),
 });
 
-serverConfig.post("/", requirePermission("admin"), zValidator("json", upsertSchema), async (c) => {
+serverConfig.post("/", requirePermission("developer"), zValidator("json", upsertSchema), async (c) => {
   const body = c.req.valid("json");
 
   // Encrypt SFTP password if encryption is available and a password is provided
@@ -113,7 +113,7 @@ serverConfig.put("/:server/sync", requirePermission("manage:whitelist-sync"), as
 });
 
 // Delete a server config
-serverConfig.delete("/:server", requirePermission("admin"), async (c) => {
+serverConfig.delete("/:server", requirePermission("developer"), async (c) => {
   const server = c.req.param("server");
 
   const existing = await prisma.serverConfig.findUnique({ where: { server } });

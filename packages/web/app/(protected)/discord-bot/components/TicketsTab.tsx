@@ -101,7 +101,7 @@ const TIER_LABELS: Record<string, string> = {
 
 function getVisibleTiers(permissions: Permission[]): string[] {
   if (
-    permissions.includes("admin") ||
+    permissions.includes("developer") ||
     permissions.includes("view:tickets") ||
     permissions.includes("manage:tickets")
   ) {

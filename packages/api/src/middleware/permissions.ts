@@ -16,7 +16,7 @@ const TIER_PERMISSION_MAP: Record<string, Permission> = {
  */
 export function getAllowedTicketTiers(permissions: Permission[]): string[] | null {
   if (
-    permissions.includes("admin") ||
+    permissions.includes("developer") ||
     permissions.includes("view:tickets") ||
     permissions.includes("manage:tickets")
   ) {
@@ -39,7 +39,7 @@ export function requirePermission(...permissions: Permission[]) {
   }>(async (c, next) => {
     const userPermissions = c.get("permissions");
 
-    if (userPermissions.includes("admin")) {
+    if (userPermissions.includes("developer")) {
       await next();
       return;
     }

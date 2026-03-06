@@ -292,7 +292,7 @@ export default function DashboardPage() {
     );
   }
 
-  const isAdmin = hasPermission("admin");
+  const isAdmin = hasPermission("developer");
   const canViewMembers = hasPermission("view:members");
   const canViewWhitelist = hasPermission("view:whitelist");
   const canManageMatches = hasPermission("manage:matches");

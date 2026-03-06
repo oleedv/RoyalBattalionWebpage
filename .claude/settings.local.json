@@ -10,5 +10,8 @@
       "Bash(bash)",
       "Bash(bun -e \":*)"
     ]
+  },
+  "enabledPlugins": {
+    "security-guidance@claude-plugins-official": true
   }
 }

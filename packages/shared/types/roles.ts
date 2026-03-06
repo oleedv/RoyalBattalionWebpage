@@ -22,7 +22,7 @@ export const PERMISSIONS = [
   "view:audit-logs",
   "manage:clan-move",
   "manage:randomize",
-  "admin",
+  "developer",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

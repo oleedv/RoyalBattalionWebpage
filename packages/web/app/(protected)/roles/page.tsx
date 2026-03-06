@@ -17,7 +17,7 @@ import { PERMISSIONS } from "shared";
 // Permission group metadata
 // ---------------------------------------------------------------------------
 
-type PermissionKey = Exclude<Permission, "admin">;
+type PermissionKey = Exclude<Permission, "developer">;
 
 interface PermEntry {
   perm: PermissionKey;
@@ -185,6 +185,16 @@ const PERMISSION_GROUPS: PermGroup[] = [
         label: "Manage Live Server",
         description: "Issue RCON commands (kicks, map changes, etc.)",
       },
+      {
+        perm: "manage:clan-move",
+        label: "Clan Move",
+        description: "Move or queue entire clans between teams",
+      },
+      {
+        perm: "manage:randomize",
+        label: "Randomize Teams",
+        description: "Queue or run team randomization",
+      },
     ],
   },
   {
@@ -224,7 +234,7 @@ const _allGroupedPerms = PERMISSION_GROUPS.flatMap((g) => [
   ...(g.subGroups?.flatMap((sg) => sg.entries.map((e) => e.perm)) ?? []),
 ]);
 if (typeof window === "undefined") {
-  const assignable = PERMISSIONS.filter((p) => p !== "admin");
+  const assignable = PERMISSIONS.filter((p) => p !== "developer");
   const missing = assignable.filter(
     (p) => !_allGroupedPerms.includes(p as PermissionKey)
   );

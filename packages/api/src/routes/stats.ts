@@ -14,7 +14,7 @@ stats.use("*", authMiddleware);
 
 stats.get("/summary", async (c) => {
   const permissions = c.get("permissions") as Permission[];
-  const isAdmin = permissions.includes("admin");
+  const isAdmin = permissions.includes("developer");
 
   const result: Record<string, unknown> = {};
 

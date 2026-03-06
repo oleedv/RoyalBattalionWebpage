@@ -4,6 +4,7 @@ import { logger } from "../lib/logger";
 import prisma from "../lib/db";
 import type { ServerWebSocket } from "bun";
 import type { WSData } from "./types";
+import type { Permission } from "shared";
 
 export const wsClients = new Set<ServerWebSocket<WSData>>();
 
@@ -107,6 +108,10 @@ export function handleLiveServerMessage(ws: ServerWebSocket<WSData>, message: st
 export function handleLiveServerClose(ws: ServerWebSocket<WSData>) {
   wsClients.delete(ws);
   logger.info("live-server", `WebSocket disconnected (${wsClients.size} clients)`);
+}
+
+function hasPermission(ws: ServerWebSocket<WSData>, perm: Permission): boolean {
+  return ws.data.permissions.includes("admin") || ws.data.permissions.includes(perm);
 }
 
 async function handleAdminAction(
@@ -241,6 +246,10 @@ async function handleAdminAction(
       }
 
       case "switchclan": {
+        if (!hasPermission(ws, "manage:clan-move")) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "manage:clan-move permission required" }));
+          return;
+        }
         if ((!msg.clanTag && !msg.clanId) || !msg.targetTeam) {
           ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing clan identifier or target team" }));
           return;
@@ -324,6 +333,88 @@ async function handleAdminAction(
           clanMap[key].members.push({ teamID: player.teamID, steamId: player.steamID, name: player.name });
         }
         ws.send(JSON.stringify({ type: "online_clans", data: clanMap }));
+        break;
+      }
+
+      case "queueclan": {
+        if (!hasPermission(ws, "manage:clan-move")) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "manage:clan-move permission required" }));
+          return;
+        }
+        if ((!msg.clanTag && !msg.clanId) || !msg.targetTeam) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing clan identifier or target team" }));
+          return;
+        }
+        const qcSnapshot = squadjsSocket.getSnapshot(serverKey);
+        if (!qcSnapshot) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Server not connected" }));
+          return;
+        }
+        const qcOnlineSteamIds = qcSnapshot.players.map((p) => p.steamID).filter(Boolean);
+        const qcClanWhere = msg.clanId
+          ? { clanId: msg.clanId, steamId: { in: qcOnlineSteamIds } }
+          : { clan: msg.clanTag, steamId: { in: qcOnlineSteamIds } };
+        const qcClanEntries = await prisma.whitelistEntry.findMany({
+          where: qcClanWhere,
+          select: { steamId: true },
+        });
+        const qcClanSteamIds = new Set(qcClanEntries.map((e) => e.steamId));
+        const toQueue = qcSnapshot.players.filter(
+          (p) => qcClanSteamIds.has(p.steamID) && p.teamID !== msg.targetTeam
+        );
+        if (toQueue.length === 0) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "No clan members to queue" }));
+          return;
+        }
+        const playersData = toQueue.map((p) => ({
+          eosID: p.eosID,
+          steamID: p.steamID,
+          name: p.name,
+        }));
+        const qcResult = await squadjsSocket.callMethod(serverKey, "queuePlayersForSwap", playersData) as { success?: boolean; error?: string };
+        if (qcResult?.success === false) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: qcResult.error || "Queue failed" }));
+          return;
+        }
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.queueclan", "LiveServer", serverKey, {
+          clanId: msg.clanId, clanTag: msg.clanTag, targetTeam: msg.targetTeam,
+          count: toQueue.length, playerNames: toQueue.map((p) => p.name),
+        });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "queueclan", data: qcResult }));
+        break;
+      }
+
+      case "queuerandomize": {
+        if (!hasPermission(ws, "manage:randomize")) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "manage:randomize permission required" }));
+          return;
+        }
+        if (!msg.message || (msg.message !== "all" && msg.message !== "squad")) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Invalid mode. Use 'all' or 'squad'" }));
+          return;
+        }
+        const qrResult = await squadjsSocket.callMethod(serverKey, "queueRandomization", msg.message, ws.data.userName) as { success?: boolean; error?: string };
+        if (qrResult?.success === false) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: qrResult.error || "Queue failed" }));
+          return;
+        }
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.queuerandomize", "LiveServer", serverKey, { mode: msg.message });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "queuerandomize", data: qrResult }));
+        break;
+      }
+
+      case "cancelrandomize": {
+        if (!hasPermission(ws, "manage:randomize")) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "manage:randomize permission required" }));
+          return;
+        }
+        const crResult = await squadjsSocket.callMethod(serverKey, "cancelRandomization") as { success?: boolean; error?: string };
+        if (crResult?.success === false) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: crResult.error || "Cancel failed" }));
+          return;
+        }
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.cancelrandomize", "LiveServer", serverKey, {});
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "cancelrandomize", data: crResult }));
         break;
       }
 

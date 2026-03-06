@@ -42,6 +42,13 @@ export interface MetricSample {
   reserveQueue: number;
 }
 
+export interface RandomizationStatus {
+  pending: boolean;
+  mode?: string;
+  requestedBy?: string;
+  requestedAt?: string;
+}
+
 export interface Snapshot {
   connected: boolean;
   players: Player[];
@@ -50,6 +57,7 @@ export interface Snapshot {
   consoleLog: ConsoleEntry[];
   tickRate: number | null;
   metricHistory: MetricSample[];
+  randomizationStatus?: RandomizationStatus | null;
 }
 
 export type OnlineClanEntry = { id: string; tag: string; members: { teamID: string; steamId: string; name: string }[] };

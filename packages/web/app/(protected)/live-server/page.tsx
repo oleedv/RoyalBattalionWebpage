@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { usePermissions } from "@/lib/permission-context";
 import { Modal } from "@/components/modal";
 
-import type { Player, ServerInfo, ChatMessage, ConsoleEntry, MetricSample, WSMessage, OnlineClanData, ChatFilter } from "./lib/types";
+import type { Player, ServerInfo, ChatMessage, ConsoleEntry, MetricSample, WSMessage, OnlineClanData, ChatFilter, RandomizationStatus } from "./lib/types";
 import { handleGameEvent, type GameEventAction } from "./lib/handle-game-event";
 import { InfoCell } from "./components/info-cell";
 import { Sparkline } from "./components/sparkline";
@@ -64,6 +64,8 @@ export default function LiveServerPage() {
   const { apiToken, hasPermission } = usePermissions();
   const canView = hasPermission("view:live-server") || hasPermission("manage:live-server");
   const canManage = hasPermission("manage:live-server");
+  const canClanMove = hasPermission("manage:clan-move");
+  const canRandomize = hasPermission("manage:randomize");
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -111,6 +113,7 @@ export default function LiveServerPage() {
   const [clanMoveModalOpen, setClanMoveModalOpen] = useState(false);
   const [clanMoveTargetTeam, setClanMoveTargetTeam] = useState<"1" | "2">("1");
   const [clanMoveSelectedKey, setClanMoveSelectedKey] = useState<string | null>(null);
+  const [randomizationStatus, setRandomizationStatus] = useState<RandomizationStatus | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
@@ -174,6 +177,9 @@ export default function LiveServerPage() {
             wsRef.current.send(JSON.stringify({ action: "get_online_clans" }));
           }
           break;
+        case "setRandomizationStatus":
+          setRandomizationStatus(action.status);
+          break;
       }
     }
   }, []);
@@ -205,6 +211,7 @@ export default function LiveServerPage() {
           if (msg.data.consoleLog?.length) setConsoleLog(msg.data.consoleLog);
           setTickRate(msg.data.tickRate);
           if (msg.data.metricHistory?.length) setMetricHistory(msg.data.metricHistory);
+          if (msg.data.randomizationStatus != null) setRandomizationStatus(msg.data.randomizationStatus);
           // Request clan data after snapshot
           if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify({ action: "get_online_clans" }));
@@ -385,17 +392,26 @@ export default function LiveServerPage() {
     sendAction({ action: "demotecommander", steamId: player.steamID, eosId: player.eosID, playerName: player.name });
   }
 
-  function handleSwitchClan() {
+  function handleSwitchClan(mode: "move" | "queue") {
     if (!clanMoveSelectedKey) return;
     const clan = onlineClans[clanMoveSelectedKey];
     if (!clan) return;
+    const action = mode === "queue" ? "queueclan" : "switchclan";
     if (clan.id) {
-      sendAction({ action: "switchclan", clanId: clan.id, targetTeam: clanMoveTargetTeam });
+      sendAction({ action, clanId: clan.id, targetTeam: clanMoveTargetTeam });
     } else {
-      sendAction({ action: "switchclan", clanTag: clan.tag, targetTeam: clanMoveTargetTeam });
+      sendAction({ action, clanTag: clan.tag, targetTeam: clanMoveTargetTeam });
     }
     setClanMoveModalOpen(false);
     setClanMoveSelectedKey(null);
+  }
+
+  function handleQueueRandomize(mode: "all" | "squad") {
+    sendAction({ action: "queuerandomize", message: mode });
+  }
+
+  function handleCancelRandomize() {
+    sendAction({ action: "cancelrandomize" });
   }
 
   function isCommander(player: Player): boolean {
@@ -661,13 +677,50 @@ export default function LiveServerPage() {
           <div className="h-6 w-px bg-border/50" />
 
           {/* Move Clan */}
-          <button
-            onClick={() => setClanMoveModalOpen(true)}
-            disabled={Object.keys(onlineClans).length === 0}
-            className="rounded-sm border border-accent/30 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/15 disabled:opacity-40"
-          >
-            Move Clan
-          </button>
+          {canClanMove && (
+            <button
+              onClick={() => setClanMoveModalOpen(true)}
+              disabled={Object.keys(onlineClans).length === 0}
+              className="rounded-sm border border-accent/30 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/15 disabled:opacity-40"
+            >
+              Move Clan
+            </button>
+          )}
+
+          {/* Randomize Teams */}
+          {canRandomize && (
+            <>
+              <div className="h-6 w-px bg-border/50" />
+              {randomizationStatus?.pending ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-warning">
+                    Randomize ({randomizationStatus.mode}) queued
+                  </span>
+                  <button
+                    onClick={handleCancelRandomize}
+                    className="rounded-sm border border-danger/30 bg-danger/5 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/15"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleQueueRandomize("all")}
+                    className="rounded-sm border border-purple-500/30 bg-purple-500/5 px-3 py-1.5 text-xs font-medium text-purple-400 transition-colors hover:bg-purple-500/15"
+                  >
+                    Randomize All
+                  </button>
+                  <button
+                    onClick={() => handleQueueRandomize("squad")}
+                    className="rounded-sm border border-purple-500/30 bg-purple-500/5 px-3 py-1.5 text-xs font-medium text-purple-400 transition-colors hover:bg-purple-500/15"
+                  >
+                    Randomize Squads
+                  </button>
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
       </div>{/* end shrink-0 */}
@@ -754,7 +807,14 @@ export default function LiveServerPage() {
             Cancel
           </button>
           <button
-            onClick={handleSwitchClan}
+            onClick={() => handleSwitchClan("queue")}
+            disabled={!clanMoveSelectedKey}
+            className="rounded-sm border border-accent/30 bg-accent/5 px-5 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/15 disabled:opacity-40"
+          >
+            {clanMoveSelectedKey ? `Queue ${getMovableClans(clanMoveTargetTeam).find((c) => c.key === clanMoveSelectedKey)?.count || 0} players` : "Queue Move"}
+          </button>
+          <button
+            onClick={() => handleSwitchClan("move")}
             disabled={!clanMoveSelectedKey}
             className="rounded-sm bg-warning px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-warning/80 disabled:opacity-40"
           >

@@ -70,6 +70,7 @@ const EVENTS_TO_RELAY = [
   "GRACE_PERIOD_ENDED",
   "GRACE_PERIOD_EVENT",
   "SWAP_QUEUE_EVENT",
+  "RANDOMIZE_QUEUE_EVENT",
 ];
 
 export interface GracePeriodEvent {
@@ -139,6 +140,7 @@ interface ServerState {
   swapQueueEvents: SwapQueueEvent[];
   gracePeriodActive: boolean;
   gracePeriodEndTime: number | null;
+  randomizationStatus: { pending: boolean; mode?: string; requestedBy?: string; requestedAt?: string } | null;
 }
 
 // Parse env: SQUADJS_SERVERS="staging|ws://ip:4001|token,production|ws://ip:4000|token"
@@ -220,6 +222,7 @@ class SquadJSSocketManager {
       swapQueueEvents: [],
       gracePeriodActive: false,
       gracePeriodEndTime: null,
+      randomizationStatus: null,
     };
 
     this.servers.set(key, state);
@@ -332,6 +335,14 @@ class SquadJSSocketManager {
         }
       });
     }
+
+    // Request randomization status via plugin API method
+    state.socket.emit("callApiMethod", "getRandomizationStatus", (result: unknown) => {
+      state.lastEventTime = Date.now();
+      if (result && typeof result === "object" && "pending" in result) {
+        state.randomizationStatus = result as ServerState["randomizationStatus"];
+      }
+    });
 
     // Lightweight poll: just refresh player list every 30s to keep count accurate
     if (state.pollInterval) clearInterval(state.pollInterval);
@@ -570,6 +581,15 @@ class SquadJSSocketManager {
         if (state.swapQueueEvents.length > 100) state.swapQueueEvents = state.swapQueueEvents.slice(-100);
         break;
       }
+      case "RANDOMIZE_QUEUE_EVENT": {
+        const rqe = data as { action: string; mode?: string; requestedBy?: string; [key: string]: unknown };
+        if (rqe.action === "queued") {
+          state.randomizationStatus = { pending: true, mode: rqe.mode, requestedBy: rqe.requestedBy, requestedAt: new Date().toISOString() };
+        } else if (rqe.action === "cancelled" || rqe.action === "executed" || rqe.action === "failed") {
+          state.randomizationStatus = null;
+        }
+        break;
+      }
     }
 
     this.broadcast(key, event, data);
@@ -625,6 +645,7 @@ class SquadJSSocketManager {
       swapQueueEvents: state.swapQueueEvents,
       gracePeriodActive: state.gracePeriodActive,
       gracePeriodEndTime: state.gracePeriodEndTime,
+      randomizationStatus: state.randomizationStatus,
     };
   }
 
@@ -640,6 +661,27 @@ class SquadJSSocketManager {
         connected: state.connected,
       })),
     };
+  }
+
+  async callMethod(serverKey: string, methodName: string, ...args: unknown[]): Promise<unknown> {
+    const state = this.servers.get(serverKey);
+    if (!state || !state.connected) {
+      throw new Error(`Not connected to ${serverKey}`);
+    }
+
+    logger.info("squadjs", `API method ${serverKey}: callApiMethod(${methodName}, ${args.map(String).join(", ")})`);
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Method call timeout")), 15000);
+      state.socket.emit("callApiMethod", methodName, ...args, (result: unknown) => {
+        clearTimeout(timeout);
+        if (result && typeof result === "object" && "error" in result) {
+          reject(new Error((result as { error: string }).error));
+        } else {
+          resolve(result);
+        }
+      });
+    });
   }
 
   async executeRcon(serverKey: string, method: string, ...args: unknown[]): Promise<unknown> {

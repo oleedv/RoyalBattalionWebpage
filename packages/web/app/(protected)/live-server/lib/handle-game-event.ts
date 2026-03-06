@@ -1,4 +1,4 @@
-import type { Player, ServerInfo, ChatMessage, ConsoleEntry } from "./types";
+import type { Player, ServerInfo, ChatMessage, ConsoleEntry, RandomizationStatus } from "./types";
 
 export type GameEventAction =
   | { type: "setPlayers"; players: Player[] }
@@ -7,7 +7,8 @@ export type GameEventAction =
   | { type: "appendChat"; message: ChatMessage }
   | { type: "setTickRate"; tickRate: number }
   | { type: "appendConsole"; entry: Omit<ConsoleEntry, "time"> }
-  | { type: "requestClanRefresh" };
+  | { type: "requestClanRefresh" }
+  | { type: "setRandomizationStatus"; status: RandomizationStatus | null };
 
 export function handleGameEvent(event: string, data: unknown): GameEventAction[] {
   const actions: GameEventAction[] = [];
@@ -192,6 +193,25 @@ export function handleGameEvent(event: string, data: unknown): GameEventAction[]
       addConsole("roundend", msg);
       const divider: ChatMessage = { chat: "__DIVIDER__", steamID: "", eosID: "", name: "", message: msg, time: new Date().toISOString() };
       actions.push({ type: "appendChat", message: divider });
+      break;
+    }
+    case "RANDOMIZE_QUEUE_EVENT": {
+      const rqe = data as { action: string; mode?: string; requestedBy?: string };
+      if (rqe.action === "queued") {
+        actions.push({ type: "setRandomizationStatus", status: { pending: true, mode: rqe.mode, requestedBy: rqe.requestedBy, requestedAt: new Date().toISOString() } });
+        addConsole("broadcast", `Randomization (${rqe.mode}) queued for next game`);
+      } else if (rqe.action === "cancelled") {
+        actions.push({ type: "setRandomizationStatus", status: null });
+        addConsole("broadcast", "Queued randomization cancelled");
+      } else if (rqe.action === "executing_soon") {
+        addConsole("broadcast", "Randomization executing soon...");
+      } else if (rqe.action === "executed") {
+        actions.push({ type: "setRandomizationStatus", status: null });
+        addConsole("broadcast", "Randomization executed");
+      } else if (rqe.action === "failed") {
+        actions.push({ type: "setRandomizationStatus", status: null });
+        addConsole("broadcast", "Randomization failed");
+      }
       break;
     }
   }

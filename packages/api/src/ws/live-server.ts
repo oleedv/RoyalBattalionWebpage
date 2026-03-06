@@ -68,6 +68,12 @@ export function handleLiveServerMessage(ws: ServerWebSocket<WSData>, message: st
       targetTeam?: string;
     };
 
+    // Handle keepalive ping (before auth checks so any connected client can ping)
+    if (msg.action === "ping") {
+      ws.send(JSON.stringify({ type: "pong" }));
+      return;
+    }
+
     // Handle server switching
     if (msg.action === "switch_server" && msg.server) {
       ws.data.serverKey = msg.server;

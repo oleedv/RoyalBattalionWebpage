@@ -219,6 +219,8 @@ export default {
     return app.fetch(req);
   },
   websocket: {
+    idleTimeout: 120,
+    sendPing: true,
     open(ws: ServerWebSocket<WSData>) {
       if (ws.data.wsType === "presence") {
         handlePresenceOpen(ws);

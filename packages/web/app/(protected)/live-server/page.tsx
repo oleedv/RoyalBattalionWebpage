@@ -69,6 +69,8 @@ export default function LiveServerPage() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const apiTokenRef = useRef(apiToken);
+  apiTokenRef.current = apiToken;
 
   const [connected, setConnected] = useState(false);
   const [squadjsConnected, setSquadjsConnected] = useState(false);
@@ -80,6 +82,8 @@ export default function LiveServerPage() {
   const [chatFilter, setChatFilter] = useState<ChatFilter>("All");
   const [serverKeys, setServerKeys] = useState<string[]>([]);
   const [activeServer, setActiveServer] = useState<string>("");
+  const activeServerRef = useRef(activeServer);
+  activeServerRef.current = activeServer;
 
   // Admin actions
   const [broadcastMsg, setBroadcastMsg] = useState("");
@@ -199,11 +203,20 @@ export default function LiveServerPage() {
       switch (msg.type) {
         case "servers": {
           setServerKeys(msg.data);
-          const stored = localStorage.getItem("rb-default-server");
-          const initial = (stored && msg.data.includes(stored)) ? stored : msg.data[0];
-          setActiveServer((prev) =>
-            !prev && msg.data.length > 0 ? initial : prev
-          );
+          // On reconnect, restore the previously active server
+          const current = activeServerRef.current;
+          if (current && msg.data.includes(current)) {
+            // Re-subscribe to the server that was active before disconnect
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ action: "switch_server", server: current }));
+            }
+          } else {
+            const stored = localStorage.getItem("rb-default-server");
+            const initial = (stored && msg.data.includes(stored)) ? stored : msg.data[0];
+            if (!current && msg.data.length > 0) {
+              setActiveServer(initial);
+            }
+          }
           break;
         }
         case "snapshot":
@@ -244,7 +257,8 @@ export default function LiveServerPage() {
   }, [applyGameEventActions]);
 
   const connectWs = useCallback(() => {
-    if (!apiToken) return;
+    const token = apiTokenRef.current;
+    if (!token) return;
     // Clean up any existing connection without triggering reconnect
     if (wsRef.current) {
       wsRef.current.onclose = null;
@@ -255,7 +269,7 @@ export default function LiveServerPage() {
       reconnectRef.current = null;
     }
 
-    const ws = new WebSocket(`${WS_BASE}/live-server/ws`, [`auth-${apiToken}`]);
+    const ws = new WebSocket(`${WS_BASE}/live-server/ws`, [`auth-${token}`]);
     wsRef.current = ws;
 
     ws.onopen = () => setConnected(true);
@@ -271,8 +285,10 @@ export default function LiveServerPage() {
       ws.close();
     };
     ws.onmessage = handleMessage;
-  }, [apiToken, handleMessage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleMessage]);
 
+  // Connect WS once when canView becomes true (decoupled from token refresh)
   useEffect(() => {
     if (!apiToken || !canView) return;
     connectWs();
@@ -288,7 +304,19 @@ export default function LiveServerPage() {
         wsRef.current = null;
       }
     };
-  }, [apiToken, canView, connectWs]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canView]);
+
+  // Application-level keepalive ping every 30s to prevent Cloudflare idle timeout
+  useEffect(() => {
+    if (!connected) return;
+    const interval = setInterval(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: "ping" }));
+      }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [connected]);
 
   // Auto-scroll chat & console (use container scrollTo to avoid pulling the page)
   useEffect(() => {

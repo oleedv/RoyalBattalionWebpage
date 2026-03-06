@@ -95,6 +95,9 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const [candidateCount, setCandidateCount] = useState(0);
   const [onlineUsers, setOnlineUsers] = useState<{ userId: string; userName: string; avatarUrl: string | null; currentPage: string }[]>([]);
   const presenceWsRef = useRef<WebSocket | null>(null);
+  const apiTokenRef = useRef(apiToken);
+  apiTokenRef.current = apiToken;
+  const hasConnectedPresence = useRef(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -158,16 +161,19 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
     setMobileOpen(false);
   }, [pathname]);
 
-  // Presence WebSocket
+  // Presence WebSocket -- connect once when first token arrives, read token from ref on reconnect
   useEffect(() => {
-    if (!apiToken) return;
+    if (!apiToken || hasConnectedPresence.current) return;
+    hasConnectedPresence.current = true;
     let cancelled = false;
     let reconnectTimer: ReturnType<typeof setTimeout>;
 
     function connect() {
       if (cancelled) return;
+      const token = apiTokenRef.current;
+      if (!token) return;
       const wsBase = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001").replace(/^http/, "ws");
-      const ws = new WebSocket(`${wsBase}/presence/ws?page=${encodeURIComponent(pathname)}`, [`auth-${apiToken}`]);
+      const ws = new WebSocket(`${wsBase}/presence/ws?page=${encodeURIComponent(pathname)}`, [`auth-${token}`]);
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
@@ -186,6 +192,7 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
     connect();
     return () => {
       cancelled = true;
+      hasConnectedPresence.current = false;
       clearTimeout(reconnectTimer);
       const ws = presenceWsRef.current;
       if (ws) {

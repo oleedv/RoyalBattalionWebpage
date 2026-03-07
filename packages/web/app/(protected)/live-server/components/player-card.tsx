@@ -77,12 +77,12 @@ export function PlayerCard({
             {allTimeStats && (
               <>
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-text-muted">All-Time Playtime</span>
-                  <span className="text-xs text-text-secondary">{allTimeStats.playtimeHours}h</span>
+                  <span className="text-[10px] text-text-muted">Playtime (30/90d)</span>
+                  <span className="text-xs text-text-secondary">{allTimeStats.playtime30}h / {allTimeStats.playtime90}h</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-text-muted">All-Time Seed Time</span>
-                  <span className="text-xs text-text-secondary">{allTimeStats.seedHours}h</span>
+                  <span className="text-[10px] text-text-muted">Seed Time (30/90d)</span>
+                  <span className="text-xs text-text-secondary">{allTimeStats.seed30}h / {allTimeStats.seed90}h</span>
                 </div>
               </>
             )}

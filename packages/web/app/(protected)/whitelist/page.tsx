@@ -443,7 +443,7 @@ function EntriesTab({
       setActivityOpen(false);
       setPlaytimeStats(null);
       setPlaytimeLoading(true);
-      getPlaytime(apiToken, res.data.steamId, res.data.createdAt)
+      getPlaytime(apiToken, res.data.steamId)
         .then((pt) => { if (pt.success && pt.data) setPlaytimeStats(pt.data); })
         .finally(() => setPlaytimeLoading(false));
     }
@@ -1220,20 +1220,20 @@ function EntriesTab({
               <InfoField label="Added">
                 {formatDate(selectedEntry.createdAt)}
               </InfoField>
-              <InfoField label="Gameplay Hours">
+              <InfoField label="Playtime (30/90d)">
                 {playtimeLoading ? (
                   <span className="text-text-muted">Loading...</span>
                 ) : playtimeStats ? (
-                  <span className="text-text-secondary">{playtimeStats.playtimeHours}h</span>
+                  <span className="text-text-secondary">{playtimeStats.playtime30}h / {playtimeStats.playtime90}h</span>
                 ) : (
                   <span className="text-text-muted">--</span>
                 )}
               </InfoField>
-              <InfoField label="Seeding Hours">
+              <InfoField label="Seed Time (30/90d)">
                 {playtimeLoading ? (
                   <span className="text-text-muted">Loading...</span>
                 ) : playtimeStats ? (
-                  <span className="text-text-secondary">{playtimeStats.seedHours}h</span>
+                  <span className="text-text-secondary">{playtimeStats.seed30}h / {playtimeStats.seed90}h</span>
                 ) : (
                   <span className="text-text-muted">--</span>
                 )}

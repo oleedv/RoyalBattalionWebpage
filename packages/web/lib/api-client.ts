@@ -808,13 +808,8 @@ export function getSwapQueueHistory(
 export function getPlaytime(
   token: string,
   steamId: string,
-  from?: string,
-  to?: string
 ): Promise<ApiResponse<PlaytimeStats>> {
-  const qs = new URLSearchParams({ steamId });
-  if (from) qs.set("from", from);
-  if (to) qs.set("to", to);
-  return request<PlaytimeStats>(`/playtime?${qs.toString()}`, {
+  return request<PlaytimeStats>(`/playtime?steamId=${encodeURIComponent(steamId)}`, {
     headers: authHeaders(token),
   });
 }

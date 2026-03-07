@@ -8,56 +8,37 @@ const playtime = new Hono();
 playtime.use("*", authMiddleware);
 playtime.use("*", requirePermission("view:whitelist", "view:members", "view:live-server"));
 
-// GET /playtime?steamId=xxx&from=ISO&to=ISO
+// GET /playtime?steamId=xxx
 playtime.get("/", async (c) => {
   const steamId = c.req.query("steamId");
   if (!steamId) {
     return c.json({ success: false, error: "steamId is required" }, 400);
   }
 
-  const from = c.req.query("from");
-  const to = c.req.query("to") || new Date().toISOString();
-
   const pool = getSquadJSPool();
 
-  let query: string;
-  let params: unknown[];
+  const query = `
+    SELECT
+      COALESCE(SUM(CASE WHEN c.time >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN c.session_duration ELSE 0 END), 0) AS session30,
+      COALESCE(SUM(CASE WHEN c.time >= DATE_SUB(NOW(), INTERVAL 90 DAY) THEN c.session_duration ELSE 0 END), 0) AS session90,
+      COALESCE(SUM(CASE WHEN c.time >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN c.seed_duration ELSE 0 END), 0) AS seed30,
+      COALESCE(SUM(CASE WHEN c.time >= DATE_SUB(NOW(), INTERVAL 90 DAY) THEN c.seed_duration ELSE 0 END), 0) AS seed90
+    FROM squadjs_connections c
+    JOIN squadjs_players p ON p.id = c.player_id
+    WHERE p.steam_id = ? AND c.event_type = 'leave'
+  `;
 
-  if (from) {
-    query = `
-      SELECT
-        COALESCE(SUM(c.session_duration), 0) AS totalSession,
-        COALESCE(SUM(c.seed_duration), 0) AS totalSeed
-      FROM squadjs_connections c
-      JOIN squadjs_players p ON p.id = c.player_id
-      WHERE p.steam_id = ?
-        AND c.event_type = 'leave'
-        AND c.time >= ?
-        AND c.time <= ?
-    `;
-    params = [steamId, from, to];
-  } else {
-    query = `
-      SELECT
-        COALESCE(SUM(c.session_duration), 0) AS totalSession,
-        COALESCE(SUM(c.seed_duration), 0) AS totalSeed
-      FROM squadjs_connections c
-      JOIN squadjs_players p ON p.id = c.player_id
-      WHERE p.steam_id = ?
-        AND c.event_type = 'leave'
-    `;
-    params = [steamId];
-  }
-
-  const [rows] = await pool.query(query, params);
-  const row = (rows as Record<string, unknown>[])[0] || { totalSession: 0, totalSeed: 0 };
+  const [rows] = await pool.query(query, [steamId]);
+  const row = (rows as Record<string, unknown>[])[0] || { session30: 0, session90: 0, seed30: 0, seed90: 0 };
 
   return c.json({
     success: true,
     data: {
       steamId,
-      playtimeHours: Math.round((Number(row.totalSession) / 3600) * 10) / 10,
-      seedHours: Math.round((Number(row.totalSeed) / 3600) * 10) / 10,
+      playtime30: Math.round((Number(row.session30) / 3600) * 10) / 10,
+      playtime90: Math.round((Number(row.session90) / 3600) * 10) / 10,
+      seed30: Math.round((Number(row.seed30) / 3600) * 10) / 10,
+      seed90: Math.round((Number(row.seed90) / 3600) * 10) / 10,
     },
   });
 });

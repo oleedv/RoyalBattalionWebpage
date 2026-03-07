@@ -9,6 +9,7 @@ import { SearchInput } from "@/components/search-input";
 import { Modal } from "@/components/modal";
 import { formatDate, formatRelativeTime } from "@/lib/format";
 import type { UserWithRolesAndComments, PlaytimeStats } from "shared";
+import { COUNTRIES, validateCountry } from "shared";
 
 function CopyableId({ value, label }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -44,7 +45,7 @@ function InfoField({ label, children }: { label: string; children: React.ReactNo
 }
 
 export default function MembersPage() {
-  const { apiToken, hasPermission } = usePermissions();
+  const { apiToken, hasPermission, permissions } = usePermissions();
   const [users, setUsers] = useState<UserWithRolesAndComments[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,8 +126,7 @@ export default function MembersPage() {
     setPlaytimeStats(null);
     if (apiToken && user.steamId) {
       setPlaytimeLoading(true);
-      const from = user.membershipDate || user.createdAt;
-      getPlaytime(apiToken, user.steamId, from)
+      getPlaytime(apiToken, user.steamId)
         .then((pt) => { if (pt.success && pt.data) setPlaytimeStats(pt.data); })
         .finally(() => setPlaytimeLoading(false));
     }
@@ -160,6 +160,15 @@ export default function MembersPage() {
   async function saveEdit() {
     if (!apiToken || !selectedUser) return;
     setEditError(null);
+
+    if (editCountry.trim()) {
+      const result = validateCountry(editCountry);
+      if (!result.valid) {
+        setEditError("Invalid country name");
+        return;
+      }
+      setEditCountry(result.country);
+    }
 
     const res = await updateUser(apiToken, selectedUser.id, {
       steamId: editSteamId.trim() || undefined,
@@ -435,13 +444,21 @@ export default function MembersPage() {
 
               <InfoField label="Country">
                 {editing ? (
-                  <input
-                    type="text"
-                    value={editCountry}
-                    onChange={(e) => setEditCountry(e.target.value)}
-                    className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
-                    placeholder="Country"
-                  />
+                  <>
+                    <input
+                      type="text"
+                      list="country-list"
+                      value={editCountry}
+                      onChange={(e) => setEditCountry(e.target.value)}
+                      className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"
+                      placeholder="Country"
+                    />
+                    <datalist id="country-list">
+                      {COUNTRIES.map((c) => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
+                  </>
                 ) : (
                   <span className={selectedUser.country ? "text-text-secondary" : "text-text-muted"}>
                     {selectedUser.country || "--"}
@@ -495,20 +512,20 @@ export default function MembersPage() {
                 </span>
               </InfoField>
 
-              <InfoField label="Playtime">
+              <InfoField label="Playtime (30/90d)">
                 {playtimeLoading ? (
                   <span className="text-text-muted">Loading...</span>
                 ) : playtimeStats ? (
-                  <span className="text-text-secondary">{playtimeStats.playtimeHours}h</span>
+                  <span className="text-text-secondary">{playtimeStats.playtime30}h / {playtimeStats.playtime90}h</span>
                 ) : (
                   <span className="text-text-muted">--</span>
                 )}
               </InfoField>
-              <InfoField label="Seed Time">
+              <InfoField label="Seed Time (30/90d)">
                 {playtimeLoading ? (
                   <span className="text-text-muted">Loading...</span>
                 ) : playtimeStats ? (
-                  <span className="text-text-secondary">{playtimeStats.seedHours}h</span>
+                  <span className="text-text-secondary">{playtimeStats.seed30}h / {playtimeStats.seed90}h</span>
                 ) : (
                   <span className="text-text-muted">--</span>
                 )}
@@ -551,7 +568,7 @@ export default function MembersPage() {
                           <span className="text-[10px] text-text-muted">
                             {formatRelativeTime(c.createdAt)}
                           </span>
-                          {canManage && (
+                          {permissions.includes("developer") && (
                             <button
                               onClick={() => handleDeleteComment(c.id)}
                               className="text-[10px] text-text-muted transition-colors hover:text-danger"

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import type { UserWithRoles, UserWithRolesAndComments, MemberComment } from "shared";
+import { validateCountry } from "shared";
 import prisma from "../lib/db";
 import { env } from "../lib/env";
 import { findOrThrow, success, fail } from "../lib/crud-helpers";
@@ -161,13 +162,26 @@ users.put("/:id", authMiddleware, requirePermission("manage:members"), zValidato
 
   await findOrThrow(prisma.user, { id }, "User");
 
+  let normalizedCountry: string | null | undefined = undefined;
+  if (body.country !== undefined) {
+    if (body.country) {
+      const result = validateCountry(body.country);
+      if (!result.valid) {
+        return fail(c, "Invalid country name", 400);
+      }
+      normalizedCountry = result.country;
+    } else {
+      normalizedCountry = null;
+    }
+  }
+
   try {
     const updated = await prisma.user.update({
       where: { id },
       data: {
         ...(body.steamId !== undefined && { steamId: body.steamId || null }),
         ...(body.eosId !== undefined && { eosId: body.eosId || null }),
-        ...(body.country !== undefined && { country: body.country || null }),
+        ...(normalizedCountry !== undefined && { country: normalizedCountry }),
         ...(body.membershipDate !== undefined && { membershipDate: body.membershipDate ? new Date(body.membershipDate) : null }),
         ...(body.dateOfBirth !== undefined && { dateOfBirth: body.dateOfBirth ? new Date(body.dateOfBirth) : null }),
       },

@@ -33,18 +33,47 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function extractUrls(arr: unknown[]): string[] {
+  return arr
+    .map((item) => {
+      if (typeof item === "string") return item;
+      if (item && typeof item === "object" && "url" in item) return (item as { url: string }).url;
+      return null;
+    })
+    .filter(Boolean) as string[];
+}
+
 function parseAttachments(raw: string | string[] | null): string[] {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw.filter((u: unknown) => typeof u === "string");
+  if (Array.isArray(raw)) return extractUrls(raw);
   try {
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed.filter((u: unknown) => typeof u === "string");
+    if (Array.isArray(parsed)) return extractUrls(parsed);
   } catch { /* not JSON */ }
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 function isImageUrl(url: string): boolean {
   return /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url) || url.includes("cdn.discordapp.com");
+}
+
+const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
+
+function Linkify({ text }: { text: string }) {
+  const parts = text.split(URL_REGEX);
+  return (
+    <>
+      {parts.map((part, i) =>
+        URL_REGEX.test(part) ? (
+          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-accent underline break-all hover:text-accent-bright">
+            {part}
+          </a>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
 }
 
 function MessageAttachments({ attachments }: { attachments: string | null }) {
@@ -646,7 +675,7 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                                 {msg.isStaff && <span className="rounded-sm bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-accent">Staff</span>}
                                 <span className="text-xs text-text-muted">{fmtDate(msg.createdAt)}</span>
                               </div>
-                              {msg.content && <p className="whitespace-pre-wrap text-sm text-text-secondary">{msg.content}</p>}
+                              {msg.content && <p className="whitespace-pre-wrap text-sm text-text-secondary"><Linkify text={msg.content} /></p>}
                               <MessageAttachments attachments={msg.attachments} />
                             </div>
                           ))}

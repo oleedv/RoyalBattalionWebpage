@@ -61,9 +61,10 @@ const WARN_TEMPLATES = [
 ];
 
 export default function LiveServerPage() {
-  const { apiToken, hasPermission } = usePermissions();
+  const { apiToken, hasPermission, permissions } = usePermissions();
   const canView = hasPermission("view:live-server") || hasPermission("manage:live-server");
   const canManage = hasPermission("manage:live-server");
+  const isDeveloper = permissions.includes("developer");
   const canClanMove = hasPermission("manage:clan-move");
   const canRandomize = hasPermission("manage:randomize");
 
@@ -462,6 +463,12 @@ export default function LiveServerPage() {
     sendAction({ action: "cancelrandomize" });
   }
 
+  function handleTestWarn() {
+    const eosId = prompt("Enter EOS ID to warn:");
+    if (!eosId?.trim()) return;
+    sendAction({ action: "testwarn", eosId: eosId.trim() });
+  }
+
   function isCommander(player: Player): boolean {
     return typeof player.role === "string" && player.role.includes("_Cmd_");
   }
@@ -767,6 +774,14 @@ export default function LiveServerPage() {
                 </button>
               )}
             </>
+          )}
+          {isDeveloper && (
+            <button
+              onClick={handleTestWarn}
+              className="rounded-sm border border-yellow-500/30 bg-yellow-500/5 px-3 py-1.5 text-xs font-medium text-yellow-400 transition-colors hover:bg-yellow-500/15"
+            >
+              Test Warn
+            </button>
           )}
         </div>
       )}

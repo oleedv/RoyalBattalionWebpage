@@ -452,6 +452,20 @@ async function handleAdminAction(
         break;
       }
 
+      case "testwarn": {
+        if (!ws.data.permissions.includes("developer")) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Developer only" }));
+          return;
+        }
+        if (!msg.eosId || typeof msg.eosId !== "string") {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "eosId required" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "warn", msg.eosId, "Line 1\n\nLine after empty row\n\n\nTwo empty rows above\nNo gap here");
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "testwarn" }));
+        break;
+      }
+
       default:
         ws.send(JSON.stringify({ type: "action_result", success: false, error: `Unknown action: ${msg.action}` }));
     }

@@ -375,6 +375,7 @@ function EntriesTab({
   const [search, setSearch] = useState("");
   const [filterClan, setFilterClan] = useState("");
   const [filterGroup, setFilterGroup] = useState("");
+  const [showExpired, setShowExpired] = useState(false);
 
   // Add form
   const [newSteamId, setNewSteamId] = useState("");
@@ -822,6 +823,7 @@ function EntriesTab({
   }
 
   const filtered = entries.filter((e) => {
+    if (!showExpired && e.expiresAt && new Date(e.expiresAt) < new Date()) return false;
     if (filterClan && e.clanId !== filterClan) return false;
     if (filterGroup && e.groupId !== filterGroup) return false;
     if (search) {
@@ -868,6 +870,16 @@ function EntriesTab({
             <option key={g.id} value={g.id}>{g.name}</option>
           ))}
         </select>
+        <button
+          onClick={() => setShowExpired((v) => !v)}
+          className={`rounded-sm border px-4 py-2 text-sm transition-colors ${
+            showExpired
+              ? "border-accent/40 bg-accent/10 text-accent"
+              : "border-border bg-bg-tertiary text-text-secondary hover:border-accent/40 hover:text-text-primary"
+          }`}
+        >
+          {showExpired ? "Showing Expired" : "Show Expired"}
+        </button>
         {canManage && (
           <button
             onClick={toggleBulkMode}

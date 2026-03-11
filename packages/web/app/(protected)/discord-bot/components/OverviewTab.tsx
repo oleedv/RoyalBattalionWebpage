@@ -40,7 +40,7 @@ function ConnectionDot({ connected, label }: { connected: boolean; label: string
 
 function BotStatusBanner({ status }: { status: BotStatus }) {
   const heartbeatAge = Date.now() - new Date(status.lastHeartbeat).getTime();
-  const isStale = heartbeatAge > 2 * 60 * 1000;
+  const isStale = heartbeatAge > 3 * 60 * 1000;
   const effectiveStatus = isStale ? "offline" : status.status;
 
   const statusColors: Record<string, string> = {

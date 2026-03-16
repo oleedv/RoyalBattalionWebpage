@@ -361,7 +361,7 @@ class SquadJSSocketManager {
 
   private addConsoleEntry(state: ServerState, type: ConsoleEntry["type"], message: string) {
     state.consoleLog.push({ time: new Date().toISOString(), type, message });
-    if (state.consoleLog.length > 100) state.consoleLog = state.consoleLog.slice(-100);
+    if (state.consoleLog.length > 2000) state.consoleLog = state.consoleLog.slice(-2000);
   }
 
   private sampleMetric(state: ServerState) {
@@ -431,7 +431,7 @@ class SquadJSSocketManager {
           const msg = data as SquadJSChatMessage;
           msg.time = new Date().toISOString();
           state.chatLog.push(msg);
-          if (state.chatLog.length > 100) state.chatLog = state.chatLog.slice(-100);
+          if (state.chatLog.length > 2000) state.chatLog = state.chatLog.slice(-2000);
         }
         break;
       case "TICK_RATE":

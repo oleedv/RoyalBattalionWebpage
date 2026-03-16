@@ -126,6 +126,11 @@ export default function LiveServerPage() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const consoleEndRef = useRef<HTMLDivElement>(null);
+  const chatAutoScroll = useRef(true);
+  const consoleAutoScroll = useRef(true);
+  const consoleFilterRef = useRef<HTMLDivElement>(null);
+  const [chatSearch, setChatSearch] = useState("");
+  const [consoleSearch, setConsoleSearch] = useState("");
 
   // Refs for metric sampling interval (needs current values without re-creating interval)
   const serverInfoRef = useRef(serverInfo);
@@ -169,7 +174,7 @@ export default function LiveServerPage() {
         case "appendChat":
           setChatLog((prev) => {
             const next = [...prev, action.message];
-            return next.length > 100 ? next.slice(-100) : next;
+            return next.length > 5000 ? next.slice(-5000) : next;
           });
           break;
         case "setTickRate":
@@ -178,7 +183,7 @@ export default function LiveServerPage() {
         case "appendConsole":
           setConsoleLog((prev) => {
             const next = [...prev, { time: new Date().toISOString(), ...action.entry }];
-            return next.length > 200 ? next.slice(-200) : next;
+            return next.length > 5000 ? next.slice(-5000) : next;
           });
           break;
         case "requestClanRefresh":
@@ -319,15 +324,46 @@ export default function LiveServerPage() {
     return () => clearInterval(interval);
   }, [connected]);
 
-  // Auto-scroll chat & console (use container scrollTo to avoid pulling the page)
+  // Auto-scroll chat & console only when user is near bottom
   useEffect(() => {
+    if (!chatAutoScroll.current) return;
     const el = chatEndRef.current?.parentElement;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [chatLog]);
   useEffect(() => {
+    if (!consoleAutoScroll.current) return;
     const el = consoleEndRef.current?.parentElement;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [consoleLog]);
+
+  // Track scroll position to toggle auto-scroll
+  useEffect(() => {
+    const chatEl = chatEndRef.current?.parentElement;
+    const consoleEl = consoleEndRef.current?.parentElement;
+    function isNearBottom(el: HTMLElement, threshold = 50) {
+      return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    }
+    function onChatScroll() { if (chatEl) chatAutoScroll.current = isNearBottom(chatEl); }
+    function onConsoleScroll() { if (consoleEl) consoleAutoScroll.current = isNearBottom(consoleEl); }
+    chatEl?.addEventListener("scroll", onChatScroll);
+    consoleEl?.addEventListener("scroll", onConsoleScroll);
+    return () => {
+      chatEl?.removeEventListener("scroll", onChatScroll);
+      consoleEl?.removeEventListener("scroll", onConsoleScroll);
+    };
+  }, []);
+
+  // Close console filter on outside click
+  useEffect(() => {
+    if (!consoleFilterOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (consoleFilterRef.current && !consoleFilterRef.current.contains(e.target as Node)) {
+        setConsoleFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [consoleFilterOpen]);
 
   // Close demote dropdown on outside click
   useEffect(() => {
@@ -546,10 +582,9 @@ export default function LiveServerPage() {
     (p) => String(p.teamID) !== "1" && String(p.teamID) !== "2"
   );
 
-  const filteredChat =
-    chatFilter === "All"
-      ? chatLog
-      : chatLog.filter((m) => m.chat === chatFilter || m.chat === "__DIVIDER__");
+  const filteredChat = chatLog
+    .filter((m) => chatFilter === "All" || m.chat === chatFilter || m.chat === "__DIVIDER__")
+    .filter((m) => !chatSearch || m.chat === "__DIVIDER__" || m.name?.toLowerCase().includes(chatSearch.toLowerCase()) || m.message?.toLowerCase().includes(chatSearch.toLowerCase()));
 
   // Compute clans that can be moved to a target team
   function getMovableClans(targetTeam: string): { key: string; tag: string; count: number; team1: number; team2: number }[] {
@@ -1109,6 +1144,15 @@ export default function LiveServerPage() {
                 )}
               </div>
             </div>
+            <div className="border-b border-border px-4 py-1.5">
+              <input
+                type="text"
+                value={chatSearch}
+                onChange={(e) => setChatSearch(e.target.value)}
+                placeholder="Search chat..."
+                className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+              />
+            </div>
 
             <div className="flex-1 overflow-auto px-4 py-2">
               {filteredChat.length === 0 ? (
@@ -1169,52 +1213,73 @@ export default function LiveServerPage() {
                   Console
                 </h2>
                 <div className="flex items-center gap-2">
-                  <div className="relative">
+                  <div className="relative" ref={consoleFilterRef}>
                     <button
                       onClick={() => setConsoleFilterOpen((v) => !v)}
-                      className="flex items-center gap-1 text-[10px] text-text-muted transition-colors hover:text-text-secondary"
+                      className="flex items-center gap-1 rounded-sm border border-border px-2 py-0.5 text-xs text-text-muted transition-colors hover:border-accent/30 hover:text-text-secondary"
                     >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
                       Filters
                       {consoleFilters.size < CONSOLE_TYPES.length && (
-                        <span className="rounded-sm bg-accent/15 px-1 text-[9px] font-bold text-accent">
+                        <span className="rounded-sm bg-accent/15 px-1 text-xs font-bold text-accent">
                           {consoleFilters.size}/{CONSOLE_TYPES.length}
                         </span>
                       )}
                     </button>
                     {consoleFilterOpen && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setConsoleFilterOpen(false)}
-                        />
-                        <div className="absolute right-0 top-full z-50 mt-1 rounded-sm border border-border bg-bg-secondary p-2 shadow-lg">
-                          <div className="flex flex-wrap gap-1" style={{ width: "220px" }}>
-                            {CONSOLE_TYPES.map((t) => (
-                              <button
-                                key={t}
-                                onClick={() => toggleConsoleFilter(t)}
-                                className={`rounded-sm px-1.5 py-0.5 text-[9px] font-medium tracking-wide transition-colors ${
-                                  consoleFilters.has(t)
-                                    ? "bg-accent/10 text-accent"
-                                    : "text-text-muted/50 line-through"
-                                }`}
-                              >
-                                {t}
-                              </button>
-                            ))}
+                      <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-sm border border-border bg-bg-secondary p-3 shadow-lg">
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-text-primary">Console Filters</span>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => { setConsoleFilters(new Set(CONSOLE_TYPES)); localStorage.setItem("rb-console-filters", JSON.stringify(CONSOLE_TYPES)); }}
+                              className="rounded-sm border border-border px-1.5 py-0.5 text-xs text-text-muted transition-colors hover:text-text-secondary"
+                            >
+                              All
+                            </button>
+                            <button
+                              onClick={() => { setConsoleFilters(new Set()); localStorage.setItem("rb-console-filters", "[]"); }}
+                              className="rounded-sm border border-border px-1.5 py-0.5 text-xs text-text-muted transition-colors hover:text-text-secondary"
+                            >
+                              None
+                            </button>
                           </div>
                         </div>
-                      </>
+                        <div className="flex flex-wrap gap-1">
+                          {CONSOLE_TYPES.map((t) => (
+                            <button
+                              key={t}
+                              onClick={() => toggleConsoleFilter(t)}
+                              className={`rounded-sm border px-1.5 py-0.5 text-xs font-medium tracking-wide transition-colors ${
+                                consoleFilters.has(t)
+                                  ? "border-accent/30 bg-accent/10 text-accent"
+                                  : "border-border text-text-muted/50 line-through"
+                              }`}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     )}
                   </div>
                   <button
                     onClick={() => setConsoleLog([])}
-                    className="text-[10px] text-text-muted transition-colors hover:text-text-secondary"
+                    className="rounded-sm border border-border px-2 py-0.5 text-xs text-text-muted transition-colors hover:border-accent/30 hover:text-text-secondary"
                   >
                     Clear
                   </button>
                 </div>
               </div>
+            </div>
+            <div className="border-b border-border px-4 py-1.5">
+              <input
+                type="text"
+                value={consoleSearch}
+                onChange={(e) => setConsoleSearch(e.target.value)}
+                placeholder="Search console..."
+                className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+              />
             </div>
             <div className="flex-1 overflow-auto px-4 py-2 font-mono">
               {consoleLog.length === 0 ? (
@@ -1224,6 +1289,7 @@ export default function LiveServerPage() {
               ) : (
                 consoleLog
                   .filter((e) => consoleFilters.has(e.type))
+                  .filter((e) => !consoleSearch || e.message.toLowerCase().includes(consoleSearch.toLowerCase()))
                   .map((entry, i) => (
                   <div key={i} className="mb-1 text-xs">
                     <span className="text-text-muted">

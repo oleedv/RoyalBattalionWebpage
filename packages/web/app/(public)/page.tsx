@@ -201,15 +201,15 @@ export default function HomePage() {
               </svg>
               Join Discord
             </a>
-            <a
-              href="steam://connect/37.153.157.204:27050"
+            <Link
+              href="/server"
               className="glow-button group relative inline-flex items-center gap-2.5 rounded-sm border border-accent bg-accent px-8 py-3.5 text-sm font-semibold tracking-wide text-bg-primary transition-all hover:bg-accent-bright hover:shadow-[0_0_30px_rgba(200,168,78,0.3)]"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
                 <path fillRule="evenodd" d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm6.39-2.908a.75.75 0 01.766.027l3.5 2.25a.75.75 0 010 1.262l-3.5 2.25A.75.75 0 018 12.25v-4.5a.75.75 0 01.39-.658z" clipRule="evenodd" />
               </svg>
               Connect to Server
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -247,8 +247,8 @@ export default function HomePage() {
 
           <div className="flex flex-col items-center gap-5 sm:flex-row sm:justify-center">
             {/* Main Server Button */}
-            <a
-              href="steam://connect/37.153.157.204:27050"
+            <Link
+              href="/server"
               className="facet-border group relative flex w-full max-w-xs flex-col items-center gap-3 rounded-sm bg-bg-card px-8 py-7 transition-all hover:bg-bg-card-hover hover:shadow-[0_0_40px_rgba(200,168,78,0.08)]"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-full border border-accent/20 bg-accent/10">
@@ -266,11 +266,11 @@ export default function HomePage() {
                 </svg>
                 Connect via Steam
               </div>
-            </a>
+            </Link>
 
             {/* Battle Server Button */}
-            <a
-              href="steam://connect/37.153.157.204:27060"
+            <Link
+              href="/server"
               className="facet-border group relative flex w-full max-w-xs flex-col items-center gap-3 rounded-sm bg-bg-card px-8 py-7 transition-all hover:bg-bg-card-hover hover:shadow-[0_0_40px_rgba(200,168,78,0.08)]"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-full border border-accent/20 bg-accent/10">
@@ -289,7 +289,7 @@ export default function HomePage() {
                 </svg>
                 Connect via Steam
               </div>
-            </a>
+            </Link>
           </div>
         </div>
       </section>

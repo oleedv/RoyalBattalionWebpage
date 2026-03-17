@@ -804,6 +804,81 @@ export function getSwapQueueHistory(
   });
 }
 
+// Lobby Service (public API - direct to lobby service)
+const LOBBY_SERVICE_URL =
+  process.env.NEXT_PUBLIC_LOBBY_SERVICE_URL || "https://lobby.royalbattalion.xyz";
+
+export async function createLobby(
+  serverName: string
+): Promise<ApiResponse<{ url: string; serverId: string; serverName: string }>> {
+  try {
+    const res = await fetch(
+      `${LOBBY_SERVICE_URL}/api/v1/lobby/${encodeURIComponent(serverName)}`,
+      { method: "POST" }
+    );
+    return await res.json();
+  } catch {
+    return { success: false, error: "Lobby service unavailable" };
+  }
+}
+
+// Lobby Monitoring (proxied through API)
+export interface LobbyStats {
+  stats: {
+    callsThisMinute: number;
+    callsThisHour: number;
+    callsToday: number;
+    totalCalls: number;
+    totalErrors: number;
+    rateLimitHits: number;
+    errorRate: number;
+    avgLatencyMs: number;
+  };
+  recentCalls: {
+    timestamp: number;
+    endpoint: string;
+    callerIp: string;
+    serverRequested: string;
+    status: number;
+    latencyMs: number;
+  }[];
+}
+
+export interface LobbyHealth {
+  steam: { connected: boolean };
+  eos: { tokenValid: boolean; tokenTTLSeconds: number };
+  discovery: {
+    serverCount: number;
+    lastRefresh: string | null;
+  };
+  service: { uptime: number; buildId: string };
+}
+
+export function getLobbyStats(
+  token: string
+): Promise<ApiResponse<LobbyStats>> {
+  return request<LobbyStats>("/lobby/stats", {
+    headers: authHeaders(token),
+  });
+}
+
+export function getLobbyHealth(
+  token: string
+): Promise<ApiResponse<LobbyHealth>> {
+  return request<LobbyHealth>("/lobby/health", {
+    headers: authHeaders(token),
+  });
+}
+
+export function reconnectLobbyServiceSteam(
+  token: string
+): Promise<ApiResponse<void>> {
+  return request<void>("/lobby/steam/reconnect", {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
 // Playtime
 export function getPlaytime(
   token: string,

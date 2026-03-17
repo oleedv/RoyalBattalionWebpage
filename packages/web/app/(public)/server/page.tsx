@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { NavAuthButton } from "@/components/nav-auth-button";
-import { getServerStatus } from "@/lib/api-client";
+import { getServerStatus, createLobby } from "@/lib/api-client";
 import type { ServerStatus } from "@/lib/api-client";
 
 const SERVERS = [
   {
     label: "Main Server",
     displayName: "Royal Battalion",
-    connectUrl: "steam://connect/37.153.157.204:27050",
+    lobbyName: "Royal Battalion",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-6 w-6 text-accent">
         <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7" />
@@ -21,7 +21,7 @@ const SERVERS = [
   {
     label: "Battle Server",
     displayName: "RB Battle",
-    connectUrl: "steam://connect/37.153.157.204:27060",
+    lobbyName: "RB Battle",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-6 w-6 text-accent">
         <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
@@ -46,7 +46,26 @@ function ServerCard({
   status: ServerStatus | null;
 }) {
   const [showPlayers, setShowPlayers] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const isOnline = status?.status === "online";
+
+  const handleJoin = useCallback(async () => {
+    setJoining(true);
+    setJoinError(null);
+    try {
+      const res = await createLobby(config.lobbyName);
+      if (res.success && res.data) {
+        window.location.href = res.data.url;
+      } else {
+        setJoinError("Join service is currently unavailable, please try again later");
+      }
+    } catch {
+      setJoinError("Join service is currently unavailable, please try again later");
+    } finally {
+      setJoining(false);
+    }
+  }, [config.lobbyName]);
 
   return (
     <div className="facet-border w-full rounded-sm bg-bg-card">
@@ -165,15 +184,31 @@ function ServerCard({
 
       {/* Connect button */}
       <div className="border-t border-border/50 px-6 py-4">
-        <a
-          href={config.connectUrl}
-          className="inline-flex items-center gap-2 rounded-sm border border-accent/30 bg-accent/10 px-6 py-2.5 text-sm font-semibold tracking-wide text-accent transition-colors hover:bg-accent/20 hover:border-accent/50"
+        <button
+          onClick={handleJoin}
+          disabled={joining}
+          className="inline-flex items-center gap-2 rounded-sm border border-accent/30 bg-accent/10 px-6 py-2.5 text-sm font-semibold tracking-wide text-accent transition-colors hover:bg-accent/20 hover:border-accent/50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-            <path fillRule="evenodd" d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm6.39-2.908a.75.75 0 01.766.027l3.5 2.25a.75.75 0 010 1.262l-3.5 2.25A.75.75 0 018 12.25v-4.5a.75.75 0 01.39-.658z" clipRule="evenodd" />
-          </svg>
-          Connect via Steam
-        </a>
+          {joining ? (
+            <>
+              <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Creating lobby...
+            </>
+          ) : (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                <path fillRule="evenodd" d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm6.39-2.908a.75.75 0 01.766.027l3.5 2.25a.75.75 0 010 1.262l-3.5 2.25A.75.75 0 018 12.25v-4.5a.75.75 0 01.39-.658z" clipRule="evenodd" />
+              </svg>
+              Join Server
+            </>
+          )}
+        </button>
+        {joinError && (
+          <p className="mt-2 text-sm text-danger">{joinError}</p>
+        )}
       </div>
     </div>
   );

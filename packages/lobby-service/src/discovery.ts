@@ -3,6 +3,7 @@ import { getEosToken } from "./auth"
 
 const EOS_MATCHMAKING_URL =
   "https://api.epicgames.dev/matchmaking/v1/5dee4062a90b42cd98fcad618b6636c2/filter"
+const BATTLEMETRICS_SERVER_ID = "27560507"
 
 interface ServerSession {
   sessionId: string
@@ -17,6 +18,30 @@ interface ServerSession {
 const serverCache = new Map<string, ServerSession>()
 let lastRefresh = 0
 const REFRESH_INTERVAL = 30_000 // 30 seconds
+
+// Dynamic build ID from BattleMetrics
+let squadBuildId: string | null = null
+
+export function getSquadBuildId(): string {
+  return squadBuildId || process.env.SQUAD_BUILD_ID || "0"
+}
+
+async function fetchBuildId(): Promise<void> {
+  try {
+    const res = await fetch(
+      `https://api.battlemetrics.com/servers/${BATTLEMETRICS_SERVER_ID}`
+    )
+    if (!res.ok) return
+    const json = await res.json()
+    const version = json.data?.attributes?.details?.version
+    if (version && version !== squadBuildId) {
+      squadBuildId = version
+      console.log(`[discovery] Squad build: ${version}`)
+    }
+  } catch {
+    // Silent - env var fallback still works
+  }
+}
 
 // Known server name mappings
 const SERVER_ALIASES: Record<string, string[]> = {
@@ -62,6 +87,8 @@ export function findServerSession(
 }
 
 export async function refreshServerDiscovery(): Promise<void> {
+  await fetchBuildId()
+
   const token = getEosToken()
   if (!token) {
     console.warn("[discovery] No EOS token available, skipping refresh")

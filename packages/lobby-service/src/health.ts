@@ -1,5 +1,9 @@
 import { isSteamConnected, isEosTokenValid, getEosTokenTTL } from "./auth"
-import { getCachedServers, getLastRefreshTime } from "./discovery"
+import {
+  getCachedServers,
+  getLastRefreshTime,
+  getSquadBuildId,
+} from "./discovery"
 
 const startTime = Date.now()
 
@@ -20,7 +24,7 @@ export function getHealthStatus() {
     },
     service: {
       uptime: Math.floor((Date.now() - startTime) / 1000),
-      buildId: process.env.SQUAD_BUILD_ID || "not set",
+      buildId: getSquadBuildId(),
     },
   }
 }

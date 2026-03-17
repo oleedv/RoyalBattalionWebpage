@@ -4,6 +4,12 @@ import axios from "axios"
 const EOS_TOKEN_URL = "https://api.epicgames.dev/auth/v1/oauth/token"
 const DEPLOYMENT_ID = "5dee4062a90b42cd98fcad618b6636c2"
 
+// Squad game client OAuth credentials (public, used by every game client)
+// Source: https://github.com/gamedig/node-gamedig/blob/main/protocols/squad.js
+const EOS_CLIENT_ID = "xyza7891J7d3GU8ZIwCoC5xdBsdoqVWA"
+const EOS_CLIENT_SECRET = "4SLVBqAm09q776SIlQRTD6moM/bnGAWhDSqOxJAIS0s"
+const EOS_BASIC_AUTH = btoa(`${EOS_CLIENT_ID}:${EOS_CLIENT_SECRET}`)
+
 let steamClient: SteamUser | null = null
 let eosToken: string | null = null
 let eosTokenExpiry = 0
@@ -33,9 +39,6 @@ async function exchangeForEosToken(): Promise<void> {
     throw new Error("Steam client not connected")
   }
 
-  const basicAuth = process.env.EOS_BASIC_AUTH
-  if (!basicAuth) throw new Error("EOS_BASIC_AUTH not configured")
-
   // Get a session ticket for Squad (AppID 393380)
   const ticket = await new Promise<Buffer>((resolve, reject) => {
     steamClient!.createAuthSessionTicket(393380, (err, sessionTicket) => {
@@ -56,7 +59,7 @@ async function exchangeForEosToken(): Promise<void> {
     }).toString(),
     {
       headers: {
-        Authorization: `Basic ${basicAuth}`,
+        Authorization: `Basic ${EOS_BASIC_AUTH}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
     }

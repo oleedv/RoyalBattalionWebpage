@@ -1,5 +1,5 @@
 import steamworks from "steamworks.js"
-import { findServerSession } from "./discovery"
+import { findServerSession, getSquadBuildId } from "./discovery"
 
 const SQUAD_APP_ID = 393380
 const LOBBY_LIFETIME_MS = 60_000 // Auto-cleanup after 60s
@@ -33,7 +33,7 @@ export async function createLobby(
     throw new Error(`Server "${serverName}" not found in discovery cache`)
   }
 
-  const buildId = process.env.SQUAD_BUILD_ID || "0"
+  const buildId = getSquadBuildId()
 
   // Create a friends-only lobby
   const lobbyId = await client.matchmaking.createLobby(

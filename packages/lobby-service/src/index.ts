@@ -147,7 +147,7 @@ app.get("/internal/stats", (c, next) => requireInternalKey(c, next), (c) => {
   })
 })
 
-app.get("/internal/health", (c, next) => requireInternalKey(c, next), (c) => {
+app.get("/internal/health", (c) => {
   return c.json({ success: true, data: getHealthStatus() })
 })
 

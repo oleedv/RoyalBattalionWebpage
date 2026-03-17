@@ -11,6 +11,11 @@ const EOS_CLIENT_SECRET = "4SLVBqAm09q776SIlQRTD6moM/bnGAWhDSqOxJAIS0s"
 const EOS_BASIC_AUTH = btoa(`${EOS_CLIENT_ID}:${EOS_CLIENT_SECRET}`)
 
 let steamClient: SteamUser | null = null
+
+export function getSteamClient(): SteamUser | null {
+  return steamClient
+}
+
 let eosToken: string | null = null
 let eosTokenExpiry = 0
 let steamConnected = false

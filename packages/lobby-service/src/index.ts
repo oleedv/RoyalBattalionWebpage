@@ -1,8 +1,9 @@
 import { Hono } from "hono"
 import { cors } from "hono/cors"
+import { serve } from "@hono/node-server"
 import { connectSteam, reconnectSteam } from "./auth"
 import { startDiscoveryLoop, getCachedServers } from "./discovery"
-import { createLobby, initSteamworks } from "./lobby"
+import { createLobby } from "./lobby"
 import { apiCallStore } from "./store"
 import { getHealthStatus } from "./health"
 
@@ -166,9 +167,6 @@ app.post("/internal/steam/reconnect", (c, next) => requireInternalKey(c, next), 
 async function start() {
   console.log(`[lobby-service] Starting on port ${PORT}...`)
 
-  // Init steamworks.js for lobby creation
-  initSteamworks()
-
   // Connect to Steam
   try {
     await connectSteam()
@@ -188,7 +186,4 @@ async function start() {
 
 start()
 
-export default {
-  port: PORT,
-  fetch: app.fetch,
-}
+serve({ fetch: app.fetch, port: PORT })

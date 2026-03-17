@@ -804,22 +804,14 @@ export function getSwapQueueHistory(
   });
 }
 
-// Lobby Service (public API - direct to lobby service)
-const LOBBY_SERVICE_URL =
-  process.env.NEXT_PUBLIC_LOBBY_SERVICE_URL || "https://lobby.royalbattalion.xyz";
-
-export async function createLobby(
+// Lobby Service (proxied through API to avoid CORS)
+export function createLobby(
   serverName: string
 ): Promise<ApiResponse<{ url: string; serverId: string; serverName: string }>> {
-  try {
-    const res = await fetch(
-      `${LOBBY_SERVICE_URL}/api/v1/lobby/${encodeURIComponent(serverName)}`,
-      { method: "POST" }
-    );
-    return await res.json();
-  } catch {
-    return { success: false, error: "Lobby service unavailable" };
-  }
+  return request<{ url: string; serverId: string; serverName: string }>(
+    `/lobby/create/${encodeURIComponent(serverName)}`,
+    { method: "POST" }
+  );
 }
 
 // Lobby Monitoring (proxied through API)

@@ -3,6 +3,23 @@ import { authMiddleware } from "../middleware/auth"
 import { requirePermission } from "../middleware/permissions"
 
 const lobby = new Hono()
+
+// Public route - no auth required
+lobby.post("/create/:serverName", async (c) => {
+  const serverName = decodeURIComponent(c.req.param("serverName"))
+  try {
+    const res = await fetch(
+      `${LOBBY_SERVICE_URL}/api/v1/lobby/${encodeURIComponent(serverName)}`,
+      { method: "POST" }
+    )
+    const data = await res.json()
+    return c.json(data, res.status as 200)
+  } catch {
+    return c.json({ success: false, error: "Lobby service unreachable" }, 502)
+  }
+})
+
+// All other routes require auth
 lobby.use("*", authMiddleware, requirePermission("developer"))
 
 const LOBBY_SERVICE_URL =

@@ -6,6 +6,7 @@ import {
   createRole,
   updateRolePermissions,
   updateRoleWhitelistGrant,
+  updateRoleMemberRole,
   deleteRole,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
@@ -297,6 +298,9 @@ export default function RolesPage() {
   // Whitelist grant toggle
   const [togglingWl, setTogglingWl] = useState<string | null>(null);
 
+  // Member role toggle
+  const [togglingMember, setTogglingMember] = useState<string | null>(null);
+
   const canManage = hasPermission("manage:roles");
 
   useEffect(() => {
@@ -441,6 +445,26 @@ export default function RolesPage() {
       );
     }
     setTogglingWl(null);
+  }
+
+  async function toggleMemberRole(role: DiscordRole) {
+    if (!apiToken) return;
+    setTogglingMember(role.id);
+    const res = await updateRoleMemberRole(
+      apiToken,
+      role.id,
+      !role.isMemberRole
+    );
+    if (res.success) {
+      setRoles((prev) =>
+        prev.map((r) =>
+          r.id === role.id
+            ? { ...r, isMemberRole: !r.isMemberRole }
+            : r
+        )
+      );
+    }
+    setTogglingMember(null);
   }
 
   async function handleDelete(id: string) {
@@ -706,6 +730,12 @@ export default function RolesPage() {
                             <span className="text-success">Grants Whitelist</span>
                           </>
                         )}
+                        {role.isMemberRole && (
+                          <>
+                            <span className="text-text-muted/40">|</span>
+                            <span className="text-accent">Member Role</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -741,41 +771,75 @@ export default function RolesPage() {
                 {/* Expanded: permissions + actions */}
                 {isExpanded && (
                   <>
-                    {/* Whitelist grant toggle + Save/Discard */}
+                    {/* Role toggles + Save/Discard */}
                     {canManage && (
                       <div className="flex items-center justify-between border-t border-border/50 px-5 py-3">
-                        <button
-                          onClick={() => toggleWhitelistGrant(role)}
-                          disabled={togglingWl === role.id}
-                          className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide transition-all"
-                        >
-                          <span
-                            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                              role.grantsWhitelist
-                                ? "bg-success"
-                                : "bg-text-muted/30"
-                            }`}
+                        <div className="flex items-center gap-4">
+                          <button
+                            onClick={() => toggleWhitelistGrant(role)}
+                            disabled={togglingWl === role.id}
+                            className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide transition-all"
                           >
                             <span
-                              className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
                                 role.grantsWhitelist
-                                  ? "translate-x-[18px]"
-                                  : "translate-x-[3px]"
+                                  ? "bg-success"
+                                  : "bg-text-muted/30"
                               }`}
-                            />
-                          </span>
-                          <span
-                            className={
-                              role.grantsWhitelist
-                                ? "text-success"
-                                : "text-text-muted"
-                            }
+                            >
+                              <span
+                                className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                                  role.grantsWhitelist
+                                    ? "translate-x-[18px]"
+                                    : "translate-x-[3px]"
+                                }`}
+                              />
+                            </span>
+                            <span
+                              className={
+                                role.grantsWhitelist
+                                  ? "text-success"
+                                  : "text-text-muted"
+                              }
+                            >
+                              {role.grantsWhitelist
+                                ? "Grants Whitelist"
+                                : "No Whitelist"}
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => toggleMemberRole(role)}
+                            disabled={togglingMember === role.id}
+                            className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide transition-all"
                           >
-                            {role.grantsWhitelist
-                              ? "Grants Whitelist"
-                              : "No Whitelist"}
-                          </span>
-                        </button>
+                            <span
+                              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                                role.isMemberRole
+                                  ? "bg-accent"
+                                  : "bg-text-muted/30"
+                              }`}
+                            >
+                              <span
+                                className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                                  role.isMemberRole
+                                    ? "translate-x-[18px]"
+                                    : "translate-x-[3px]"
+                                }`}
+                              />
+                            </span>
+                            <span
+                              className={
+                                role.isMemberRole
+                                  ? "text-accent"
+                                  : "text-text-muted"
+                              }
+                            >
+                              {role.isMemberRole
+                                ? "Member Role"
+                                : "Not Member"}
+                            </span>
+                          </button>
+                        </div>
                         {changed && (
                           <div className="flex items-center gap-2">
                             <button

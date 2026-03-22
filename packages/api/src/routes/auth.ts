@@ -60,11 +60,13 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
       update: {
         discordName: discordUser.username,
         avatarUrl,
+        hasLoggedIn: true,
       },
       create: {
         discordId: discordUser.id,
         discordName: discordUser.username,
         avatarUrl,
+        hasLoggedIn: true,
       },
     });
 

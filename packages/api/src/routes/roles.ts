@@ -36,6 +36,7 @@ roles.get("/", async (c) => {
     name: r.name,
     permissions: r.permissions.map((p) => p.permission as Permission),
     grantsWhitelist: r.grantsWhitelist,
+    isMemberRole: r.isMemberRole,
   }));
 
   return success(c, result);
@@ -62,6 +63,7 @@ roles.post("/", zValidator("json", createRoleSchema), async (c) => {
       name: role.name,
       permissions: role.permissions.map((p) => p.permission as Permission),
       grantsWhitelist: role.grantsWhitelist,
+      isMemberRole: role.isMemberRole,
     };
 
     audit(c, "role.create", "DiscordRole", role.id, { name, discordRoleId, permissions });
@@ -118,6 +120,26 @@ roles.put("/:id/whitelist-grant", zValidator("json", whitelistGrantSchema), asyn
   });
 
   audit(c, "role.update_whitelist_grant", "DiscordRole", id, { name: existing.name, grantsWhitelist });
+
+  return success(c, { updated: true as const });
+});
+
+const memberRoleSchema = z.object({
+  isMemberRole: z.boolean(),
+});
+
+roles.put("/:id/member-role", zValidator("json", memberRoleSchema), async (c) => {
+  const id = c.req.param("id");
+  const { isMemberRole } = c.req.valid("json");
+
+  const existing = await findOrThrow(prisma.discordRole, { id }, "Role");
+
+  await prisma.discordRole.update({
+    where: { id },
+    data: { isMemberRole },
+  });
+
+  audit(c, "role.update_member_role", "DiscordRole", id, { name: existing.name, isMemberRole });
 
   return success(c, { updated: true as const });
 });

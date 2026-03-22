@@ -27,12 +27,12 @@ export async function bootstrap() {
   // Sync Discord roles for all users on startup and every 2 minutes
   if (env.DISCORD_BOT_TOKEN) {
     syncAllUserRoles()
-      .then((n) => logger.info("role-sync", `Initial sync: ${n} users updated`))
+      .then(({ updated, created }) => logger.info("role-sync", `Initial sync: ${updated} updated, ${created} created`))
       .catch((err) => logger.error("role-sync", "Initial role sync failed", err));
     setInterval(
       () =>
         syncAllUserRoles()
-          .then((n) => { if (n > 0) logger.info("role-sync", `${n} users updated`); })
+          .then(({ updated, created }) => { if (updated > 0 || created > 0) logger.info("role-sync", `${updated} updated, ${created} created`); })
           .catch((err) => logger.error("role-sync", "Role sync failed", err)),
       2 * 60 * 1000
     );

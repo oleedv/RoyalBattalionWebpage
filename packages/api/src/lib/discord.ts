@@ -58,15 +58,15 @@ export async function fetchGuildRoles(accessToken: string, guildId: string) {
 }
 
 interface GuildMember {
-  user?: { id: string; username: string };
+  user?: { id: string; username: string; avatar: string | null };
   roles: string[];
 }
 
 export async function fetchAllGuildMembers(
   botToken: string,
   guildId: string
-): Promise<{ discordId: string; roles: string[] }[]> {
-  const members: { discordId: string; roles: string[] }[] = [];
+): Promise<{ discordId: string; username: string; avatar: string | null; roles: string[] }[]> {
+  const members: { discordId: string; username: string; avatar: string | null; roles: string[] }[] = [];
   let after = "0";
 
   logger.info("discord", `Fetching all guild members for guild ${guildId} using bot token`);
@@ -90,7 +90,12 @@ export async function fetchAllGuildMembers(
 
     for (const m of batch) {
       if (m.user) {
-        members.push({ discordId: m.user.id, roles: m.roles });
+        members.push({
+          discordId: m.user.id,
+          username: m.user.username,
+          avatar: m.user.avatar,
+          roles: m.roles,
+        });
       }
     }
 

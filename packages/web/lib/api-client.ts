@@ -232,6 +232,18 @@ export function updateRoleWhitelistGrant(
   });
 }
 
+export function updateRoleMemberRole(
+  token: string,
+  id: string,
+  isMemberRole: boolean,
+): Promise<ApiResponse<{ updated: true }>> {
+  return request<{ updated: true }>(`/roles/${id}/member-role`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify({ isMemberRole }),
+  });
+}
+
 // Users
 const usersClient = createCrudClient<UserWithRolesAndComments>("/users");
 export const getUsers = usersClient.getAll;
@@ -274,10 +286,45 @@ export function deleteMemberComment(
 
 export function syncUserRoles(
   token: string
-): Promise<ApiResponse<{ updated: number }>> {
-  return request<{ updated: number }>("/users/sync-roles", {
+): Promise<ApiResponse<{ updated: number; created: number }>> {
+  return request<{ updated: number; created: number }>("/users/sync-roles", {
     method: "POST",
     headers: authHeaders(token),
+  });
+}
+
+export function bulkUpdateMembers(
+  token: string,
+  ids: string[],
+  data: { country?: string; membershipDate?: string | null },
+): Promise<ApiResponse<{ updated: number }>> {
+  return request<{ updated: number }>("/users/bulk-update", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ ids, data }),
+  });
+}
+
+export function bulkDeleteMembers(
+  token: string,
+  ids: string[],
+): Promise<ApiResponse<{ deleted: number }>> {
+  return request<{ deleted: number }>("/users/bulk-delete", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ ids }),
+  });
+}
+
+export function bulkCommentMembers(
+  token: string,
+  ids: string[],
+  text: string,
+): Promise<ApiResponse<{ commented: number }>> {
+  return request<{ commented: number }>("/users/bulk-comment", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ ids, text }),
   });
 }
 
@@ -833,6 +880,7 @@ export interface LobbyStats {
     serverRequested: string;
     status: number;
     latencyMs: number;
+    error?: string;
   }[];
 }
 

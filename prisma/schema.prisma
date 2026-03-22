@@ -17,6 +17,7 @@ model User {
   country        String?
   membershipDate DateTime?
   dateOfBirth    DateTime?
+  hasLoggedIn    Boolean         @default(false)
   roles          UserRole[]
   comments       MemberComment[]
   createdAt      DateTime        @default(now())
@@ -40,6 +41,7 @@ model DiscordRole {
   discordRoleId   String           @unique
   name            String
   grantsWhitelist Boolean          @default(false)
+  isMemberRole    Boolean          @default(false)
   permissions     RolePermission[]
   users           UserRole[]
 }

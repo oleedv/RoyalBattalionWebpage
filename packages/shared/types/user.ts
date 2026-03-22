@@ -8,6 +8,7 @@ export interface User {
   country: string | null;
   membershipDate: string | null;
   dateOfBirth: string | null;
+  hasLoggedIn: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -33,4 +34,8 @@ export interface UserWithRolesAndComments extends UserWithRoles {
   comments: MemberComment[];
   activity30: number;
   activity90: number;
+  playtime30: number;
+  playtime90: number;
+  seed30: number;
+  seed90: number;
 }

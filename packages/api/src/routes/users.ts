@@ -48,6 +48,7 @@ function mapUser(u: any): UserWithRoles {
     country: u.country ?? null,
     membershipDate: u.membershipDate?.toISOString() ?? null,
     dateOfBirth: u.dateOfBirth?.toISOString() ?? null,
+    hasLoggedIn: u.hasLoggedIn ?? false,
     createdAt: u.createdAt.toISOString(),
     updatedAt: u.updatedAt.toISOString(),
     roles: u.roles.map((ur: any) => ({
@@ -72,13 +73,19 @@ function mapComment(c: any): MemberComment {
 function mapUserWithComments(
   u: any,
   activityMap: Map<string, { activity30: number; activity90: number }>,
+  playtimeMap: Map<string, { playtime30: number; playtime90: number; seed30: number; seed90: number }>,
 ): UserWithRolesAndComments {
   const activity = (u.steamId && activityMap.get(u.steamId)) || { activity30: 0, activity90: 0 };
+  const playtime = (u.steamId && playtimeMap.get(u.steamId)) || { playtime30: 0, playtime90: 0, seed30: 0, seed90: 0 };
   return {
     ...mapUser(u),
     comments: (u.comments || []).map(mapComment),
     activity30: activity.activity30,
     activity90: activity.activity90,
+    playtime30: playtime.playtime30,
+    playtime90: playtime.playtime90,
+    seed30: playtime.seed30,
+    seed90: playtime.seed90,
   };
 }
 
@@ -116,23 +123,152 @@ async function fetchActivityMap(): Promise<Map<string, { activity30: number; act
   return map;
 }
 
+interface PlaytimeRow extends RowDataPacket {
+  steam_id: string;
+  session30: number;
+  session90: number;
+  seed30: number;
+  seed90: number;
+}
+
+async function fetchBulkPlaytimeMap(): Promise<Map<string, { playtime30: number; playtime90: number; seed30: number; seed90: number }>> {
+  const map = new Map<string, { playtime30: number; playtime90: number; seed30: number; seed90: number }>();
+  try {
+    const pool = getSquadJSPool();
+    const [rows] = await pool.query<PlaytimeRow[]>(`
+      SELECT
+        p.steam_id,
+        COALESCE(SUM(CASE WHEN c.time >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN c.session_duration ELSE 0 END), 0) AS session30,
+        COALESCE(SUM(CASE WHEN c.time >= DATE_SUB(NOW(), INTERVAL 90 DAY) THEN c.session_duration ELSE 0 END), 0) AS session90,
+        COALESCE(SUM(CASE WHEN c.time >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN c.seed_duration ELSE 0 END), 0) AS seed30,
+        COALESCE(SUM(CASE WHEN c.time >= DATE_SUB(NOW(), INTERVAL 90 DAY) THEN c.seed_duration ELSE 0 END), 0) AS seed90
+      FROM squadjs_connections c
+      JOIN squadjs_players p ON p.id = c.player_id
+      WHERE c.event_type = 'leave'
+        AND c.time >= DATE_SUB(NOW(), INTERVAL 90 DAY)
+        AND p.steam_id IS NOT NULL
+        AND p.steam_id != ''
+      GROUP BY p.steam_id
+    `);
+    for (const row of rows) {
+      map.set(row.steam_id, {
+        playtime30: Math.round((Number(row.session30) / 3600) * 10) / 10,
+        playtime90: Math.round((Number(row.session90) / 3600) * 10) / 10,
+        seed30: Math.round((Number(row.seed30) / 3600) * 10) / 10,
+        seed90: Math.round((Number(row.seed90) / 3600) * 10) / 10,
+      });
+    }
+  } catch (err) {
+    logger.error("users", "Failed to fetch bulk playtime from SquadJS DB", err);
+  }
+  return map;
+}
+
 users.post("/sync-roles", authMiddleware, requirePermission("manage:members"), async (c) => {
   if (!env.DISCORD_BOT_TOKEN) {
     return fail(c, "DISCORD_BOT_TOKEN is not configured", 503);
   }
 
   try {
-    const updated = await syncAllUserRoles();
-    await audit(c, "member.sync_roles", "user", null, { updated });
-    return success(c, { updated });
+    const result = await syncAllUserRoles();
+    await audit(c, "member.sync_roles", "user", null, result);
+    return success(c, result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Sync failed";
     return fail(c, message, 500);
   }
 });
 
+// --- Bulk endpoints (must be registered BEFORE /:id routes) ---
+
+const bulkUpdateSchema = z.object({
+  ids: z.array(z.string()).min(1).max(500),
+  data: z.object({
+    country: z.string().max(100).optional(),
+    membershipDate: z.string().nullable().optional(),
+  }),
+});
+
+users.post("/bulk-update", authMiddleware, requirePermission("manage:members"), rateLimit(10), zValidator("json", bulkUpdateSchema), async (c) => {
+  const { ids, data } = c.req.valid("json");
+
+  const updateData: Record<string, unknown> = {};
+  if (data.country !== undefined) {
+    if (data.country) {
+      const result = validateCountry(data.country);
+      if (!result.valid) return fail(c, "Invalid country name", 400);
+      updateData.country = result.country;
+    } else {
+      updateData.country = null;
+    }
+  }
+  if (data.membershipDate !== undefined) {
+    updateData.membershipDate = data.membershipDate ? new Date(data.membershipDate) : null;
+  }
+
+  const result = await prisma.user.updateMany({
+    where: { id: { in: ids } },
+    data: updateData,
+  });
+
+  await audit(c, "member.bulk_update", "user", null, { count: result.count, changes: data });
+  return success(c, { updated: result.count });
+});
+
+const bulkDeleteSchema = z.object({
+  ids: z.array(z.string()).min(1).max(500),
+});
+
+users.post("/bulk-delete", authMiddleware, requirePermission("manage:members"), rateLimit(10), zValidator("json", bulkDeleteSchema), async (c) => {
+  const { ids } = c.req.valid("json");
+
+  const toDelete = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, discordName: true },
+  });
+
+  const result = await prisma.user.deleteMany({
+    where: { id: { in: ids } },
+  });
+
+  await audit(c, "member.bulk_delete", "user", null, {
+    count: result.count,
+    names: toDelete.map((u) => u.discordName),
+  });
+  return success(c, { deleted: result.count });
+});
+
+const bulkCommentSchema = z.object({
+  ids: z.array(z.string()).min(1).max(500),
+  text: z.string().min(1).max(2000),
+});
+
+users.post("/bulk-comment", authMiddleware, requirePermission("manage:members"), rateLimit(10), zValidator("json", bulkCommentSchema), async (c) => {
+  const { ids, text } = c.req.valid("json");
+  const authorId = c.get("userId") as string;
+
+  const author = await prisma.user.findUnique({
+    where: { id: authorId },
+    select: { discordName: true },
+  });
+
+  await prisma.memberComment.createMany({
+    data: ids.map((userId) => ({
+      userId,
+      authorId,
+      authorName: author?.discordName ?? "Unknown",
+      text,
+    })),
+  });
+
+  await audit(c, "member.bulk_comment", "user", null, { count: ids.length });
+  return success(c, { commented: ids.length });
+});
+
+// --- Standard CRUD ---
+
 users.get("/", authMiddleware, requirePermission("view:members", "manage:members"), async (c) => {
-  const [dbUsers, activityMap] = await Promise.all([
+  const [dbUsers, activityMap, playtimeMap] = await Promise.all([
     prisma.user.findMany({
       include: {
         roles: { include: { role: true } },
@@ -141,9 +277,10 @@ users.get("/", authMiddleware, requirePermission("view:members", "manage:members
       orderBy: { createdAt: "desc" },
     }),
     fetchActivityMap(),
+    fetchBulkPlaytimeMap(),
   ]);
 
-  const result: UserWithRolesAndComments[] = dbUsers.map((u) => mapUserWithComments(u, activityMap));
+  const result: UserWithRolesAndComments[] = dbUsers.map((u) => mapUserWithComments(u, activityMap, playtimeMap));
 
   return success(c, result);
 });
@@ -193,8 +330,8 @@ users.put("/:id", authMiddleware, requirePermission("manage:members"), zValidato
 
     await audit(c, "member.update", "user", id, { changes: body });
 
-    const activityMap = await fetchActivityMap();
-    return success(c, mapUserWithComments(updated, activityMap));
+    const [activityMap, playtimeMap] = await Promise.all([fetchActivityMap(), fetchBulkPlaytimeMap()]);
+    return success(c, mapUserWithComments(updated, activityMap, playtimeMap));
   } catch {
     return fail(c, "Failed to update user. The Steam ID may already be linked to another account.");
   }

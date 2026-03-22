@@ -33,6 +33,7 @@ export interface DiscordRole {
   name: string;
   permissions: Permission[];
   grantsWhitelist: boolean;
+  isMemberRole: boolean;
 }
 
 export interface RolePermission {

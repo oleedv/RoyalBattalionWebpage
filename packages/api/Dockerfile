@@ -17,6 +17,8 @@ COPY --from=install /app/packages/shared/node_modules ./packages/shared/node_mod
 COPY . .
 RUN DATABASE_URL="mysql://build:build@localhost:3306/build" bunx prisma generate
 
+RUN chmod +x packages/api/entrypoint.sh
+
 ENV NODE_ENV=production
 EXPOSE 3001
-CMD ["bun", "run", "packages/api/src/index.ts"]
+CMD ["sh", "packages/api/entrypoint.sh"]

@@ -15,3 +15,11 @@ export default function getSecretaryDb(): PrismaClient {
   }
   return _client;
 }
+
+/** Destroy the cached client so the next call to getSecretaryDb() creates a fresh connection pool. */
+export function resetSecretaryDb(): void {
+  if (_client) {
+    _client.$disconnect().catch(() => {});
+    _client = null;
+  }
+}

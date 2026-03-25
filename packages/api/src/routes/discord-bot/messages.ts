@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { Prisma } from "../../generated/prisma/client";
 import type { BotMessage, BotLog, Paginated } from "shared";
-import getSecretaryDb from "../../lib/secretary-db";
+import getSecretaryDb, { resetSecretaryDb } from "../../lib/secretary-db";
 import { requirePermission } from "../../middleware/permissions";
 import { success, fail } from "../../lib/crud-helpers";
 import { logger } from "../../lib/logger";
@@ -91,8 +91,9 @@ messages.get(
 
       return success(c, { items, total } as Paginated<BotMessage>);
     } catch (err: any) {
+      resetSecretaryDb();
       logger.error("discord-bot", "Messages endpoint error", err);
-      return fail(c, "Failed to query messages", 500);
+      return fail(c, "Secretary database unavailable", 503);
     }
   }
 );
@@ -136,8 +137,9 @@ messages.get(
 
       return success(c, { items, total } as Paginated<BotLog>);
     } catch (err: any) {
+      resetSecretaryDb();
       logger.error("discord-bot", "Logs endpoint error", err);
-      return fail(c, "Failed to query logs", 500);
+      return fail(c, "Secretary database unavailable", 503);
     }
   }
 );

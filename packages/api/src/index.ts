@@ -25,6 +25,8 @@ import { squadjsSocket } from "./lib/squadjs-socket";
 import { AppError } from "./lib/errors";
 import { logger } from "./lib/logger";
 import prisma from "./lib/db";
+import getSecretaryDb, { resetSecretaryDb } from "./lib/secretary-db";
+import { Prisma } from "./generated/prisma/client";
 import { env } from "./lib/env";
 import { bootstrap } from "./lib/bootstrap";
 import { initLiveServerRelay, handleLiveServerOpen, handleLiveServerMessage, handleLiveServerClose } from "./ws/live-server";
@@ -96,11 +98,27 @@ app.get("/admins.cfg", async (c) => {
 
 app.get("/health", async (c) => {
   let dbOk = false;
+  let secretaryDbOk = false;
   try {
     await prisma.$queryRaw`SELECT 1`;
     dbOk = true;
   } catch {}
-  return c.json({ status: dbOk ? "ok" : "degraded", database: dbOk ? "connected" : "unreachable" });
+  try {
+    if (env.SECRETARY_DATABASE_URL) {
+      await getSecretaryDb().$queryRaw(Prisma.sql`SELECT 1`);
+      secretaryDbOk = true;
+    }
+  } catch {
+    resetSecretaryDb();
+  }
+  const allOk = dbOk && (secretaryDbOk || !env.SECRETARY_DATABASE_URL);
+  return c.json({
+    status: allOk ? "ok" : "degraded",
+    database: dbOk ? "connected" : "unreachable",
+    secretaryDb: env.SECRETARY_DATABASE_URL
+      ? (secretaryDbOk ? "connected" : "unreachable")
+      : "not configured",
+  });
 });
 app.get("/live-server/health", (c) => c.json(squadjsSocket.getStatus()));
 

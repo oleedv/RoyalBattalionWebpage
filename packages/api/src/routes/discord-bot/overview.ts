@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { Prisma } from "../../generated/prisma/client";
 import type { DiscordBotOverview, BotStatus, SeedingSession, Permission } from "shared";
-import getSecretaryDb from "../../lib/secretary-db";
+import getSecretaryDb, { resetSecretaryDb } from "../../lib/secretary-db";
 import { requirePermission, getAllowedTicketTiers } from "../../middleware/permissions";
 import { success, fail } from "../../lib/crud-helpers";
 import { logger } from "../../lib/logger";
@@ -112,83 +112,89 @@ overview.get(
   "/overview",
   requirePermission("view:discord-bot", "manage:discord-bot"),
   async (c) => {
-    const db = getSecretaryDb();
+    try {
+      const db = getSecretaryDb();
 
-    const [
-      ticketTierRows,
-      recentClosedRows,
-      prospectStatusRows,
-      recentProspectRows,
-      activeSessionRows,
-      recentSessionRows,
-      seedingConfigRows,
-      botStatusRows,
-    ] = await Promise.all([
-      db.$queryRaw<TicketTierCountRow[]>(Prisma.sql`SELECT tier, COUNT(*) as count FROM tickets WHERE status = 'open' GROUP BY tier`),
-      db.$queryRaw<RecentClosedRow[]>(Prisma.sql`SELECT t.id, t.uuid, t.tier, t.closed_at, (SELECT content FROM ticket_messages WHERE ticket_id = t.id AND is_staff = 0 ORDER BY created_at ASC LIMIT 1) as first_message FROM tickets t WHERE t.status = 'closed' ORDER BY t.closed_at DESC LIMIT 5`),
-      db.$queryRaw<ProspectStatusRow[]>(Prisma.sql`SELECT status, COUNT(*) as count FROM prospects GROUP BY status`),
-      db.$queryRaw<RecentProspectRow[]>(Prisma.sql`SELECT id, alias, status, created_at FROM prospects ORDER BY created_at DESC LIMIT 5`),
-      db.$queryRaw<SeedingSessionRow[]>(Prisma.sql`SELECT * FROM seeding_sessions WHERE status = 'active' LIMIT 1`).catch((): SeedingSessionRow[] => []),
-      db.$queryRaw<SeedingSessionRow[]>(Prisma.sql`SELECT * FROM seeding_sessions ORDER BY started_at DESC LIMIT 5`).catch((): SeedingSessionRow[] => []),
-      db.$queryRaw<SeedingConfigRow[]>(Prisma.sql`SELECT enabled, seed_threshold FROM seeding_config WHERE id = 1`).catch((): SeedingConfigRow[] => []),
-      db.$queryRaw<BotStatusRow[]>(Prisma.sql`SELECT * FROM bot_status WHERE id = 1`).catch((): BotStatusRow[] => []),
-    ]);
+      const [
+        ticketTierRows,
+        recentClosedRows,
+        prospectStatusRows,
+        recentProspectRows,
+        activeSessionRows,
+        recentSessionRows,
+        seedingConfigRows,
+        botStatusRows,
+      ] = await Promise.all([
+        db.$queryRaw<TicketTierCountRow[]>(Prisma.sql`SELECT tier, COUNT(*) as count FROM tickets WHERE status = 'open' GROUP BY tier`).catch((): TicketTierCountRow[] => []),
+        db.$queryRaw<RecentClosedRow[]>(Prisma.sql`SELECT t.id, t.uuid, t.tier, t.closed_at, (SELECT content FROM ticket_messages WHERE ticket_id = t.id AND is_staff = 0 ORDER BY created_at ASC LIMIT 1) as first_message FROM tickets t WHERE t.status = 'closed' ORDER BY t.closed_at DESC LIMIT 5`).catch((): RecentClosedRow[] => []),
+        db.$queryRaw<ProspectStatusRow[]>(Prisma.sql`SELECT status, COUNT(*) as count FROM prospects GROUP BY status`).catch((): ProspectStatusRow[] => []),
+        db.$queryRaw<RecentProspectRow[]>(Prisma.sql`SELECT id, alias, status, created_at FROM prospects ORDER BY created_at DESC LIMIT 5`).catch((): RecentProspectRow[] => []),
+        db.$queryRaw<SeedingSessionRow[]>(Prisma.sql`SELECT * FROM seeding_sessions WHERE status = 'active' LIMIT 1`).catch((): SeedingSessionRow[] => []),
+        db.$queryRaw<SeedingSessionRow[]>(Prisma.sql`SELECT * FROM seeding_sessions ORDER BY started_at DESC LIMIT 5`).catch((): SeedingSessionRow[] => []),
+        db.$queryRaw<SeedingConfigRow[]>(Prisma.sql`SELECT enabled, seed_threshold FROM seeding_config WHERE id = 1`).catch((): SeedingConfigRow[] => []),
+        db.$queryRaw<BotStatusRow[]>(Prisma.sql`SELECT * FROM bot_status WHERE id = 1`).catch((): BotStatusRow[] => []),
+      ]);
 
-    const userPermissions = c.get("permissions") as Permission[];
-    const allowedTiers = getAllowedTicketTiers(userPermissions);
+      const userPermissions = c.get("permissions") as Permission[];
+      const allowedTiers = getAllowedTicketTiers(userPermissions);
 
-    const openByTier = { normal: 0, community_officer: 0, admin_officer: 0 };
-    for (const r of ticketTierRows) {
-      const tier = r.tier as keyof typeof openByTier;
-      if (tier in openByTier) {
-        if (allowedTiers === null || allowedTiers.includes(tier)) {
-          openByTier[tier] = Number(r.count);
+      const openByTier = { normal: 0, community_officer: 0, admin_officer: 0 };
+      for (const r of ticketTierRows) {
+        const tier = r.tier as keyof typeof openByTier;
+        if (tier in openByTier) {
+          if (allowedTiers === null || allowedTiers.includes(tier)) {
+            openByTier[tier] = Number(r.count);
+          }
         }
       }
-    }
 
-    const recentlyClosed = recentClosedRows
-      .filter((r) => allowedTiers === null || allowedTiers.includes(r.tier))
-      .map((r) => ({
+      const recentlyClosed = recentClosedRows
+        .filter((r) => allowedTiers === null || allowedTiers.includes(r.tier))
+        .map((r) => ({
+          id: r.id,
+          uuid: r.uuid,
+          tier: r.tier,
+          closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : "",
+          firstMessage: r.first_message || null,
+        }));
+
+      let prospectOpen = 0, prospectAccepted = 0, prospectDenied = 0;
+      for (const r of prospectStatusRows) {
+        const count = Number(r.count);
+        if (r.status === "accepted") prospectAccepted += count;
+        else if (r.status === "denied") prospectDenied += count;
+        else if (r.status === "open") prospectOpen += count;
+      }
+
+      const recentActivity = recentProspectRows.map((r) => ({
         id: r.id,
-        uuid: r.uuid,
-        tier: r.tier,
-        closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : "",
-        firstMessage: r.first_message || null,
+        alias: r.alias,
+        status: r.status,
+        createdAt: new Date(r.created_at).toISOString(),
       }));
 
-    let prospectOpen = 0, prospectAccepted = 0, prospectDenied = 0;
-    for (const r of prospectStatusRows) {
-      const count = Number(r.count);
-      if (r.status === "accepted") prospectAccepted += count;
-      else if (r.status === "denied") prospectDenied += count;
-      else if (r.status === "open") prospectOpen += count;
+      const activeSession = activeSessionRows.length > 0 ? mapSession(activeSessionRows[0]) : null;
+      const recentSessions = recentSessionRows.map(mapSession);
+
+      const seedingCfg = seedingConfigRows.length > 0
+        ? { enabled: Boolean(seedingConfigRows[0].enabled), seedThreshold: Number(seedingConfigRows[0].seed_threshold) }
+        : null;
+
+      const botStatus: BotStatus | null = botStatusRows.length > 0 ? mapBotStatus(botStatusRows[0]) : null;
+
+      const data: DiscordBotOverview = {
+        tickets: { openByTier, recentlyClosed },
+        prospects: { open: prospectOpen, accepted: prospectAccepted, denied: prospectDenied, recentActivity },
+        seeding: { activeSession, recentSessions, config: seedingCfg },
+        botStatus,
+      };
+
+      return success(c, data);
+    } catch (err: unknown) {
+      resetSecretaryDb();
+      logger.error("discord-bot", "Overview endpoint error", err);
+      return fail(c, "Secretary database unavailable", 503);
     }
-
-    const recentActivity = recentProspectRows.map((r) => ({
-      id: r.id,
-      alias: r.alias,
-      status: r.status,
-      createdAt: new Date(r.created_at).toISOString(),
-    }));
-
-    const activeSession = activeSessionRows.length > 0 ? mapSession(activeSessionRows[0]) : null;
-    const recentSessions = recentSessionRows.map(mapSession);
-
-    const seedingCfg = seedingConfigRows.length > 0
-      ? { enabled: Boolean(seedingConfigRows[0].enabled), seedThreshold: Number(seedingConfigRows[0].seed_threshold) }
-      : null;
-
-    const botStatus: BotStatus | null = botStatusRows.length > 0 ? mapBotStatus(botStatusRows[0]) : null;
-
-    const data: DiscordBotOverview = {
-      tickets: { openByTier, recentlyClosed },
-      prospects: { open: prospectOpen, accepted: prospectAccepted, denied: prospectDenied, recentActivity },
-      seeding: { activeSession, recentSessions, config: seedingCfg },
-      botStatus,
-    };
-
-    return success(c, data);
   }
 );
 
@@ -208,8 +214,9 @@ overview.get(
 
       return success(c, mapBotStatus(rows[0]));
     } catch (err: unknown) {
+      resetSecretaryDb();
       logger.error("discord-bot", "Status endpoint error", err);
-      return fail(c, "Failed to query bot status", 500);
+      return fail(c, "Secretary database unavailable", 503);
     }
   }
 );

@@ -5,6 +5,7 @@ export interface ApiCallEntry {
   serverRequested: string
   status: number
   latencyMs: number
+  error?: string
 }
 
 const BUFFER_SIZE = 1000

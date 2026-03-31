@@ -101,7 +101,7 @@ export async function refreshServerDiscovery(): Promise<void> {
       {
         criteria: [
           {
-            key: "attributes.SERVERNAMEF_s",
+            key: "attributes.SERVERNAME_s",
             op: "CONTAINS",
             value: "Royal",
           },
@@ -116,13 +116,19 @@ export async function refreshServerDiscovery(): Promise<void> {
     )
 
     const sessions = res.data?.sessions || []
+    if (sessions.length === 0) {
+      console.warn(
+        `[discovery] EOS returned 0 sessions (status ${res.status}). ` +
+        `Response keys: ${Object.keys(res.data || {}).join(", ")}`
+      )
+    }
     serverCache.clear()
 
     for (const s of sessions) {
       const attrs = s.attributes || {}
       const session: ServerSession = {
         sessionId: s.id,
-        serverName: attrs.SERVERNAMEF_s || "Unknown",
+        serverName: attrs.CUSTOMSERVERNAME_s || attrs.SERVERNAME_s || "Unknown",
         mapName: attrs.MAPNAME_s || "Unknown",
         playerCount: attrs.MATCHINGPLAYERS_i || 0,
         maxPlayers: attrs.MAXPUBLICPLAYERS_i || 100,

@@ -341,8 +341,11 @@ export default function LobbyMonitorPage() {
                     <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-text-secondary">
                       {formatTimestamp(call.timestamp)}
                     </td>
-                    <td className="px-4 py-2 text-text-primary">
-                      {call.endpoint}
+                    <td className="px-4 py-2">
+                      <div className="text-text-primary">{call.endpoint}</div>
+                      {call.error && (
+                        <div className="mt-0.5 text-xs text-red-400">{call.error}</div>
+                      )}
                     </td>
                     <td className="px-4 py-2 font-mono text-xs text-text-secondary">
                       {anonymizeIp(call.callerIp)}

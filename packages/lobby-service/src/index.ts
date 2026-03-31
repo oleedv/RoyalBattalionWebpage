@@ -88,6 +88,7 @@ app.post("/api/v1/lobby/:serverName", async (c) => {
       serverRequested: serverName,
       status: 500,
       latencyMs: Date.now() - start,
+      error: message,
     })
     return c.json({ success: false, error: message }, 500)
   }
@@ -181,9 +182,8 @@ async function start() {
   // Start EOS server discovery loop
   startDiscoveryLoop()
 
+  serve({ fetch: app.fetch, port: PORT })
   console.log(`[lobby-service] Listening on port ${PORT}`)
 }
 
 start()
-
-serve({ fetch: app.fetch, port: PORT })

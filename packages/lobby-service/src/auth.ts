@@ -1,4 +1,5 @@
 import SteamUser from "steam-user"
+import crypto from "crypto"
 import axios from "axios"
 
 const EOS_TOKEN_URL = "https://api.epicgames.dev/auth/v1/oauth/token"
@@ -48,7 +49,7 @@ async function exchangeForEosToken(): Promise<void> {
   const ticket = await new Promise<Buffer>((resolve, reject) => {
     steamClient!.createAuthSessionTicket(393380, (err, sessionTicket) => {
       if (err) return reject(err)
-      resolve(sessionTicket.sessionTicket)
+      resolve(sessionTicket)
     })
   })
 
@@ -61,6 +62,7 @@ async function exchangeForEosToken(): Promise<void> {
       external_auth_type: "steam_session_ticket",
       external_auth_token: ticketHex,
       deployment_id: DEPLOYMENT_ID,
+      nonce: crypto.randomUUID(),
     }).toString(),
     {
       headers: {
@@ -90,6 +92,28 @@ async function exchangeForEosToken(): Promise<void> {
   )
 }
 
+const EOS_RETRY_DELAYS = [15_000, 30_000, 60_000]
+
+function scheduleEosRetry(attempt = 0): void {
+  if (attempt >= EOS_RETRY_DELAYS.length) {
+    console.error("[auth] EOS token retry exhausted after %d attempts", EOS_RETRY_DELAYS.length)
+    return
+  }
+
+  const delay = EOS_RETRY_DELAYS[attempt]
+  console.log("[auth] Retrying EOS token exchange in %ds (attempt %d/%d)", delay / 1000, attempt + 1, EOS_RETRY_DELAYS.length)
+
+  setTimeout(async () => {
+    try {
+      await exchangeForEosToken()
+      console.log("[auth] EOS token retry succeeded on attempt %d", attempt + 1)
+    } catch (err) {
+      console.error("[auth] EOS token retry attempt %d failed:", attempt + 1, err instanceof Error ? err.message : err)
+      scheduleEosRetry(attempt + 1)
+    }
+  }, delay)
+}
+
 export async function connectSteam(): Promise<void> {
   if (steamConnecting) return
   steamConnecting = true
@@ -110,12 +134,12 @@ export async function connectSteam(): Promise<void> {
 
       try {
         await exchangeForEosToken()
-        resolve()
       } catch (err) {
         console.error("[auth] Initial EOS token exchange failed:", err)
-        // Still resolve - Steam is connected, EOS can retry
-        resolve()
+        scheduleEosRetry()
       }
+      // Always resolve - Steam is connected, EOS can retry in background
+      resolve()
     })
 
     steamClient.on("error", (err) => {

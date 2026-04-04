@@ -63,12 +63,7 @@ const NAV_ITEMS: NavItem[] = [
     href: "/audit-logs",
     requiredPermissions: ["view:audit-logs"],
   },
-  {
-    label: "Observability",
-    href: "/observability",
-    requiredPermissions: ["view:live-server", "manage:live-server"],
-  },
-  {
+{
     label: "Lobby API",
     href: "/lobby-monitor",
     requiredPermissions: ["developer"],

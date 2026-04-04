@@ -9,6 +9,7 @@ import { findOrThrow, success, fail } from "../lib/crud-helpers";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { syncAllUserRoles } from "../lib/role-sync";
+import { clearSyncCache } from "./auth";
 import { audit } from "../lib/audit";
 import { rateLimit } from "../middleware/rate-limit";
 import { getSquadJSPool } from "../lib/squadjs-db";
@@ -49,6 +50,9 @@ function mapUser(u: any): UserWithRoles {
     membershipDate: u.membershipDate?.toISOString() ?? null,
     dateOfBirth: u.dateOfBirth?.toISOString() ?? null,
     hasLoggedIn: u.hasLoggedIn ?? false,
+    disabled: u.disabled ?? false,
+    disabledAt: u.disabledAt?.toISOString() ?? null,
+    disabledReason: u.disabledReason ?? null,
     createdAt: u.createdAt.toISOString(),
     updatedAt: u.updatedAt.toISOString(),
     roles: u.roles.map((ur: any) => ({
@@ -263,6 +267,53 @@ users.post("/bulk-comment", authMiddleware, requirePermission("manage:members"),
 
   await audit(c, "member.bulk_comment", "user", null, { count: ids.length });
   return success(c, { commented: ids.length });
+});
+
+// --- Disable / Enable (developer only) ---
+
+const disableSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+
+users.post("/:id/disable", authMiddleware, requirePermission("developer"), zValidator("json", disableSchema), async (c) => {
+  const id = c.req.param("id");
+  const actorId = c.get("userId") as string;
+  const { reason } = c.req.valid("json");
+
+  const target = await findOrThrow(prisma.user, { id }, "User");
+
+  if (target.id === actorId) {
+    return fail(c, "You cannot disable your own account", 400);
+  }
+
+  const adminIds = env.ADMIN_DISCORD_IDS.split(",").map((s) => s.trim()).filter(Boolean);
+  if (adminIds.includes(target.discordId)) {
+    return fail(c, "Cannot disable a developer account", 400);
+  }
+
+  await prisma.user.update({
+    where: { id },
+    data: { disabled: true, disabledAt: new Date(), disabledReason: reason },
+  });
+
+  clearSyncCache(target.discordId);
+
+  await audit(c, "member.disable", "user", id, { reason, targetName: target.discordName });
+  return success(c, { disabled: true as const });
+});
+
+users.post("/:id/enable", authMiddleware, requirePermission("developer"), async (c) => {
+  const id = c.req.param("id");
+
+  const target = await findOrThrow(prisma.user, { id }, "User");
+
+  await prisma.user.update({
+    where: { id },
+    data: { disabled: false, disabledAt: null, disabledReason: null },
+  });
+
+  await audit(c, "member.enable", "user", id, { targetName: target.discordName });
+  return success(c, { enabled: true as const });
 });
 
 // --- Standard CRUD ---

@@ -12,6 +12,8 @@ import {
   bulkDeleteMembers,
   bulkCommentMembers,
   getRoles,
+  disableUser,
+  enableUser,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -143,6 +145,10 @@ export default function MembersPage() {
 
   // Delete confirmation
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  // Disable confirmation
+  const [confirmingDisable, setConfirmingDisable] = useState(false);
+  const [disableReason, setDisableReason] = useState("");
 
   // Role sync
   const [syncing, setSyncing] = useState(false);
@@ -322,6 +328,8 @@ export default function MembersPage() {
     setSelectedUser(user);
     setEditing(false);
     setConfirmingDelete(false);
+    setConfirmingDisable(false);
+    setDisableReason("");
     setEditError(null);
     setCommentText("");
   }
@@ -330,6 +338,8 @@ export default function MembersPage() {
     setSelectedUser(null);
     setEditing(false);
     setConfirmingDelete(false);
+    setConfirmingDisable(false);
+    setDisableReason("");
     setEditError(null);
     setCommentText("");
   }
@@ -338,6 +348,7 @@ export default function MembersPage() {
     if (!selectedUser) return;
     setEditing(true);
     setConfirmingDelete(false);
+    setConfirmingDisable(false);
     setEditSteamId(selectedUser.steamId || "");
     setEditEosId(selectedUser.eosId || "");
     setEditCountry(selectedUser.country || "");
@@ -406,6 +417,28 @@ export default function MembersPage() {
     if (res.success) {
       setUsers((prev) => prev.filter((u) => u.id !== selectedUser.id));
       closeDetail();
+    }
+  }
+
+  async function handleDisable() {
+    if (!apiToken || !selectedUser || !disableReason.trim()) return;
+    const res = await disableUser(apiToken, selectedUser.id, disableReason.trim());
+    if (res.success) {
+      const updated = { ...selectedUser, disabled: true, disabledAt: new Date().toISOString(), disabledReason: disableReason.trim() };
+      setUsers((prev) => prev.map((u) => (u.id === selectedUser.id ? updated : u)));
+      setSelectedUser(updated);
+      setConfirmingDisable(false);
+      setDisableReason("");
+    }
+  }
+
+  async function handleEnable() {
+    if (!apiToken || !selectedUser) return;
+    const res = await enableUser(apiToken, selectedUser.id);
+    if (res.success) {
+      const updated = { ...selectedUser, disabled: false, disabledAt: null, disabledReason: null };
+      setUsers((prev) => prev.map((u) => (u.id === selectedUser.id ? updated : u)));
+      setSelectedUser(updated);
     }
   }
 
@@ -755,8 +788,13 @@ export default function MembersPage() {
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-text-primary">{user.discordName}</span>
-                            {!user.hasLoggedIn && (
+                            <span className={`font-medium ${user.disabled ? "text-text-muted line-through" : "text-text-primary"}`}>{user.discordName}</span>
+                            {user.disabled && (
+                              <span className="rounded-sm bg-danger/10 px-1.5 py-0.5 text-[10px] font-medium text-danger">
+                                Disabled
+                              </span>
+                            )}
+                            {!user.hasLoggedIn && !user.disabled && (
                               <span className="rounded-sm bg-text-muted/10 px-1.5 py-0.5 text-[10px] text-text-muted">
                                 Discord only
                               </span>
@@ -951,6 +989,11 @@ export default function MembersPage() {
                     <h2 className="font-display text-lg font-semibold tracking-wide text-text-primary">
                       {selectedUser.discordName}
                     </h2>
+                    {selectedUser.disabled && (
+                      <span className="rounded-sm bg-danger/10 px-1.5 py-0.5 text-[10px] font-medium text-danger">
+                        Disabled
+                      </span>
+                    )}
                     {selectedUser.hasLoggedIn ? (
                       <span className="rounded-sm bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success">
                         Logged In
@@ -1160,6 +1203,31 @@ export default function MembersPage() {
               )}
             </div>
 
+            {/* Disable info (developer only) */}
+            {selectedUser.disabled && permissions.includes("developer") && (
+              <div className="border-b border-border px-6 py-4">
+                <div className="rounded-sm border border-danger/30 bg-danger/5 px-4 py-3">
+                  <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-danger">Account Disabled</div>
+                  {selectedUser.disabledAt && (
+                    <div className="text-xs text-text-muted">
+                      Since {formatDate(selectedUser.disabledAt)}
+                    </div>
+                  )}
+                  {selectedUser.disabledReason && (
+                    <div className="mt-1 text-sm text-text-secondary">
+                      {selectedUser.disabledReason}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleEnable}
+                    className="mt-2 rounded-sm bg-success/20 px-4 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success/30"
+                  >
+                    Enable Account
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Actions */}
             {canManage && (
               <div className="flex items-center justify-between px-6 py-4">
@@ -1195,6 +1263,33 @@ export default function MembersPage() {
                       Cancel
                     </button>
                   </div>
+                ) : confirmingDisable ? (
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs text-danger">Disable this account?</span>
+                    <input
+                      type="text"
+                      value={disableReason}
+                      onChange={(e) => setDisableReason(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && disableReason.trim()) handleDisable(); }}
+                      placeholder="Reason for disabling..."
+                      className="rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:border-danger focus:outline-none"
+                    />
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleDisable}
+                        disabled={!disableReason.trim()}
+                        className="rounded-sm bg-danger/20 px-4 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/30 disabled:opacity-40"
+                      >
+                        Confirm Disable
+                      </button>
+                      <button
+                        onClick={() => { setConfirmingDisable(false); setDisableReason(""); }}
+                        className="text-xs text-text-muted transition-colors hover:text-text-primary"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-3">
                     <button
@@ -1209,6 +1304,14 @@ export default function MembersPage() {
                     >
                       Delete
                     </button>
+                    {permissions.includes("developer") && !selectedUser.disabled && (
+                      <button
+                        onClick={() => setConfirmingDisable(true)}
+                        className="rounded-sm border border-border px-4 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-danger/40 hover:text-danger"
+                      >
+                        Disable Account
+                      </button>
+                    )}
                   </div>
                 )}
                 <div />

@@ -21,6 +21,10 @@ const getSecret = () => new TextEncoder().encode(env.JWT_SECRET);
 const SYNC_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 const syncCache = new Map<string, { data: ApiResponse<AuthSyncResponse>; expiry: number }>();
 
+export function clearSyncCache(discordId: string) {
+  syncCache.delete(`discord:${discordId}`);
+}
+
 auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
   const { accessToken } = c.req.valid("json");
   const guildId = env.DISCORD_GUILD_ID;
@@ -70,6 +74,14 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
       },
     });
 
+    // Block disabled users
+    if (user.disabled) {
+      return c.json<ApiResponse<never>>({
+        success: false,
+        error: "ACCOUNT_DISABLED",
+      }, 403);
+    }
+
     // Find matching Discord roles in our database
     const knownRoles = await prisma.discordRole.findMany({
       where: { discordRoleId: { in: guildRoles } },
@@ -116,6 +128,7 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
 
     const userWithRoles = {
       ...user,
+      disabledAt: user.disabledAt?.toISOString() ?? null,
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
       roles: knownRoles.map((r) => ({
@@ -168,7 +181,15 @@ auth.get("/me", authMiddleware, async (c) => {
     discordId: user.discordId,
     discordName: user.discordName,
     steamId: user.steamId,
+    eosId: user.eosId,
     avatarUrl: user.avatarUrl,
+    country: user.country,
+    membershipDate: user.membershipDate?.toISOString() ?? null,
+    dateOfBirth: user.dateOfBirth?.toISOString() ?? null,
+    hasLoggedIn: user.hasLoggedIn,
+    disabled: user.disabled,
+    disabledAt: user.disabledAt?.toISOString() ?? null,
+    disabledReason: user.disabledReason,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
     roles: user.roles.map((ur) => ({

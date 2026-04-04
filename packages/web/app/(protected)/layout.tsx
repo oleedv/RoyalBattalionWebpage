@@ -127,7 +127,11 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
             }).catch(() => {});
           }
         } else if (!res.success) {
-          setSyncError(res.error === "NOT_IN_GUILD" ? "NOT_IN_GUILD" : res.error || "Failed to sync");
+          if (res.error === "ACCOUNT_DISABLED" || res.error === "NOT_IN_GUILD") {
+            setSyncError(res.error);
+          } else {
+            setSyncError(res.error || "Failed to sync");
+          }
         }
       } catch {
         setSyncError("Failed to sync");
@@ -148,6 +152,8 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           setApiToken(res.data.token);
           setPermissions(res.data.permissions);
           setUser(res.data.user);
+        } else if (!res.success && res.error === "ACCOUNT_DISABLED") {
+          setSyncError("ACCOUNT_DISABLED");
         }
       } catch {
         // Silently fail - the next navigation or tab focus will retry
@@ -228,7 +234,22 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg-primary px-4">
         <div className="w-full max-w-md rounded-sm border border-border bg-bg-card p-8 text-center">
-          {syncError === "NOT_IN_GUILD" ? (
+          {syncError === "ACCOUNT_DISABLED" ? (
+            <>
+              <h1 className="font-display mb-3 text-xl font-bold tracking-wide text-danger">
+                Account Disabled
+              </h1>
+              <p className="mb-6 text-sm text-text-secondary">
+                Your account has been disabled by an administrator. If you believe this is an error, please contact a developer.
+              </p>
+              <button
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="rounded-sm border border-border px-6 py-2.5 text-sm text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+              >
+                Sign Out
+              </button>
+            </>
+          ) : syncError === "NOT_IN_GUILD" ? (
             <>
               <h1 className="font-display mb-3 text-xl font-bold tracking-wide text-text-primary">
                 Not a Member

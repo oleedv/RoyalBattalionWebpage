@@ -2,6 +2,7 @@ import { createMiddleware } from "hono/factory";
 import { jwtVerify } from "jose";
 import type { Permission } from "shared";
 import { env } from "../lib/env";
+import prisma from "../lib/db";
 
 type AuthVariables = {
   userId: string;
@@ -27,6 +28,15 @@ export const authMiddleware = createMiddleware<{
 
     if (!userId || !permissions) {
       return c.json({ success: false, error: "Invalid token payload" }, 401);
+    }
+
+    // Block disabled users even if their JWT is still valid
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { disabled: true },
+    });
+    if (!user || user.disabled) {
+      return c.json({ success: false, error: "ACCOUNT_DISABLED" }, 403);
     }
 
     c.set("userId", userId);

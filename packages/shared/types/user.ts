@@ -9,6 +9,9 @@ export interface User {
   membershipDate: string | null;
   dateOfBirth: string | null;
   hasLoggedIn: boolean;
+  disabled: boolean;
+  disabledAt: string | null;
+  disabledReason: string | null;
   createdAt: string;
   updatedAt: string;
 }

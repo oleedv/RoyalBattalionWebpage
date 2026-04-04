@@ -260,6 +260,28 @@ export const updateUser = (
 ) => usersClient.update(token, id, data as Record<string, unknown>);
 export const deleteUser = usersClient.remove;
 
+export function disableUser(
+  token: string,
+  id: string,
+  reason: string,
+): Promise<ApiResponse<{ disabled: true }>> {
+  return request<{ disabled: true }>(`/users/${id}/disable`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function enableUser(
+  token: string,
+  id: string,
+): Promise<ApiResponse<{ enabled: true }>> {
+  return request<{ enabled: true }>(`/users/${id}/enable`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
 // Member Comments
 export function addMemberComment(
   token: string,

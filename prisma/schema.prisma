@@ -18,6 +18,9 @@ model User {
   membershipDate DateTime?
   dateOfBirth    DateTime?
   hasLoggedIn    Boolean         @default(false)
+  disabled       Boolean         @default(false)
+  disabledAt     DateTime?
+  disabledReason String?         @db.Text
   roles          UserRole[]
   comments       MemberComment[]
   createdAt      DateTime        @default(now())

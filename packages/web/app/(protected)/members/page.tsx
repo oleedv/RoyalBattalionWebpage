@@ -103,6 +103,9 @@ export default function MembersPage() {
   // Search
   const [search, setSearch] = useState("");
 
+  // Members-only toggle (default ON)
+  const [membersOnly, setMembersOnly] = useState(true);
+
   // Filter panel
   const [filterOpen, setFilterOpen] = useState(false);
   const [allRoles, setAllRoles] = useState<DiscordRole[]>([]);
@@ -232,8 +235,18 @@ export default function MembersPage() {
     return count;
   }, [filterRoles, filterCountry, filterLoggedIn, filterPlaytimeMin30, filterPlaytimeMax30, filterPlaytimeMin90, filterPlaytimeMax90, filterSeedMin30, filterSeedMax30, filterSeedMin90, filterSeedMax90, filterActivityMin30, filterActivityMax30, filterActivityMin90, filterActivityMax90, filterJoinFrom, filterJoinTo, filterMemberFrom, filterMemberTo]);
 
+  const memberRoleIds = useMemo(
+    () => new Set(allRoles.filter((r) => r.isMemberRole).map((r) => r.id)),
+    [allRoles],
+  );
+
   const filtered = useMemo(() => {
     let result = users;
+
+    // Members-only filter
+    if (membersOnly && memberRoleIds.size > 0) {
+      result = result.filter((u) => u.roles.some((r) => memberRoleIds.has(r.id)));
+    }
 
     if (search) {
       const s = search.toLowerCase();
@@ -301,7 +314,7 @@ export default function MembersPage() {
     }
 
     return result;
-  }, [users, search, filterRoles, filterCountry, filterLoggedIn, filterPlaytimeMin30, filterPlaytimeMax30, filterPlaytimeMin90, filterPlaytimeMax90, filterSeedMin30, filterSeedMax30, filterSeedMin90, filterSeedMax90, filterActivityMin30, filterActivityMax30, filterActivityMin90, filterActivityMax90, filterJoinFrom, filterJoinTo, filterMemberFrom, filterMemberTo]);
+  }, [users, search, membersOnly, memberRoleIds, filterRoles, filterCountry, filterLoggedIn, filterPlaytimeMin30, filterPlaytimeMax30, filterPlaytimeMin90, filterPlaytimeMax90, filterSeedMin30, filterSeedMax30, filterSeedMin90, filterSeedMax90, filterActivityMin30, filterActivityMax30, filterActivityMin90, filterActivityMax90, filterJoinFrom, filterJoinTo, filterMemberFrom, filterMemberTo]);
 
   // --- Detail modal ---
 
@@ -526,6 +539,16 @@ export default function MembersPage() {
             </button>
           )}
           <button
+            onClick={() => setMembersOnly((v) => !v)}
+            className={`rounded-sm border px-4 py-1.5 text-xs font-medium tracking-wide transition-colors ${
+              membersOnly
+                ? "border-accent/40 bg-accent/10 text-accent"
+                : "border-border text-text-secondary hover:border-accent/40 hover:text-accent"
+            }`}
+          >
+            {membersOnly ? "Members" : "All Users"}
+          </button>
+          <button
             onClick={() => setFilterOpen((v) => !v)}
             className={`rounded-sm border px-4 py-1.5 text-xs font-medium tracking-wide transition-colors ${
               filterOpen || activeFilterCount > 0
@@ -715,13 +738,21 @@ export default function MembersPage() {
                     )}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        {user.avatarUrl ? (
-                          <img src={user.avatarUrl} alt="" className="h-8 w-8 rounded-full" />
-                        ) : (
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-bg-tertiary text-xs text-text-muted">
-                            {user.discordName.charAt(0).toUpperCase()}
-                          </div>
-                        )}
+                        <div className="relative">
+                          {user.avatarUrl ? (
+                            <img src={user.avatarUrl} alt="" className="h-8 w-8 rounded-full" />
+                          ) : (
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-bg-tertiary text-xs text-text-muted">
+                              {user.discordName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <span
+                            className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-bg-card ${
+                              user.hasLoggedIn ? "bg-emerald-500" : "bg-text-muted/40"
+                            }`}
+                            title={user.hasLoggedIn ? "Logged in" : "Discord only"}
+                          />
+                        </div>
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-medium text-text-primary">{user.discordName}</span>

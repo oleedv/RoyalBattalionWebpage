@@ -20,6 +20,7 @@ const envSchema = z.object({
   DISCORD_BOT_TOKEN: optStr,
   DISCORD_GUILD_ID: optStr,
   ADMIN_DISCORD_IDS: z.string().default(""),
+  DISCORD_MEMBER_ROLE_IDS: z.string().default(""),
 
   // --- Encryption (optional - crypto module checks at call time) ---
   ENCRYPTION_KEY: optStr,

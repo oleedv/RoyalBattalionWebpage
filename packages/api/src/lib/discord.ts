@@ -57,6 +57,24 @@ export async function fetchGuildRoles(accessToken: string, guildId: string) {
   return data.roles;
 }
 
+export async function fetchGuildRoleDefinitions(
+  botToken: string,
+  guildId: string
+): Promise<{ id: string; name: string }[]> {
+  const res = await discordFetch(`${DISCORD_API}/guilds/${guildId}/roles`, {
+    Authorization: `Bot ${botToken}`,
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    logger.error("discord", `Guild roles fetch failed: ${res.status} - ${body}`);
+    throw new Error(`Discord guild roles fetch failed: ${res.status}`);
+  }
+
+  const data = (await res.json()) as { id: string; name: string }[];
+  return data.map((r) => ({ id: r.id, name: r.name }));
+}
+
 interface GuildMember {
   user?: { id: string; username: string; avatar: string | null };
   roles: string[];

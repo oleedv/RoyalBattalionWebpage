@@ -14,6 +14,8 @@ import {
   getRoles,
   disableUser,
   enableUser,
+  bulkDisableMembers,
+  bulkEnableMembers,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -108,6 +110,21 @@ export default function MembersPage() {
   // Members-only toggle (default ON)
   const [membersOnly, setMembersOnly] = useState(true);
 
+  // Sorting
+  type SortKey = "name" | "steamId" | "joined" | "country" | "loggedIn";
+  type SortDir = "asc" | "desc";
+  const [sortKey, setSortKey] = useState<SortKey>("loggedIn");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "name" || key === "country" ? "asc" : "desc");
+    }
+  }
+
   // Filter panel
   const [filterOpen, setFilterOpen] = useState(false);
   const [allRoles, setAllRoles] = useState<DiscordRole[]>([]);
@@ -160,10 +177,11 @@ export default function MembersPage() {
   // Bulk selection
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkAction, setBulkAction] = useState<"country" | "membershipDate" | "comment" | "delete" | null>(null);
+  const [bulkAction, setBulkAction] = useState<"country" | "membershipDate" | "comment" | "delete" | "disable" | "enable" | null>(null);
   const [bulkCountry, setBulkCountry] = useState("");
   const [bulkMembershipDate, setBulkMembershipDate] = useState("");
   const [bulkCommentText, setBulkCommentText] = useState("");
+  const [bulkDisableReason, setBulkDisableReason] = useState("");
   const [bulkProcessing, setBulkProcessing] = useState(false);
 
   const canManage = hasPermission("manage:members");
@@ -319,8 +337,35 @@ export default function MembersPage() {
       result = result.filter((u) => u.membershipDate && u.membershipDate <= filterMemberTo + "T23:59:59");
     }
 
+    // Sort
+    const dir = sortDir === "desc" ? -1 : 1;
+    result = [...result].sort((a, b) => {
+      switch (sortKey) {
+        case "name":
+          return dir * a.discordName.localeCompare(b.discordName);
+        case "steamId": {
+          if (!a.steamId && !b.steamId) return 0;
+          if (!a.steamId) return 1;
+          if (!b.steamId) return -1;
+          return dir * a.steamId.localeCompare(b.steamId);
+        }
+        case "joined":
+          return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        case "country": {
+          if (!a.country && !b.country) return 0;
+          if (!a.country) return 1;
+          if (!b.country) return -1;
+          return dir * a.country.localeCompare(b.country);
+        }
+        case "loggedIn":
+          return dir * (Number(a.hasLoggedIn) - Number(b.hasLoggedIn));
+        default:
+          return 0;
+      }
+    });
+
     return result;
-  }, [users, search, membersOnly, memberRoleIds, filterRoles, filterCountry, filterLoggedIn, filterPlaytimeMin30, filterPlaytimeMax30, filterPlaytimeMin90, filterPlaytimeMax90, filterSeedMin30, filterSeedMax30, filterSeedMin90, filterSeedMax90, filterActivityMin30, filterActivityMax30, filterActivityMin90, filterActivityMax90, filterJoinFrom, filterJoinTo, filterMemberFrom, filterMemberTo]);
+  }, [users, search, membersOnly, memberRoleIds, sortKey, sortDir, filterRoles, filterCountry, filterLoggedIn, filterPlaytimeMin30, filterPlaytimeMax30, filterPlaytimeMin90, filterPlaytimeMax90, filterSeedMin30, filterSeedMax30, filterSeedMin90, filterSeedMax90, filterActivityMin30, filterActivityMax30, filterActivityMin90, filterActivityMax90, filterJoinFrom, filterJoinTo, filterMemberFrom, filterMemberTo]);
 
   // --- Detail modal ---
 
@@ -540,6 +585,21 @@ export default function MembersPage() {
           setBulkAction(null);
           setBulkCommentText("");
         }
+      } else if (bulkAction === "disable") {
+        const res = await bulkDisableMembers(apiToken, ids, bulkDisableReason);
+        if (res.success) {
+          await refreshUsers();
+          setSelectedIds(new Set());
+          setBulkAction(null);
+          setBulkDisableReason("");
+        }
+      } else if (bulkAction === "enable") {
+        const res = await bulkEnableMembers(apiToken, ids);
+        if (res.success) {
+          await refreshUsers();
+          setSelectedIds(new Set());
+          setBulkAction(null);
+        }
       }
     } catch {
       // silent
@@ -730,11 +790,34 @@ export default function MembersPage() {
                     />
                   </th>
                 )}
-                <th className="px-4 py-3 text-xs font-medium uppercase tracking-[0.15em] text-text-muted">Member</th>
-                <th className="px-4 py-3 text-xs font-medium uppercase tracking-[0.15em] text-text-muted">Steam ID</th>
-                <th className="px-4 py-3 text-xs font-medium uppercase tracking-[0.15em] text-text-muted">Roles</th>
-                <th className="px-4 py-3 text-xs font-medium uppercase tracking-[0.15em] text-text-muted">Joined</th>
-                <th className="px-4 py-3 text-xs font-medium uppercase tracking-[0.15em] text-text-muted">Country</th>
+                {(
+                  [
+                    { key: "name" as SortKey, label: "Member" },
+                    { key: "steamId" as SortKey, label: "Steam ID" },
+                    { key: null, label: "Roles" },
+                    { key: "joined" as SortKey, label: "Joined" },
+                    { key: "country" as SortKey, label: "Country" },
+                  ] as const
+                ).map(({ key, label }) => (
+                  <th
+                    key={label}
+                    onClick={key ? () => toggleSort(key) : undefined}
+                    className={`px-4 py-3 text-xs font-medium uppercase tracking-[0.15em] text-text-muted select-none ${key ? "cursor-pointer hover:text-text-primary" : ""}`}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {label}
+                      {key && sortKey === key && (
+                        <svg className="h-3 w-3" viewBox="0 0 12 12" fill="currentColor">
+                          {sortDir === "asc" ? (
+                            <path d="M6 2l4 5H2z" />
+                          ) : (
+                            <path d="M6 10l4-5H2z" />
+                          )}
+                        </svg>
+                      )}
+                    </span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -875,6 +958,22 @@ export default function MembersPage() {
               >
                 Delete
               </button>
+              {permissions.includes("developer") && (
+                <>
+                  <button
+                    onClick={() => { setBulkAction("disable"); setBulkDisableReason(""); }}
+                    className="rounded-sm border border-danger/30 bg-danger/10 px-4 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/20"
+                  >
+                    Disable
+                  </button>
+                  <button
+                    onClick={() => setBulkAction("enable")}
+                    className="rounded-sm border border-success/30 bg-success/10 px-4 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success/20"
+                  >
+                    Enable
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -892,6 +991,8 @@ export default function MembersPage() {
             {bulkAction === "membershipDate" && "Set Membership Date"}
             {bulkAction === "comment" && "Add Comment"}
             {bulkAction === "delete" && "Delete Members"}
+            {bulkAction === "disable" && "Disable Accounts"}
+            {bulkAction === "enable" && "Enable Accounts"}
           </h2>
           <button onClick={() => setBulkAction(null)} className="text-text-muted transition-colors hover:text-text-primary">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -945,6 +1046,27 @@ export default function MembersPage() {
           </p>
         )}
 
+        {bulkAction === "disable" && (
+          <>
+            <input
+              type="text"
+              value={bulkDisableReason}
+              onChange={(e) => setBulkDisableReason(e.target.value)}
+              placeholder="Reason for disabling..."
+              className="mb-4 w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-danger focus:outline-none"
+            />
+            <p className="mb-4 text-sm text-danger">
+              This will disable {selectedIds.size} {selectedIds.size === 1 ? "account" : "accounts"}. Disabled users cannot access the website.
+            </p>
+          </>
+        )}
+
+        {bulkAction === "enable" && (
+          <p className="mb-4 text-sm text-text-secondary">
+            This will re-enable {selectedIds.size} {selectedIds.size === 1 ? "account" : "accounts"}, restoring their access.
+          </p>
+        )}
+
         <div className="flex justify-end gap-3">
           <button
             onClick={() => setBulkAction(null)}
@@ -954,9 +1076,9 @@ export default function MembersPage() {
           </button>
           <button
             onClick={executeBulkAction}
-            disabled={bulkProcessing || (bulkAction === "comment" && !bulkCommentText.trim())}
+            disabled={bulkProcessing || (bulkAction === "comment" && !bulkCommentText.trim()) || (bulkAction === "disable" && !bulkDisableReason.trim())}
             className={`rounded-sm px-5 py-2 text-sm font-semibold tracking-wide transition-colors disabled:opacity-50 ${
-              bulkAction === "delete"
+              bulkAction === "delete" || bulkAction === "disable"
                 ? "bg-danger text-white hover:bg-danger/80"
                 : "bg-accent text-bg-primary hover:bg-accent-muted"
             }`}

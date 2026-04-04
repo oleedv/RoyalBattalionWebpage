@@ -316,6 +316,72 @@ users.post("/:id/enable", authMiddleware, requirePermission("developer"), async 
   return success(c, { enabled: true as const });
 });
 
+// --- Bulk Disable / Enable (developer only) ---
+
+const bulkDisableSchema = z.object({
+  ids: z.array(z.string()).min(1).max(500),
+  reason: z.string().min(1).max(500),
+});
+
+users.post("/bulk-disable", authMiddleware, requirePermission("developer"), rateLimit(10), zValidator("json", bulkDisableSchema), async (c) => {
+  const actorId = c.get("userId") as string;
+  const { ids, reason } = c.req.valid("json");
+
+  const adminIds = env.ADMIN_DISCORD_IDS.split(",").map((s) => s.trim()).filter(Boolean);
+
+  // Filter out self and developer accounts
+  const targets = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, discordId: true, discordName: true },
+  });
+  const safeTargets = targets.filter((t) => t.id !== actorId && !adminIds.includes(t.discordId));
+
+  if (safeTargets.length === 0) {
+    return fail(c, "No eligible accounts to disable", 400);
+  }
+
+  const safeIds = safeTargets.map((t) => t.id);
+  const result = await prisma.user.updateMany({
+    where: { id: { in: safeIds } },
+    data: { disabled: true, disabledAt: new Date(), disabledReason: reason },
+  });
+
+  for (const t of safeTargets) {
+    clearSyncCache(t.discordId);
+  }
+
+  await audit(c, "member.bulk_disable", "user", null, {
+    count: result.count,
+    reason,
+    names: safeTargets.map((t) => t.discordName),
+  });
+  return success(c, { disabled: result.count });
+});
+
+const bulkEnableSchema = z.object({
+  ids: z.array(z.string()).min(1).max(500),
+});
+
+users.post("/bulk-enable", authMiddleware, requirePermission("developer"), rateLimit(10), zValidator("json", bulkEnableSchema), async (c) => {
+  const { ids } = c.req.valid("json");
+
+  const targets = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, discordName: true },
+  });
+
+  const result = await prisma.user.updateMany({
+    where: { id: { in: ids } },
+    data: { disabled: false, disabledAt: null, disabledReason: null },
+  });
+
+  await audit(c, "member.bulk_enable", "user", null, {
+    count: result.count,
+    names: targets.map((t) => t.discordName),
+  });
+  return success(c, { enabled: result.count });
+});
+
 // --- Standard CRUD ---
 
 users.get("/", authMiddleware, requirePermission("view:members", "manage:members"), async (c) => {

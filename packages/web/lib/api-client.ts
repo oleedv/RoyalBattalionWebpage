@@ -282,6 +282,29 @@ export function enableUser(
   });
 }
 
+export function bulkDisableMembers(
+  token: string,
+  ids: string[],
+  reason: string,
+): Promise<ApiResponse<{ disabled: number }>> {
+  return request<{ disabled: number }>("/users/bulk-disable", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ ids, reason }),
+  });
+}
+
+export function bulkEnableMembers(
+  token: string,
+  ids: string[],
+): Promise<ApiResponse<{ enabled: number }>> {
+  return request<{ enabled: number }>("/users/bulk-enable", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ ids }),
+  });
+}
+
 // Member Comments
 export function addMemberComment(
   token: string,

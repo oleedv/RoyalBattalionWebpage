@@ -131,6 +131,7 @@ export default function LiveServerPage() {
   const consoleFilterRef = useRef<HTMLDivElement>(null);
   const [chatSearch, setChatSearch] = useState("");
   const [consoleSearch, setConsoleSearch] = useState("");
+  const [expandedPanel, setExpandedPanel] = useState<"chat" | "console" | null>(null);
 
   // Refs for metric sampling interval (needs current values without re-creating interval)
   const serverInfoRef = useRef(serverInfo);
@@ -586,6 +587,226 @@ export default function LiveServerPage() {
     .filter((m) => chatFilter === "All" || m.chat === chatFilter || m.chat === "__DIVIDER__")
     .filter((m) => !chatSearch || m.chat === "__DIVIDER__" || m.name?.toLowerCase().includes(chatSearch.toLowerCase()) || m.message?.toLowerCase().includes(chatSearch.toLowerCase()));
 
+  const expandIcon = (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+      <path d="M3 8V4a1 1 0 011-1h4a1 1 0 010 2H5v3a1 1 0 01-2 0zm14 0V5h-3a1 1 0 010-2h4a1 1 0 011 1v4a1 1 0 01-2 0zm0 4v3h-3a1 1 0 010 2h4a1 1 0 001-1v-4a1 1 0 00-2 0zM3 12v4a1 1 0 001 1h4a1 1 0 010-2H5v-3a1 1 0 00-2 0z" />
+    </svg>
+  );
+  const minimizeIcon = (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+      <path d="M3.28 2.22a.75.75 0 00-1.06 1.06L5.94 7H4a.75.75 0 000 1.5h3.75A.75.75 0 008.5 7.75V4a.75.75 0 00-1.5 0v1.94L3.28 2.22zm13.44 0a.75.75 0 010 1.06L13.06 7H15a.75.75 0 010 1.5h-3.75a.75.75 0 01-.75-.75V4a.75.75 0 011.5 0v1.94l3.72-3.72a.75.75 0 011.06 0zm0 15.56a.75.75 0 001.06-1.06L14.06 13H16a.75.75 0 000-1.5h-3.75a.75.75 0 00-.75.75V16a.75.75 0 001.5 0v-1.94l3.72 3.72zM3.28 17.78a.75.75 0 01-1.06-1.06L5.94 13H4a.75.75 0 010-1.5h3.75a.75.75 0 01.75.75V16a.75.75 0 01-1.5 0v-1.94l-3.72 3.72z" />
+    </svg>
+  );
+
+  function renderChatContent(isExpanded: boolean) {
+    return (
+      <>
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
+            Chat
+          </h2>
+          <div className="flex items-center gap-1">
+            {(["All", "ChatAll", "ChatTeam", "ChatSquad", "ChatAdmin"] as ChatFilter[]).map(
+              (f) => (
+                <button
+                  key={f}
+                  onClick={() => setChatFilter(f)}
+                  className={`rounded-sm px-2 py-0.5 text-[10px] font-medium tracking-wide transition-colors ${
+                    chatFilter === f
+                      ? "bg-accent/10 text-accent"
+                      : "text-text-muted hover:text-text-secondary"
+                  }`}
+                >
+                  {f === "All" ? "All" : f.replace("Chat", "")}
+                </button>
+              )
+            )}
+            <button
+              onClick={() => setExpandedPanel(isExpanded ? null : "chat")}
+              className="ml-1 rounded-sm p-1 text-text-muted transition-colors hover:text-text-secondary"
+              title={isExpanded ? "Minimize chat" : "Expand chat"}
+            >
+              {isExpanded ? minimizeIcon : expandIcon}
+            </button>
+          </div>
+        </div>
+        <div className="border-b border-border px-4 py-1.5">
+          <input
+            type="text"
+            value={chatSearch}
+            onChange={(e) => setChatSearch(e.target.value)}
+            placeholder="Search chat..."
+            className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+          />
+        </div>
+        <div className="flex-1 overflow-auto px-4 py-2">
+          {filteredChat.length === 0 ? (
+            <div className="py-8 text-center text-xs text-text-muted">
+              No chat messages yet
+            </div>
+          ) : (
+            filteredChat.map((msg, i) => {
+              if (msg.chat === "__DIVIDER__") {
+                return (
+                  <div key={i} className="my-2 flex items-center gap-2">
+                    <div className="flex-1 border-t border-border" />
+                    <span className="whitespace-nowrap text-[10px] text-text-muted">New Game: {msg.message}</span>
+                    <div className="flex-1 border-t border-border" />
+                  </div>
+                );
+              }
+              const player = players.find((p) => p.steamID === msg.steamID || p.eosID === msg.eosID);
+              const teamColor = String(player?.teamID) === "1"
+                ? "text-blue-400"
+                : String(player?.teamID) === "2"
+                  ? "text-red-400"
+                  : "text-text-secondary";
+              return (
+                <div key={i} className="mb-1.5 text-xs">
+                  <span className="text-text-muted">
+                    {new Date(msg.time).toLocaleTimeString("en-GB", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>{" "}
+                  <span
+                    className={`font-medium ${
+                      msg.chat === "ChatAdmin"
+                        ? "text-warning"
+                        : msg.chat === "ChatTeam"
+                          ? "text-accent"
+                          : "text-text-primary"
+                    }`}
+                  >
+                    [{msg.chat?.replace("Chat", "") || "?"}]
+                  </span>{" "}
+                  <span className={`font-medium ${teamColor}`}>{msg.name}:</span>{" "}
+                  <span className="text-text-primary">{msg.message}</span>
+                </div>
+              );
+            })
+          )}
+          <div ref={chatEndRef} />
+        </div>
+      </>
+    );
+  }
+
+  function renderConsoleContent(isExpanded: boolean) {
+    return (
+      <>
+        <div className="border-b border-border px-4 py-2">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
+              Console
+            </h2>
+            <div className="flex items-center gap-2">
+              <div className="relative" ref={consoleFilterRef}>
+                <button
+                  onClick={() => setConsoleFilterOpen((v) => !v)}
+                  className="flex items-center gap-1 rounded-sm border border-border px-2 py-0.5 text-xs text-text-muted transition-colors hover:border-accent/30 hover:text-text-secondary"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
+                  Filters
+                  {consoleFilters.size < CONSOLE_TYPES.length && (
+                    <span className="rounded-sm bg-accent/15 px-1 text-xs font-bold text-accent">
+                      {consoleFilters.size}/{CONSOLE_TYPES.length}
+                    </span>
+                  )}
+                </button>
+                {consoleFilterOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-sm border border-border bg-bg-secondary p-3 shadow-lg">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs font-semibold text-text-primary">Console Filters</span>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => { setConsoleFilters(new Set(CONSOLE_TYPES)); localStorage.setItem("rb-console-filters", JSON.stringify(CONSOLE_TYPES)); }}
+                          className="rounded-sm border border-border px-1.5 py-0.5 text-xs text-text-muted transition-colors hover:text-text-secondary"
+                        >
+                          All
+                        </button>
+                        <button
+                          onClick={() => { setConsoleFilters(new Set()); localStorage.setItem("rb-console-filters", "[]"); }}
+                          className="rounded-sm border border-border px-1.5 py-0.5 text-xs text-text-muted transition-colors hover:text-text-secondary"
+                        >
+                          None
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {CONSOLE_TYPES.map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => toggleConsoleFilter(t)}
+                          className={`rounded-sm border px-1.5 py-0.5 text-xs font-medium tracking-wide transition-colors ${
+                            consoleFilters.has(t)
+                              ? "border-accent/30 bg-accent/10 text-accent"
+                              : "border-border text-text-muted/50 line-through"
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setConsoleLog([])}
+                className="rounded-sm border border-border px-2 py-0.5 text-xs text-text-muted transition-colors hover:border-accent/30 hover:text-text-secondary"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setExpandedPanel(isExpanded ? null : "console")}
+                className="rounded-sm border border-border p-1 text-text-muted transition-colors hover:border-accent/30 hover:text-text-secondary"
+                title={isExpanded ? "Minimize console" : "Expand console"}
+              >
+                {isExpanded ? minimizeIcon : expandIcon}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="border-b border-border px-4 py-1.5">
+          <input
+            type="text"
+            value={consoleSearch}
+            onChange={(e) => setConsoleSearch(e.target.value)}
+            placeholder="Search console..."
+            className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+          />
+        </div>
+        <div className="flex-1 overflow-auto px-4 py-2 font-mono">
+          {consoleLog.length === 0 ? (
+            <div className="py-8 text-center text-xs text-text-muted">
+              No events yet
+            </div>
+          ) : (
+            consoleLog
+              .filter((e) => consoleFilters.has(e.type))
+              .filter((e) => !consoleSearch || e.message.toLowerCase().includes(consoleSearch.toLowerCase()))
+              .map((entry, i) => (
+              <div key={i} className="mb-1 text-xs">
+                <span className="text-text-muted">
+                  {new Date(entry.time).toLocaleTimeString("en-GB", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </span>{" "}
+                <span className={consoleTypeColor(entry.type)}>
+                  [{entry.type.toUpperCase()}]
+                </span>{" "}
+                <span className="text-text-primary">{entry.message}</span>
+              </div>
+            ))
+          )}
+          <div ref={consoleEndRef} />
+        </div>
+      </>
+    );
+  }
+
   // Compute clans that can be moved to a target team
   function getMovableClans(targetTeam: string): { key: string; tag: string; count: number; team1: number; team2: number }[] {
     const result: { key: string; tag: string; count: number; team1: number; team2: number }[] = [];
@@ -1019,9 +1240,9 @@ export default function LiveServerPage() {
       </Modal>
 
       {/* Main grid: Players + Chat */}
-      <div className="grid gap-4 lg:grid-cols-3 flex-1 min-h-0">
+      <div className="grid gap-4 lg:grid-cols-[3fr_2fr] flex-1 min-h-0">
         {/* Player list - 2 cols */}
-        <div className="lg:col-span-2 flex flex-col min-h-0">
+        <div className="flex flex-col min-h-0">
           <div className="facet-border flex flex-1 flex-col min-h-0 rounded-sm bg-bg-card">
             <div className="border-b border-border px-4 py-3">
               <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
@@ -1121,196 +1342,52 @@ export default function LiveServerPage() {
           )}
 
           {/* Chat feed */}
-          <div className="facet-border flex min-h-[200px] lg:min-h-0 flex-1 flex-col rounded-sm bg-bg-card">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
-                Chat
-              </h2>
-              <div className="flex gap-1">
-                {(["All", "ChatAll", "ChatTeam", "ChatSquad", "ChatAdmin"] as ChatFilter[]).map(
-                  (f) => (
-                    <button
-                      key={f}
-                      onClick={() => setChatFilter(f)}
-                      className={`rounded-sm px-2 py-0.5 text-[10px] font-medium tracking-wide transition-colors ${
-                        chatFilter === f
-                          ? "bg-accent/10 text-accent"
-                          : "text-text-muted hover:text-text-secondary"
-                      }`}
-                    >
-                      {f === "All" ? "All" : f.replace("Chat", "")}
-                    </button>
-                  )
-                )}
-              </div>
+          {expandedPanel === "chat" ? (
+            <button
+              onClick={() => setExpandedPanel(null)}
+              className="facet-border flex min-h-[60px] items-center justify-center rounded-sm bg-bg-card text-xs text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
+            >
+              Chat expanded — click to minimize
+            </button>
+          ) : (
+            <div className="facet-border flex min-h-[200px] lg:min-h-0 flex-1 flex-col rounded-sm bg-bg-card">
+              {renderChatContent(false)}
             </div>
-            <div className="border-b border-border px-4 py-1.5">
-              <input
-                type="text"
-                value={chatSearch}
-                onChange={(e) => setChatSearch(e.target.value)}
-                placeholder="Search chat..."
-                className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-              />
-            </div>
-
-            <div className="flex-1 overflow-auto px-4 py-2">
-              {filteredChat.length === 0 ? (
-                <div className="py-8 text-center text-xs text-text-muted">
-                  No chat messages yet
-                </div>
-              ) : (
-                filteredChat.map((msg, i) => {
-                  if (msg.chat === "__DIVIDER__") {
-                    return (
-                      <div key={i} className="my-2 flex items-center gap-2">
-                        <div className="flex-1 border-t border-border" />
-                        <span className="whitespace-nowrap text-[10px] text-text-muted">New Game: {msg.message}</span>
-                        <div className="flex-1 border-t border-border" />
-                      </div>
-                    );
-                  }
-                  const player = players.find((p) => p.steamID === msg.steamID || p.eosID === msg.eosID);
-                  const teamColor = String(player?.teamID) === "1"
-                    ? "text-blue-400"
-                    : String(player?.teamID) === "2"
-                      ? "text-red-400"
-                      : "text-text-secondary";
-                  return (
-                    <div key={i} className="mb-1.5 text-xs">
-                      <span className="text-text-muted">
-                        {new Date(msg.time).toLocaleTimeString("en-GB", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>{" "}
-                      <span
-                        className={`font-medium ${
-                          msg.chat === "ChatAdmin"
-                            ? "text-warning"
-                            : msg.chat === "ChatTeam"
-                              ? "text-accent"
-                              : "text-text-primary"
-                        }`}
-                      >
-                        [{msg.chat?.replace("Chat", "") || "?"}]
-                      </span>{" "}
-                      <span className={`font-medium ${teamColor}`}>{msg.name}:</span>{" "}
-                      <span className="text-text-primary">{msg.message}</span>
-                    </div>
-                  );
-                })
-              )}
-              <div ref={chatEndRef} />
-            </div>
-          </div>
+          )}
 
           {/* Console */}
-          <div className="facet-border flex min-h-[200px] lg:min-h-0 flex-1 flex-col rounded-sm bg-bg-card">
-            <div className="border-b border-border px-4 py-2">
-              <div className="flex items-center justify-between">
-                <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
-                  Console
-                </h2>
-                <div className="flex items-center gap-2">
-                  <div className="relative" ref={consoleFilterRef}>
-                    <button
-                      onClick={() => setConsoleFilterOpen((v) => !v)}
-                      className="flex items-center gap-1 rounded-sm border border-border px-2 py-0.5 text-xs text-text-muted transition-colors hover:border-accent/30 hover:text-text-secondary"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" /></svg>
-                      Filters
-                      {consoleFilters.size < CONSOLE_TYPES.length && (
-                        <span className="rounded-sm bg-accent/15 px-1 text-xs font-bold text-accent">
-                          {consoleFilters.size}/{CONSOLE_TYPES.length}
-                        </span>
-                      )}
-                    </button>
-                    {consoleFilterOpen && (
-                      <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-sm border border-border bg-bg-secondary p-3 shadow-lg">
-                        <div className="mb-2 flex items-center justify-between">
-                          <span className="text-xs font-semibold text-text-primary">Console Filters</span>
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => { setConsoleFilters(new Set(CONSOLE_TYPES)); localStorage.setItem("rb-console-filters", JSON.stringify(CONSOLE_TYPES)); }}
-                              className="rounded-sm border border-border px-1.5 py-0.5 text-xs text-text-muted transition-colors hover:text-text-secondary"
-                            >
-                              All
-                            </button>
-                            <button
-                              onClick={() => { setConsoleFilters(new Set()); localStorage.setItem("rb-console-filters", "[]"); }}
-                              className="rounded-sm border border-border px-1.5 py-0.5 text-xs text-text-muted transition-colors hover:text-text-secondary"
-                            >
-                              None
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {CONSOLE_TYPES.map((t) => (
-                            <button
-                              key={t}
-                              onClick={() => toggleConsoleFilter(t)}
-                              className={`rounded-sm border px-1.5 py-0.5 text-xs font-medium tracking-wide transition-colors ${
-                                consoleFilters.has(t)
-                                  ? "border-accent/30 bg-accent/10 text-accent"
-                                  : "border-border text-text-muted/50 line-through"
-                              }`}
-                            >
-                              {t}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setConsoleLog([])}
-                    className="rounded-sm border border-border px-2 py-0.5 text-xs text-text-muted transition-colors hover:border-accent/30 hover:text-text-secondary"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
+          {expandedPanel === "console" ? (
+            <button
+              onClick={() => setExpandedPanel(null)}
+              className="facet-border flex min-h-[60px] items-center justify-center rounded-sm bg-bg-card text-xs text-text-muted hover:text-text-secondary transition-colors cursor-pointer"
+            >
+              Console expanded — click to minimize
+            </button>
+          ) : (
+            <div className="facet-border flex min-h-[200px] lg:min-h-0 flex-1 flex-col rounded-sm bg-bg-card">
+              {renderConsoleContent(false)}
             </div>
-            <div className="border-b border-border px-4 py-1.5">
-              <input
-                type="text"
-                value={consoleSearch}
-                onChange={(e) => setConsoleSearch(e.target.value)}
-                placeholder="Search console..."
-                className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-              />
-            </div>
-            <div className="flex-1 overflow-auto px-4 py-2 font-mono">
-              {consoleLog.length === 0 ? (
-                <div className="py-8 text-center text-xs text-text-muted">
-                  No events yet
-                </div>
-              ) : (
-                consoleLog
-                  .filter((e) => consoleFilters.has(e.type))
-                  .filter((e) => !consoleSearch || e.message.toLowerCase().includes(consoleSearch.toLowerCase()))
-                  .map((entry, i) => (
-                  <div key={i} className="mb-1 text-xs">
-                    <span className="text-text-muted">
-                      {new Date(entry.time).toLocaleTimeString("en-GB", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      })}
-                    </span>{" "}
-                    <span className={consoleTypeColor(entry.type)}>
-                      [{entry.type.toUpperCase()}]
-                    </span>{" "}
-                    <span className="text-text-primary">{entry.message}</span>
-                  </div>
-                ))
-              )}
-              <div ref={consoleEndRef} />
-            </div>
-          </div>
+          )}
         </div>
       </div>
+
+      {/* Expanded Chat/Console modal */}
+      <Modal
+        open={expandedPanel !== null}
+        onClose={() => setExpandedPanel(null)}
+        className="max-w-6xl w-[90vw] h-[85vh] bg-bg-secondary p-0 flex flex-col"
+      >
+        {expandedPanel === "chat" && (
+          <div className="facet-border flex flex-1 flex-col rounded-sm bg-bg-card min-h-0">
+            {renderChatContent(true)}
+          </div>
+        )}
+        {expandedPanel === "console" && (
+          <div className="facet-border flex flex-1 flex-col rounded-sm bg-bg-card min-h-0">
+            {renderConsoleContent(true)}
+          </div>
+        )}
+      </Modal>
 
       {/* Warn modal */}
       <Modal open={!!warnTarget} onClose={() => setWarnTarget(null)} className="max-w-md bg-bg-secondary p-6">

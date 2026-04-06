@@ -496,8 +496,11 @@ export const updateMatch = (
   data: { date?: string; map?: string; layer?: string; result?: string; vodUrl?: string | null; hidden?: boolean; server?: string }
 ) => matchesClient.update(token, id, data as Record<string, unknown>);
 
-export function getPublicMatches(): Promise<ApiResponse<Match[]>> {
-  return request<Match[]>("/matches/public");
+export function getPublicMatches(
+  page = 1,
+  limit = 20
+): Promise<ApiResponse<Paginated<Match>>> {
+  return request<Paginated<Match>>(`/matches/public?page=${page}&limit=${limit}`);
 }
 
 // Dashboard Stats

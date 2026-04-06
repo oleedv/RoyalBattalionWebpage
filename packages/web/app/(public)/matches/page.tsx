@@ -391,20 +391,28 @@ function MatchRow({ match }: { match: Match }) {
   );
 }
 
+const PAGE_SIZE = 20;
+
 export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
   useEffect(() => {
-    async function fetch() {
-      const res = await getPublicMatches();
+    async function load() {
+      setLoading(true);
+      const res = await getPublicMatches(page, PAGE_SIZE);
       if (res.success && res.data) {
-        setMatches(res.data);
+        setMatches(res.data.items);
+        setTotal(res.data.total);
       }
       setLoading(false);
     }
-    fetch();
-  }, []);
+    load();
+  }, [page]);
 
   return (
     <div className="min-h-screen">
@@ -482,6 +490,31 @@ export default function MatchesPage() {
               {matches.map((match) => (
                 <MatchRow key={match.id} match={match} />
               ))}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-between">
+              <div className="text-xs text-text-muted">
+                Page {page} of {totalPages}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="rounded-sm border border-border px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="rounded-sm border border-border px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </section>

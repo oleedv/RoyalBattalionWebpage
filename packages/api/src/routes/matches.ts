@@ -13,15 +13,21 @@ const matches = new Hono();
 
 // Public route (no auth) - must be registered before the wildcard auth middleware
 matches.get("/public", async (c) => {
-  const entries = await prisma.match.findMany({
-    where: { hidden: false },
-    orderBy: { date: "desc" },
-    take: 10,
-  });
+  const page = Math.max(1, Number(c.req.query("page") || "1"));
+  const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") || "20")));
+  const skip = (page - 1) * limit;
 
-  const result: Match[] = entries.map(toMatch);
+  const [entries, total] = await Promise.all([
+    prisma.match.findMany({
+      where: { hidden: false },
+      orderBy: { date: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.match.count({ where: { hidden: false } }),
+  ]);
 
-  return success(c, result);
+  return success(c, { items: entries.map(toMatch), total });
 });
 
 // All remaining routes require user auth

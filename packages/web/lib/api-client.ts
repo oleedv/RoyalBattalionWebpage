@@ -30,6 +30,9 @@ import type {
   Paginated,
   TicketTimeout,
   PlaytimeStats,
+  SeedTrackerLeaderboardEntry,
+  SeedTrackerPlayerDetail,
+  SeedTrackerStats,
 } from "shared";
 
 const BASE_URL =
@@ -940,6 +943,43 @@ export function getPlaytime(
   steamId: string,
 ): Promise<ApiResponse<PlaytimeStats>> {
   return request<PlaytimeStats>(`/playtime?steamId=${encodeURIComponent(steamId)}`, {
+    headers: authHeaders(token),
+  });
+}
+
+// Seed Tracker
+export function getSeedTrackerLeaderboard(
+  token: string,
+  days = 30,
+  limit = 50
+): Promise<ApiResponse<SeedTrackerLeaderboardEntry[]>> {
+  return request(`/seeding-tracker/leaderboard?days=${days}&limit=${limit}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function getSeedTrackerPlayer(
+  token: string,
+  steamId: string
+): Promise<ApiResponse<SeedTrackerPlayerDetail>> {
+  return request(`/seeding-tracker/player/${steamId}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function searchSeedTracker(
+  token: string,
+  query: string
+): Promise<ApiResponse<SeedTrackerLeaderboardEntry[]>> {
+  return request(`/seeding-tracker/search?q=${encodeURIComponent(query)}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function getSeedTrackerStats(
+  token: string
+): Promise<ApiResponse<SeedTrackerStats>> {
+  return request(`/seeding-tracker/stats`, {
     headers: authHeaders(token),
   });
 }

@@ -18,6 +18,7 @@ import serverConfig from "./routes/server-config";
 import discordBot from "./routes/discord-bot";
 import auditLogs from "./routes/audit-logs";
 import playtime from "./routes/playtime";
+import seedingTracker from "./routes/seeding-tracker";
 import lobby from "./routes/lobby";
 import { generateAdminsCfg } from "./lib/cfg-generator";
 import { squadjsSocket } from "./lib/squadjs-socket";
@@ -76,6 +77,7 @@ app.route("/server-config", serverConfig);
 app.route("/discord-bot", discordBot);
 app.route("/audit-logs", auditLogs);
 app.route("/playtime", playtime);
+app.route("/seeding-tracker", seedingTracker);
 app.route("/lobby", lobby);
 
 // Public cfg endpoint (IP-restricted) -- separate from /whitelist to avoid auth middleware

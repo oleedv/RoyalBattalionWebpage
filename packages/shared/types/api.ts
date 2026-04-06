@@ -124,3 +124,54 @@ export interface SquadJSPlugin {
   enabled: boolean;
   [key: string]: SquadJSPluginOptionValue;
 }
+
+// Seed tracker
+export interface SeedTrackerLeaderboardEntry {
+  steamId: string;
+  name: string;
+  seedDays: number;
+  totalDuration: number;
+  avgQuality: number;
+  streak: number;
+  lastSeedDate: string;
+}
+
+export interface SeedTrackerPlayerDetail {
+  steamId: string;
+  name: string;
+  seedDays30: number;
+  seedDays90: number;
+  seedDaysAll: number;
+  totalDuration30: number;
+  avgQuality: number;
+  streak: number;
+  timeOfDayDistribution: number[];
+  frequencyByWeekday: number[];
+  recentSessions: SeedTrackerSession[];
+  whitelistStatus: {
+    hasWhitelist: boolean;
+    role: string | null;
+    expiresAt: string | null;
+  } | null;
+}
+
+export interface SeedTrackerSession {
+  id: number;
+  seedDate: string;
+  joinTime: string;
+  spawnTime: string;
+  leaveTime: string | null;
+  joinPopulation: number;
+  peakPopulation: number;
+  thresholdReached: boolean;
+  durationSeconds: number | null;
+  qualityScore: number | null;
+  status: "active" | "completed" | "abandoned";
+}
+
+export interface SeedTrackerStats {
+  totalSeeders: number;
+  totalSeedHours: number;
+  avgQuality: number;
+  activeSeeders7d: number;
+}

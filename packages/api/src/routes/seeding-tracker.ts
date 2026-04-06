@@ -13,7 +13,7 @@ import type {
 const seedingTracker = new Hono();
 
 seedingTracker.use("*", authMiddleware);
-seedingTracker.use("*", requirePermission("view:whitelist", "view:members", "view:live-server"));
+seedingTracker.use("*", requirePermission("view:seeding-tracker"));
 
 // GET /leaderboard?days=30&limit=50
 seedingTracker.get("/leaderboard", async (c) => {

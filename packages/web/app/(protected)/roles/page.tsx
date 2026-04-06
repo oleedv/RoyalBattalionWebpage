@@ -227,6 +227,18 @@ const PERMISSION_GROUPS: PermGroup[] = [
       },
     ],
   },
+  {
+    id: "seeding-tracker",
+    label: "Seeding Tracker",
+    description: "Seeding session analytics and leaderboards",
+    entries: [
+      {
+        perm: "view:seeding-tracker",
+        label: "View Seeding Tracker",
+        description: "Browse seeding leaderboard, player stats, and session history",
+      },
+    ],
+  },
 ];
 
 // Compile-time coverage: ensure every assignable permission is in a group

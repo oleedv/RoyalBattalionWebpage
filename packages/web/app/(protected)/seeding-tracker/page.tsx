@@ -141,10 +141,7 @@ export default function SeedingTrackerPage() {
 
   if (!apiToken) return <div className="text-text-secondary">Loading...</div>;
 
-  const canView =
-    hasPermission("view:whitelist") ||
-    hasPermission("view:members") ||
-    hasPermission("view:live-server");
+  const canView = hasPermission("view:seeding-tracker");
   if (!canView) {
     return <div className="text-danger">Insufficient permissions.</div>;
   }

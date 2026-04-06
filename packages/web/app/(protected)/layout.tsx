@@ -61,7 +61,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: "Seeding Tracker",
     href: "/seeding-tracker",
-    requiredPermissions: ["view:whitelist", "view:members", "view:live-server"],
+    requiredPermissions: ["view:seeding-tracker"],
   },
   {
     label: "Audit Logs",

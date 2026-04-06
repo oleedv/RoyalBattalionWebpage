@@ -20,6 +20,7 @@ export const PERMISSIONS = [
   "view:tickets:comp_team",
   "view:tickets:whitelist",
   "view:audit-logs",
+  "view:seeding-tracker",
   "manage:clan-move",
   "manage:randomize",
   "developer",

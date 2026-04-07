@@ -134,6 +134,7 @@ export interface SeedTrackerLeaderboardEntry {
   avgQuality: number;
   streak: number;
   lastSeedDate: string;
+  isActive?: boolean;
 }
 
 export interface SeedTrackerPlayerDetail {
@@ -174,4 +175,5 @@ export interface SeedTrackerStats {
   totalSeedHours: number;
   avgQuality: number;
   activeSeeders7d: number;
+  currentlySeedingCount?: number;
 }

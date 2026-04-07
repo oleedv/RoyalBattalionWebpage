@@ -27,6 +27,13 @@ function formatQuality(quality: number | null): string {
   return `${Math.round(quality * 100)}%`;
 }
 
+function formatDate(value: string | null | undefined): string {
+  if (!value) return "--";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
 function HourlyChart({ data }: { data: number[] }) {
   const max = Math.max(...data, 1);
   const barWidth = 100 / 24;
@@ -271,8 +278,17 @@ export default function SeedingTrackerPage() {
                   <tbody>
                     {playerDetail.recentSessions.map((s) => (
                       <tr key={s.id} className="border-b border-border/50">
-                        <td className="px-3 py-2.5 text-text-muted">{s.seedDate}</td>
-                        <td className="px-3 py-2.5">{formatDuration(s.durationSeconds ?? 0)}</td>
+                        <td className="px-3 py-2.5 text-text-muted">
+                          <span className="flex items-center gap-2">
+                            {formatDate(s.seedDate)}
+                            {s.status === "active" && (
+                              <span className="rounded-sm bg-success/15 px-1.5 py-0.5 text-[10px] font-medium text-success">
+                                LIVE
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5">{s.status === "active" ? "In progress" : formatDuration(s.durationSeconds ?? 0)}</td>
                         <td className="px-3 py-2.5">{s.joinPopulation}</td>
                         <td className="px-3 py-2.5">{s.peakPopulation}</td>
                         <td className="px-3 py-2.5">
@@ -310,7 +326,7 @@ export default function SeedingTrackerPage() {
       </div>
 
       {/* Stats cards */}
-      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
         <div className="rounded-sm border border-border bg-bg-card p-5">
           <div className="text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
             Total Seeders
@@ -341,6 +357,14 @@ export default function SeedingTrackerPage() {
           </div>
           <div className="mt-2 text-2xl font-bold text-text-primary">
             {stats?.activeSeeders7d ?? "--"}
+          </div>
+        </div>
+        <div className="rounded-sm border border-success/30 bg-success/5 p-5">
+          <div className="text-xs font-semibold tracking-[0.15em] uppercase text-success/70">
+            Seeding Now
+          </div>
+          <div className="mt-2 text-2xl font-bold text-success">
+            {stats?.currentlySeedingCount ?? "--"}
           </div>
         </div>
       </div>
@@ -424,11 +448,18 @@ export default function SeedingTrackerPage() {
                       className="cursor-pointer border-b border-border/50 transition-colors hover:bg-bg-tertiary"
                     >
                       <td className="px-3 py-2.5 text-text-muted">{i + 1}</td>
-                      <td className="px-3 py-2.5 font-medium text-text-primary">{entry.name}</td>
+                      <td className="px-3 py-2.5 font-medium text-text-primary">
+                        <span className="flex items-center gap-2">
+                          {entry.name}
+                          {entry.isActive && (
+                            <span className="inline-block h-2 w-2 rounded-full bg-success" title="Currently seeding" />
+                          )}
+                        </span>
+                      </td>
                       <td className="px-3 py-2.5">{entry.seedDays}</td>
                       <td className="px-3 py-2.5">{formatDuration(entry.totalDuration)}</td>
                       <td className="px-3 py-2.5">{formatQuality(entry.avgQuality)}</td>
-                      <td className="px-3 py-2.5 text-text-muted">{entry.lastSeedDate}</td>
+                      <td className="px-3 py-2.5 text-text-muted">{formatDate(entry.lastSeedDate)}</td>
                     </tr>
                   ))}
                   {leaderboard.length === 0 && (
@@ -489,11 +520,18 @@ export default function SeedingTrackerPage() {
                       className="cursor-pointer border-b border-border/50 transition-colors hover:bg-bg-tertiary"
                     >
                       <td className="px-3 py-2.5 text-text-muted">{i + 1}</td>
-                      <td className="px-3 py-2.5 font-medium text-text-primary">{entry.name}</td>
+                      <td className="px-3 py-2.5 font-medium text-text-primary">
+                        <span className="flex items-center gap-2">
+                          {entry.name}
+                          {entry.isActive && (
+                            <span className="inline-block h-2 w-2 rounded-full bg-success" title="Currently seeding" />
+                          )}
+                        </span>
+                      </td>
                       <td className="px-3 py-2.5">{entry.seedDays}</td>
                       <td className="px-3 py-2.5">{formatDuration(entry.totalDuration)}</td>
                       <td className="px-3 py-2.5">{formatQuality(entry.avgQuality)}</td>
-                      <td className="px-3 py-2.5 text-text-muted">{entry.lastSeedDate}</td>
+                      <td className="px-3 py-2.5 text-text-muted">{formatDate(entry.lastSeedDate)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -26,12 +26,13 @@ seedingTracker.get("/leaderboard", async (c) => {
     SELECT
       p.name, p.steam_id AS steamId,
       COUNT(DISTINCT s.seed_date) AS seedDays,
-      COALESCE(SUM(s.duration_seconds), 0) AS totalDuration,
+      COALESCE(SUM(COALESCE(s.duration_seconds, TIMESTAMPDIFF(SECOND, s.spawn_time, NOW()))), 0) AS totalDuration,
       AVG(s.quality_score) AS avgQuality,
-      MAX(s.seed_date) AS lastSeedDate
+      MAX(s.seed_date) AS lastSeedDate,
+      MAX(CASE WHEN s.status = 'active' THEN 1 ELSE 0 END) AS isActive
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
-    WHERE s.status = 'completed'
+    WHERE s.status IN ('completed', 'active')
       AND s.seed_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
     GROUP BY s.player_id
     ORDER BY seedDays DESC, totalDuration DESC
@@ -47,6 +48,7 @@ seedingTracker.get("/leaderboard", async (c) => {
     avgQuality: Math.round(Number(row.avgQuality || 0) * 100) / 100,
     streak: 0,
     lastSeedDate: row.lastSeedDate ? String(row.lastSeedDate) : "",
+    isActive: Number(row.isActive) === 1,
   })) satisfies SeedTrackerLeaderboardEntry[];
 
   return c.json({ success: true, data: entries });
@@ -64,11 +66,11 @@ seedingTracker.get("/player/:steamId", async (c) => {
       COUNT(DISTINCT CASE WHEN s.seed_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN s.seed_date END) AS seedDays30,
       COUNT(DISTINCT CASE WHEN s.seed_date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY) THEN s.seed_date END) AS seedDays90,
       COUNT(DISTINCT s.seed_date) AS seedDaysAll,
-      COALESCE(SUM(CASE WHEN s.seed_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN s.duration_seconds ELSE 0 END), 0) AS totalDuration30,
+      COALESCE(SUM(CASE WHEN s.seed_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN COALESCE(s.duration_seconds, TIMESTAMPDIFF(SECOND, s.spawn_time, NOW())) ELSE 0 END), 0) AS totalDuration30,
       AVG(CASE WHEN s.seed_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN s.quality_score END) AS avgQuality
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
-    WHERE p.steam_id = ? AND s.status = 'completed'
+    WHERE p.steam_id = ? AND s.status IN ('completed', 'active')
   `;
 
   // 2. Time-of-day distribution
@@ -76,7 +78,7 @@ seedingTracker.get("/player/:steamId", async (c) => {
     SELECT HOUR(s.spawn_time) AS hour, COUNT(*) AS cnt
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
-    WHERE p.steam_id = ? AND s.status = 'completed'
+    WHERE p.steam_id = ? AND s.status IN ('completed', 'active')
     GROUP BY hour
     ORDER BY hour
   `;
@@ -86,7 +88,7 @@ seedingTracker.get("/player/:steamId", async (c) => {
     SELECT WEEKDAY(s.seed_date) AS day, COUNT(DISTINCT s.seed_date) AS cnt
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
-    WHERE p.steam_id = ? AND s.status = 'completed'
+    WHERE p.steam_id = ? AND s.status IN ('completed', 'active')
     GROUP BY day
     ORDER BY day
   `;
@@ -99,7 +101,7 @@ seedingTracker.get("/player/:steamId", async (c) => {
       s.duration_seconds AS durationSeconds, s.quality_score AS qualityScore, s.status
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
-    WHERE p.steam_id = ? AND s.status = 'completed'
+    WHERE p.steam_id = ? AND s.status IN ('completed', 'active')
     ORDER BY s.seed_date DESC, s.spawn_time DESC
     LIMIT 20
   `;
@@ -109,7 +111,7 @@ seedingTracker.get("/player/:steamId", async (c) => {
     SELECT DISTINCT s.seed_date AS seedDate
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
-    WHERE p.steam_id = ? AND s.status = 'completed'
+    WHERE p.steam_id = ? AND s.status IN ('completed', 'active')
     ORDER BY s.seed_date DESC
     LIMIT 100
   `;
@@ -241,12 +243,13 @@ seedingTracker.get("/search", async (c) => {
   const query = `
     SELECT p.name, p.steam_id AS steamId,
       COUNT(DISTINCT s.seed_date) AS seedDays,
-      COALESCE(SUM(s.duration_seconds), 0) AS totalDuration,
+      COALESCE(SUM(COALESCE(s.duration_seconds, TIMESTAMPDIFF(SECOND, s.spawn_time, NOW()))), 0) AS totalDuration,
       AVG(s.quality_score) AS avgQuality,
-      MAX(s.seed_date) AS lastSeedDate
+      MAX(s.seed_date) AS lastSeedDate,
+      MAX(CASE WHEN s.status = 'active' THEN 1 ELSE 0 END) AS isActive
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
-    WHERE p.name LIKE ? AND s.status = 'completed'
+    WHERE p.name LIKE ? AND s.status IN ('completed', 'active')
       AND s.seed_date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
     GROUP BY s.player_id
     ORDER BY seedDays DESC
@@ -262,6 +265,7 @@ seedingTracker.get("/search", async (c) => {
     avgQuality: Math.round(Number(row.avgQuality || 0) * 100) / 100,
     streak: 0,
     lastSeedDate: row.lastSeedDate ? String(row.lastSeedDate) : "",
+    isActive: Number(row.isActive) === 1,
   })) satisfies SeedTrackerLeaderboardEntry[];
 
   return c.json({ success: true, data: entries });
@@ -274,11 +278,12 @@ seedingTracker.get("/stats", async (c) => {
   const query = `
     SELECT
       COUNT(DISTINCT s.player_id) AS totalSeeders,
-      COALESCE(SUM(s.duration_seconds), 0) / 3600 AS totalSeedHours,
+      COALESCE(SUM(COALESCE(s.duration_seconds, TIMESTAMPDIFF(SECOND, s.spawn_time, NOW()))), 0) / 3600 AS totalSeedHours,
       AVG(s.quality_score) AS avgQuality,
-      COUNT(DISTINCT CASE WHEN s.seed_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN s.player_id END) AS activeSeeders7d
+      COUNT(DISTINCT CASE WHEN s.seed_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) THEN s.player_id END) AS activeSeeders7d,
+      COUNT(DISTINCT CASE WHEN s.status = 'active' THEN s.player_id END) AS currentlySeedingCount
     FROM squadjs_seed_sessions s
-    WHERE s.status = 'completed'
+    WHERE s.status IN ('completed', 'active')
       AND s.seed_date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
   `;
 
@@ -290,6 +295,7 @@ seedingTracker.get("/stats", async (c) => {
     totalSeedHours: Math.round(Number(row.totalSeedHours || 0) * 10) / 10,
     avgQuality: Math.round(Number(row.avgQuality || 0) * 100) / 100,
     activeSeeders7d: Number(row.activeSeeders7d || 0),
+    currentlySeedingCount: Number(row.currentlySeedingCount || 0),
   };
 
   return c.json({ success: true, data });

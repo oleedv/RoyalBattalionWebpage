@@ -11,6 +11,7 @@ model User {
   id             String          @id @default(cuid())
   discordId      String          @unique
   discordName    String
+  displayName    String?
   steamId        String?         @unique
   eosId          String?         @unique
   avatarUrl      String?

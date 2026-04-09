@@ -29,6 +29,11 @@ const NAV_ITEMS: NavItem[] = [
     requiredPermissions: ["view:members", "manage:members"],
   },
   {
+    label: "Discord Users",
+    href: "/discord-users",
+    requiredPermissions: ["view:members", "manage:members"],
+  },
+  {
     label: "Tickets",
     href: "/tickets",
     requiredPermissions: ["view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer", "view:tickets:comp_team", "view:tickets:whitelist"],

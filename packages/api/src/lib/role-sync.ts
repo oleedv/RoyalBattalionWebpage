@@ -44,15 +44,17 @@ export async function syncAllUserRoles(): Promise<{ updated: number; created: nu
       continue;
     }
 
-    // Update discordName and avatarUrl if changed
+    // Update discordName, displayName and avatarUrl if changed
     const avatarUrl = memberData.avatar
       ? `https://cdn.discordapp.com/avatars/${memberData.discordId}/${memberData.avatar}.png`
       : null;
-    if (user.discordName !== memberData.username || user.avatarUrl !== avatarUrl) {
+    const displayName = memberData.displayName;
+    if (user.discordName !== memberData.username || user.displayName !== displayName || user.avatarUrl !== avatarUrl) {
       await prisma.user.update({
         where: { id: user.id },
         data: {
           discordName: memberData.username,
+          displayName,
           avatarUrl,
         },
       });
@@ -124,6 +126,7 @@ export async function syncAllUserRoles(): Promise<{ updated: number; created: nu
           data: {
             discordId: member.discordId,
             discordName: member.username,
+            displayName: member.displayName,
             avatarUrl,
             hasLoggedIn: false,
             roles: mappedRoleIds.length > 0

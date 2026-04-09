@@ -107,9 +107,6 @@ export default function MembersPage() {
   // Search
   const [search, setSearch] = useState("");
 
-  // Members-only toggle (default ON)
-  const [membersOnly, setMembersOnly] = useState(true);
-
   // Sorting
   type SortKey = "name" | "steamId" | "joined" | "country" | "loggedIn";
   type SortDir = "asc" | "desc";
@@ -268,7 +265,7 @@ export default function MembersPage() {
     let result = users;
 
     // Members-only filter
-    if (membersOnly && memberRoleIds.size > 0) {
+    if (memberRoleIds.size > 0) {
       result = result.filter((u) => u.roles.some((r) => memberRoleIds.has(r.id)));
     }
 
@@ -276,6 +273,7 @@ export default function MembersPage() {
       const s = search.toLowerCase();
       result = result.filter((u) =>
         u.discordName.toLowerCase().includes(s) ||
+        (u.displayName && u.displayName.toLowerCase().includes(s)) ||
         u.steamId?.includes(search) ||
         u.eosId?.includes(search) ||
         u.discordId.includes(search)
@@ -342,7 +340,7 @@ export default function MembersPage() {
     result = [...result].sort((a, b) => {
       switch (sortKey) {
         case "name":
-          return dir * a.discordName.localeCompare(b.discordName);
+          return dir * (a.displayName || a.discordName).localeCompare(b.displayName || b.discordName);
         case "steamId": {
           if (!a.steamId && !b.steamId) return 0;
           if (!a.steamId) return 1;
@@ -365,7 +363,7 @@ export default function MembersPage() {
     });
 
     return result;
-  }, [users, search, membersOnly, memberRoleIds, sortKey, sortDir, filterRoles, filterCountry, filterLoggedIn, filterPlaytimeMin30, filterPlaytimeMax30, filterPlaytimeMin90, filterPlaytimeMax90, filterSeedMin30, filterSeedMax30, filterSeedMin90, filterSeedMax90, filterActivityMin30, filterActivityMax30, filterActivityMin90, filterActivityMax90, filterJoinFrom, filterJoinTo, filterMemberFrom, filterMemberTo]);
+  }, [users, search, memberRoleIds, sortKey, sortDir, filterRoles, filterCountry, filterLoggedIn, filterPlaytimeMin30, filterPlaytimeMax30, filterPlaytimeMin90, filterPlaytimeMax90, filterSeedMin30, filterSeedMax30, filterSeedMin90, filterSeedMax90, filterActivityMin30, filterActivityMax30, filterActivityMin90, filterActivityMax90, filterJoinFrom, filterJoinTo, filterMemberFrom, filterMemberTo]);
 
   // --- Detail modal ---
 
@@ -632,16 +630,6 @@ export default function MembersPage() {
             </button>
           )}
           <button
-            onClick={() => setMembersOnly((v) => !v)}
-            className={`rounded-sm border px-4 py-1.5 text-xs font-medium tracking-wide transition-colors ${
-              membersOnly
-                ? "border-accent/40 bg-accent/10 text-accent"
-                : "border-border text-text-secondary hover:border-accent/40 hover:text-accent"
-            }`}
-          >
-            {membersOnly ? "Members" : "All Users"}
-          </button>
-          <button
             onClick={() => setFilterOpen((v) => !v)}
             className={`rounded-sm border px-4 py-1.5 text-xs font-medium tracking-wide transition-colors ${
               filterOpen || activeFilterCount > 0
@@ -859,7 +847,7 @@ export default function MembersPage() {
                             <img src={user.avatarUrl} alt="" className="h-8 w-8 rounded-full" />
                           ) : (
                             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-bg-tertiary text-xs text-text-muted">
-                              {user.discordName.charAt(0).toUpperCase()}
+                              {(user.displayName || user.discordName).charAt(0).toUpperCase()}
                             </div>
                           )}
                           <span
@@ -871,7 +859,7 @@ export default function MembersPage() {
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className={`font-medium ${user.disabled ? "text-text-muted line-through" : "text-text-primary"}`}>{user.discordName}</span>
+                            <span className={`font-medium ${user.disabled ? "text-text-muted line-through" : "text-text-primary"}`}>{user.displayName || user.discordName}</span>
                             {user.disabled && (
                               <span className="rounded-sm bg-danger/10 px-1.5 py-0.5 text-[10px] font-medium text-danger">
                                 Disabled
@@ -883,7 +871,7 @@ export default function MembersPage() {
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-text-muted">{user.discordId}</div>
+                          <div className="text-xs text-text-muted">{user.displayName ? `${user.discordName} \u00b7 ${user.discordId}` : user.discordId}</div>
                         </div>
                       </div>
                     </td>
@@ -1103,13 +1091,13 @@ export default function MembersPage() {
                   <img src={selectedUser.avatarUrl} alt="" className="h-12 w-12 rounded-full" />
                 ) : (
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-bg-tertiary text-lg text-text-muted">
-                    {selectedUser.discordName.charAt(0).toUpperCase()}
+                    {(selectedUser.displayName || selectedUser.discordName).charAt(0).toUpperCase()}
                   </div>
                 )}
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="font-display text-lg font-semibold tracking-wide text-text-primary">
-                      {selectedUser.discordName}
+                      {selectedUser.displayName || selectedUser.discordName}
                     </h2>
                     {selectedUser.disabled && (
                       <span className="rounded-sm bg-danger/10 px-1.5 py-0.5 text-[10px] font-medium text-danger">
@@ -1126,7 +1114,7 @@ export default function MembersPage() {
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-text-muted">{selectedUser.discordId}</div>
+                  <div className="text-xs text-text-muted">{selectedUser.displayName ? `${selectedUser.discordName} \u00b7 ${selectedUser.discordId}` : selectedUser.discordId}</div>
                 </div>
               </div>
               <button

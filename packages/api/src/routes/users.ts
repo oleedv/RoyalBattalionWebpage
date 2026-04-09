@@ -43,6 +43,7 @@ function mapUser(u: any): UserWithRoles {
     id: u.id,
     discordId: u.discordId,
     discordName: u.discordName,
+    displayName: u.displayName ?? null,
     steamId: u.steamId,
     eosId: u.eosId ?? null,
     avatarUrl: u.avatarUrl,

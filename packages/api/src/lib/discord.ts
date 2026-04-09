@@ -26,12 +26,14 @@ export async function fetchDiscordUser(accessToken: string) {
   const data = (await res.json()) as {
     id: string;
     username: string;
+    global_name: string | null;
     avatar: string | null;
   };
 
   return {
     id: data.id,
     username: data.username,
+    displayName: data.global_name,
     avatar: data.avatar,
   };
 }
@@ -76,15 +78,15 @@ export async function fetchGuildRoleDefinitions(
 }
 
 interface GuildMember {
-  user?: { id: string; username: string; avatar: string | null };
+  user?: { id: string; username: string; global_name: string | null; avatar: string | null };
   roles: string[];
 }
 
 export async function fetchAllGuildMembers(
   botToken: string,
   guildId: string
-): Promise<{ discordId: string; username: string; avatar: string | null; roles: string[] }[]> {
-  const members: { discordId: string; username: string; avatar: string | null; roles: string[] }[] = [];
+): Promise<{ discordId: string; username: string; displayName: string | null; avatar: string | null; roles: string[] }[]> {
+  const members: { discordId: string; username: string; displayName: string | null; avatar: string | null; roles: string[] }[] = [];
   let after = "0";
 
   logger.info("discord", `Fetching all guild members for guild ${guildId} using bot token`);
@@ -111,6 +113,7 @@ export async function fetchAllGuildMembers(
         members.push({
           discordId: m.user.id,
           username: m.user.username,
+          displayName: m.user.global_name,
           avatar: m.user.avatar,
           roles: m.roles,
         });

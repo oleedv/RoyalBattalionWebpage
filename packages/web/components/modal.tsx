@@ -24,7 +24,7 @@ export function Modal({ open, onClose, children, className }: ModalProps) {
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
         <div
           className={`w-full rounded-sm border border-border shadow-xl ${className || "max-w-lg bg-bg-card p-6"}`}
           onClick={(e) => e.stopPropagation()}

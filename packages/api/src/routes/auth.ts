@@ -63,12 +63,14 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
       where: { discordId: discordUser.id },
       update: {
         discordName: discordUser.username,
+        displayName: discordUser.displayName,
         avatarUrl,
         hasLoggedIn: true,
       },
       create: {
         discordId: discordUser.id,
         discordName: discordUser.username,
+        displayName: discordUser.displayName,
         avatarUrl,
         hasLoggedIn: true,
       },
@@ -180,6 +182,7 @@ auth.get("/me", authMiddleware, async (c) => {
     id: user.id,
     discordId: user.discordId,
     discordName: user.discordName,
+    displayName: user.displayName ?? null,
     steamId: user.steamId,
     eosId: user.eosId,
     avatarUrl: user.avatarUrl,

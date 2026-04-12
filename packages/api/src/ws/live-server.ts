@@ -186,9 +186,13 @@ async function handleAdminAction(
           ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing players list" }));
           return;
         }
+        const squadEstimate = Math.ceil((msg.players.length - 1) * 0.5 + 1);
+        ws.send(JSON.stringify({ type: "action_progress", action: "switchsquad", count: msg.players.length, estimatedSeconds: squadEstimate }));
         let switched = 0;
         for (const p of msg.players) {
           if (!p.steamId && !p.eosId) continue;
+          const warnId = p.steamId || p.eosId;
+          await squadjsSocket.executeRcon(serverKey, "execute", `AdminWarn ${warnId} You are being moved to the other team by an admin.`);
           if (p.steamId) {
             await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChange ${p.steamId}`);
           } else {
@@ -196,7 +200,7 @@ async function handleAdminAction(
           }
           switched++;
           if (switched < msg.players.length) {
-            await new Promise((r) => setTimeout(r, 100));
+            await new Promise((r) => setTimeout(r, 500));
           }
         }
         auditDirect(ws.data.userId, ws.data.userName, "rcon.switchsquad", "LiveServer", serverKey, { count: switched, playerNames: msg.players!.map((p) => p.name).filter(Boolean) });
@@ -282,8 +286,14 @@ async function handleAdminAction(
           ws.send(JSON.stringify({ type: "action_result", success: false, error: "No clan members to switch" }));
           return;
         }
+        const clanEstimate = Math.ceil((toSwitch.length - 1) * 0.5 + 1);
+        ws.send(JSON.stringify({ type: "action_progress", action: "switchclan", count: toSwitch.length, estimatedSeconds: clanEstimate }));
         let switched = 0;
         for (const p of toSwitch) {
+          const warnId = p.steamID || p.eosID;
+          if (warnId) {
+            await squadjsSocket.executeRcon(serverKey, "execute", `AdminWarn ${warnId} You are being moved to the other team by an admin.`);
+          }
           if (p.steamID) {
             await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChange ${p.steamID}`);
           } else if (p.eosID) {
@@ -291,7 +301,7 @@ async function handleAdminAction(
           }
           switched++;
           if (switched < toSwitch.length) {
-            await new Promise((r) => setTimeout(r, 100));
+            await new Promise((r) => setTimeout(r, 500));
           }
         }
         auditDirect(ws.data.userId, ws.data.userName, "rcon.switchclan", "LiveServer", serverKey, { clanId: msg.clanId, clanTag: msg.clanTag, targetTeam: msg.targetTeam, count: switched, playerNames: toSwitch.map((p) => p.name) });

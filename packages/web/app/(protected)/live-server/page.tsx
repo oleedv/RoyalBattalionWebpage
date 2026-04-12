@@ -246,6 +246,9 @@ export default function LiveServerPage() {
           applyGameEventActions(actions);
           break;
         }
+        case "action_progress":
+          setActionFeedback(`Moving ${msg.count} player${msg.count !== 1 ? "s" : ""}... ~${msg.estimatedSeconds}s`);
+          break;
         case "action_result":
           if (msg.success) {
             setActionFeedback(`${msg.action} executed successfully`);
@@ -884,7 +887,9 @@ export default function LiveServerPage() {
           className={`mb-4 rounded-sm border px-4 py-2.5 text-sm ${
             actionFeedback.startsWith("Error")
               ? "border-danger/20 bg-danger/5 text-danger"
-              : "border-success/20 bg-success/5 text-success"
+              : actionFeedback.startsWith("Moving")
+                ? "border-accent/20 bg-accent/5 text-accent"
+                : "border-success/20 bg-success/5 text-success"
           }`}
         >
           {actionFeedback}
@@ -1150,6 +1155,12 @@ export default function LiveServerPage() {
                 )}
               </div>
             );
+          })()}
+          {clanMoveSelectedKey && (() => {
+            const moveCount = onlineClans[clanMoveSelectedKey]?.members.filter((m) => String(m.teamID) !== clanMoveTargetTeam).length || 0;
+            if (moveCount <= 1) return null;
+            const est = Math.ceil((moveCount - 1) * 0.5 + 1);
+            return <p className="mt-2 text-xs text-text-muted">Estimated time: ~{est}s ({moveCount} players at 500ms intervals)</p>;
           })()}
         </div>
         <div className="mt-4 flex justify-end gap-3">

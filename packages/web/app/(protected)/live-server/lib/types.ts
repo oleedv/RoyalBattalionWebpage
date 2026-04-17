@@ -67,6 +67,7 @@ export type WSMessage =
   | { type: "servers"; data: string[] }
   | { type: "snapshot"; data: Snapshot; server?: string; configured?: boolean }
   | { type: "event"; event: string; data: unknown; server?: string }
+  | { type: "action_progress"; action: string; count: number; estimatedSeconds: number }
   | { type: "action_result"; success: boolean; error?: string; action?: string }
   | { type: "online_clans"; data: OnlineClanData };
 

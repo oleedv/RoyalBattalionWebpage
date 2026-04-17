@@ -503,6 +503,13 @@ export function getPublicMatches(
   return request<Paginated<Match>>(`/matches/public?page=${page}&limit=${limit}`);
 }
 
+export function resyncMatches(token: string): Promise<ApiResponse<{ resynced: number }>> {
+  return request<{ resynced: number }>("/matches/resync", {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
 // Dashboard Stats
 export interface MetricSample {
   time: number;

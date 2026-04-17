@@ -5,6 +5,7 @@ import {
   getMatches,
   updateMatch,
   deleteMatch,
+  resyncMatches,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -17,6 +18,10 @@ export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Resync state
+  const [resyncing, setResyncing] = useState(false);
+  const [resyncMessage, setResyncMessage] = useState<string | null>(null);
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -113,6 +118,20 @@ export default function MatchesPage() {
     if (res.success) {
       setMatches((prev) => prev.filter((m) => m.id !== id));
     }
+  }
+
+  async function handleResync() {
+    if (!apiToken || resyncing) return;
+    setResyncing(true);
+    setResyncMessage(null);
+    const res = await resyncMatches(apiToken);
+    if (res.success && res.data) {
+      setResyncMessage(`Resynced ${res.data.resynced} matches`);
+      await refreshMatches();
+    } else {
+      setResyncMessage(res.error || "Resync failed");
+    }
+    setResyncing(false);
   }
 
   function resultBadge(result: string) {
@@ -280,9 +299,22 @@ export default function MatchesPage() {
         <h1 className="font-display text-3xl font-bold tracking-wide">
           Matches
         </h1>
-        <span className="rounded-sm border border-accent/20 bg-accent/10 px-3 py-1 text-sm text-accent">
-          {matches.length} matches
-        </span>
+        <div className="flex items-center gap-3">
+          {resyncMessage && (
+            <span className="text-xs text-text-secondary">{resyncMessage}</span>
+          )}
+          <button
+            onClick={handleResync}
+            disabled={resyncing}
+            className="rounded-sm border border-accent/40 bg-accent/10 px-3 py-1 text-sm text-accent transition-colors hover:bg-accent/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Rebuild match details from SquadJS data"
+          >
+            {resyncing ? "Resyncing..." : "Resync"}
+          </button>
+          <span className="rounded-sm border border-accent/20 bg-accent/10 px-3 py-1 text-sm text-accent">
+            {matches.length} matches
+          </span>
+        </div>
       </div>
 
       {/* Matches table */}

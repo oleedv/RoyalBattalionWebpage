@@ -348,6 +348,22 @@ export async function assembleMatchDetail(
         teamFactions.set(row.teamId, row.teamName);
       }
     }
+
+    // Fallback: derive team_name from squad_creations when scoreboard didn't
+    // capture it (happens for players whose squad wasn't resolved at ROUND_ENDED).
+    if (teamFactions.size < 2) {
+      const [sqTeamRows] = await pool.query(
+        `SELECT DISTINCT team_name AS teamName FROM squadjs_squad_creations WHERE match_id = ?`,
+        [matchId]
+      );
+      const creationFactions = (sqTeamRows as FactionRow[]).map((r) => r.teamName);
+      if (creationFactions.length >= 1 && !teamFactions.has(1)) {
+        teamFactions.set(1, creationFactions[0]);
+      }
+      if (creationFactions.length >= 2 && !teamFactions.has(2)) {
+        teamFactions.set(2, creationFactions[1]);
+      }
+    }
   } else {
     // Legacy: cross-reference squad creations with deaths/spawns to map factions to team IDs
     for (const sq of squadDetailRows) {
@@ -393,38 +409,85 @@ export async function assembleMatchDetail(
   const team2Faction = teamFactions.get(2) || "Unknown";
 
   // --- Determine winner ---
-  const winnerRaw = (match.winner || "").replace(/"/g, "").trim();
-  let team1Result: "WIN" | "LOSS" | "DRAW" = "DRAW";
-  let team2Result: "WIN" | "LOSS" | "DRAW" = "DRAW";
+  // The winner column can hold several shapes depending on what Squad's
+  // DetermineMatchWinner() log printed:
+  //   - A literal team id, e.g. "Team 1" / "Team 2"
+  //   - A full faction name, e.g. "United States Army"
+  //   - A short faction code, e.g. "USA"
+  //   - A raw team-id number, e.g. "1"
+  // Values are JSON.stringify'd by the SquadJS db-log plugin, hence the quote strip.
+  // Resolve winner. Handles three on-disk shapes:
+  //   - New JSON payload written by db-log.js onRoundEnded:
+  //       {"team":1,"subfaction":"X","faction":"Y"}
+  //   - Legacy JSON.stringify(string) — a DetermineMatchWinner() subfaction
+  //     (e.g. `"3rd Brigade Battle Group"`). These are OFF BY ONE: the winner
+  //     of match N is actually stored in match N+1's winner column, because
+  //     Squad logs DetermineMatchWinner() after the NEW_GAME transition.
+  //   - A raw team-id like "Team 1" / "1" (structured payload parse path).
+  function resolveWinner(raw: string): 0 | 1 | 2 {
+    if (!raw) return 0;
+    const stripped = raw.replace(/^"|"$/g, "").trim();
+    // JSON payload from new ROUND_ENDED writer
+    if (stripped.startsWith("{")) {
+      try {
+        const obj = JSON.parse(stripped);
+        const t = Number(obj?.team);
+        if (t === 1 || t === 2) return t;
+      } catch {
+        // fall through to string matching
+      }
+    }
+    const teamIdMatch = stripped.match(/^(?:team\s*)?(\d+)$/i);
+    if (teamIdMatch) {
+      const id = parseInt(teamIdMatch[1], 10);
+      if (id === 1 || id === 2) return id;
+    }
+    if (stripped === team1Faction || stripped === factionShort(team1Faction)) return 1;
+    if (stripped === team2Faction || stripped === factionShort(team2Faction)) return 2;
+    const wLower = stripped.toLowerCase();
+    for (const [teamId, faction] of teamFactions.entries()) {
+      const fLower = faction.toLowerCase();
+      const shortLower = factionShort(faction).toLowerCase();
+      if (
+        wLower === fLower ||
+        wLower === shortLower ||
+        wLower.includes(fLower) ||
+        fLower.includes(wLower)
+      ) {
+        if (teamId === 1 || teamId === 2) return teamId;
+      }
+    }
+    return 0;
+  }
 
-  if (winnerRaw) {
-    // The winner field contains a faction name -- match against both teams
-    if (winnerRaw === team1Faction || winnerRaw === factionShort(team1Faction)) {
-      team1Result = "WIN";
-      team2Result = "LOSS";
-    } else if (winnerRaw === team2Faction || winnerRaw === factionShort(team2Faction)) {
-      team1Result = "LOSS";
-      team2Result = "WIN";
-    } else {
-      // Winner doesn't match known factions directly -- could be a subunit name
-      // Try partial match
-      for (const [teamId, faction] of teamFactions.entries()) {
-        if (
-          winnerRaw.toLowerCase().includes(faction.toLowerCase()) ||
-          faction.toLowerCase().includes(winnerRaw.toLowerCase())
-        ) {
-          if (teamId === 1) {
-            team1Result = "WIN";
-            team2Result = "LOSS";
-          } else {
-            team1Result = "LOSS";
-            team2Result = "WIN";
-          }
-          break;
-        }
+  const winnerRaw = (match.winner || "").replace(/"/g, "").trim();
+  let winningTeamId: 0 | 1 | 2 = resolveWinner(match.winner || "");
+
+  // Legacy-data fallback: pre-fix db-log.js wrote match N-1's winner into
+  // match N's column. If the stored winner doesn't match this match's teams,
+  // check the next match's winner -- that's where match N's actual winner lives.
+  if (winningTeamId === 0 && winnerRaw) {
+    const [nextRows] = await pool.query(
+      `SELECT winner FROM squadjs_matches
+       WHERE server_id = ? AND start_time > ? AND end_time IS NOT NULL
+       ORDER BY start_time ASC LIMIT 1`,
+      [match.server_id, match.startTime]
+    );
+    const nextWinner = (nextRows as { winner: string | null }[])[0]?.winner;
+    if (nextWinner) {
+      // Don't apply the shift-fallback when the next match is already using the
+      // new JSON format (that one describes its OWN match, not a shifted one).
+      const nextStripped = nextWinner.replace(/^"|"$/g, "").trim();
+      if (!nextStripped.startsWith("{")) {
+        winningTeamId = resolveWinner(nextWinner);
       }
     }
   }
+
+  const team1Result: "WIN" | "LOSS" | "DRAW" =
+    winningTeamId === 1 ? "WIN" : winningTeamId === 2 ? "LOSS" : "DRAW";
+  const team2Result: "WIN" | "LOSS" | "DRAW" =
+    winningTeamId === 2 ? "WIN" : winningTeamId === 1 ? "LOSS" : "DRAW";
 
   // --- Build player stats ---
   interface PlayerStats {
@@ -491,6 +554,56 @@ export async function assembleMatchDetail(
 
   // Populate team/squad/role from scoreboard or legacy sources
   if (hasScoreboard) {
+    // Fix for known data gap: scoreboard snapshots sometimes write squad_name/team_name
+    // only for squad leaders (the RCON squad map lookup fails for non-SL rows at
+    // ROUND_ENDED). Build a (teamId, squadId) -> {squadName, teamName} index from
+    // SL rows so we can fill in the blanks for members.
+    const sqKey = (t: number | null, s: number | null) => `${t ?? "?"}-${s ?? "?"}`;
+    const squadLookup = new Map<string, { squadName: string; teamName: string | null }>();
+    for (const sb of scoreboard) {
+      if (sb.squadId && sb.squadName) {
+        const key = sqKey(sb.teamId, sb.squadId);
+        if (!squadLookup.has(key)) {
+          squadLookup.set(key, { squadName: sb.squadName, teamName: sb.teamName });
+        }
+      }
+    }
+
+    // Secondary fallback: squadjs_squad_creations (match-scoped creation records).
+    // Only used for (team, squad_id) combos still missing after SL lookup.
+    const [sqCreationRows] = await pool.query(
+      `SELECT squad_id AS squadId, squad_name AS squadName, team_name AS teamName, time
+       FROM squadjs_squad_creations
+       WHERE match_id = ?
+       ORDER BY time ASC`,
+      [matchId]
+    );
+    type SqCreationRow = RowDataPacket & {
+      squadId: number;
+      squadName: string | null;
+      teamName: string | null;
+    };
+    const factionToTeamId = new Map<string, number>();
+    for (const [tid, faction] of teamFactions.entries()) {
+      factionToTeamId.set(faction, tid);
+    }
+    // Collapse creations to the most recent squad_name per (team, squad_id)
+    // (squad ids get reused when an SL disbands and another is created).
+    const latestCreation = new Map<string, { squadName: string; teamName: string }>();
+    for (const row of sqCreationRows as SqCreationRow[]) {
+      const tid = row.teamName ? factionToTeamId.get(row.teamName) : undefined;
+      if (!tid || !row.squadId || !row.squadName) continue;
+      latestCreation.set(sqKey(tid, row.squadId), {
+        squadName: row.squadName,
+        teamName: row.teamName!,
+      });
+    }
+    // Scoreboard SL data remains authoritative; fall back to creation data only
+    // for (team, squad_id) combos the scoreboard didn't capture.
+    for (const [key, val] of latestCreation) {
+      if (!squadLookup.has(key)) squadLookup.set(key, val);
+    }
+
     for (const sb of scoreboard) {
       const steamId = sb.steamID || steamByEos.get(sb.eosID) || sb.eosID;
       const name = sb.playerName || nameByEos.get(sb.eosID) || "Unknown";
@@ -498,7 +611,8 @@ export async function assembleMatchDetail(
 
       // Scoreboard data is authoritative -- overwrite any prior values
       p.teamId = sb.teamId;
-      p.squad = sb.squadName || "";
+      const filled = squadLookup.get(sqKey(sb.teamId, sb.squadId));
+      p.squad = sb.squadName || filled?.squadName || "";
       p.isSquadLeader = !!sb.isLeader;
       p.role = parseScoreboardRole(sb.role);
     }

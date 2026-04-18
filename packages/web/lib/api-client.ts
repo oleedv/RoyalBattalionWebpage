@@ -56,6 +56,21 @@ async function request<T>(
     const data: ApiResponse<T> = await res.json();
     return data;
   } catch (error) {
+    if (typeof window === "undefined") {
+      const method = options.method ?? "GET";
+      const err = error instanceof Error ? { message: error.message, name: error.name, stack: error.stack } : { message: String(error) };
+      console.error(JSON.stringify({
+        level: "warn",
+        time: new Date().toISOString(),
+        service: process.env.RAILWAY_SERVICE_NAME ?? "web",
+        env: process.env.RAILWAY_ENVIRONMENT_NAME ?? process.env.NODE_ENV ?? "dev",
+        module: "api-client",
+        msg: `Fetch failed: ${method} ${path}`,
+        method,
+        path,
+        err,
+      }));
+    }
     return {
       success: false,
       error:

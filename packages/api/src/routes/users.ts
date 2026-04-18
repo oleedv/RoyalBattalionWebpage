@@ -34,6 +34,7 @@ users.post("/link-steam", authMiddleware, rateLimit(10), zValidator("json", link
 
     return success(c, { steamId: user.steamId! });
   } catch (err) {
+    logger.error("users", "Failed to link Steam ID", { userId, steamId, err });
     return fail(c, "Failed to link Steam ID. It may already be linked to another account.");
   }
 });
@@ -450,7 +451,8 @@ users.put("/:id", authMiddleware, requirePermission("manage:members"), zValidato
 
     const [activityMap, playtimeMap] = await Promise.all([fetchActivityMap(), fetchBulkPlaytimeMap()]);
     return success(c, mapUserWithComments(updated, activityMap, playtimeMap));
-  } catch {
+  } catch (err) {
+    logger.error("users", "Failed to update user", { id, err });
     return fail(c, "Failed to update user. The Steam ID may already be linked to another account.");
   }
 });

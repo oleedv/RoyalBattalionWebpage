@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
 import { env } from "./env";
+import { logger } from "./logger";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
@@ -56,8 +57,8 @@ export function decrypt(value: string): string {
     decipher.setAuthTag(authTag);
     const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
     return decrypted.toString("utf-8");
-  } catch {
-    // Decryption failed - might be plaintext that happens to have colons
+  } catch (err) {
+    logger.error("crypto", "Decryption failed, returning value as-is", { err });
     return value;
   }
 }

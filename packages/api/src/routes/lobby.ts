@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { authMiddleware } from "../middleware/auth"
 import { requirePermission } from "../middleware/permissions"
+import { logger } from "../lib/logger"
 
 const lobby = new Hono()
 
@@ -14,7 +15,8 @@ lobby.post("/create/:serverName", async (c) => {
     )
     const data = await res.json()
     return c.json(data, res.status as 200)
-  } catch {
+  } catch (err) {
+    logger.error("lobby", "Lobby service unreachable (create)", { serverName, err })
     return c.json({ success: false, error: "Lobby service unreachable" }, 502)
   }
 })
@@ -44,7 +46,8 @@ lobby.get("/stats", async (c) => {
   try {
     const res = await proxyToLobbyService("GET", "/internal/stats")
     return res
-  } catch {
+  } catch (err) {
+    logger.error("lobby", "Lobby service unreachable (stats)", { err })
     return c.json(
       { success: false, error: "Lobby service unreachable" },
       502
@@ -56,7 +59,8 @@ lobby.get("/health", async (c) => {
   try {
     const res = await proxyToLobbyService("GET", "/internal/health")
     return res
-  } catch {
+  } catch (err) {
+    logger.warn("lobby", "Lobby service unreachable (health)", { err })
     return c.json(
       { success: false, error: "Lobby service unreachable" },
       502
@@ -68,7 +72,8 @@ lobby.post("/steam/reconnect", async (c) => {
   try {
     const res = await proxyToLobbyService("POST", "/internal/steam/reconnect")
     return res
-  } catch {
+  } catch (err) {
+    logger.error("lobby", "Lobby service unreachable (steam/reconnect)", { err })
     return c.json(
       { success: false, error: "Lobby service unreachable" },
       502

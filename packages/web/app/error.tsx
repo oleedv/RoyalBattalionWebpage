@@ -1,13 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
+import { logClientError } from "@/lib/log-actions";
 
 export default function ErrorPage({
+  error,
   reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    logClientError({
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+      digest: error.digest,
+      path: typeof window !== "undefined" ? window.location.pathname : undefined,
+    }).catch(() => {});
+  }, [error]);
+
   return (
     <div className="noise-overlay relative flex min-h-screen flex-col items-center justify-center px-6">
       {/* Background grid */}

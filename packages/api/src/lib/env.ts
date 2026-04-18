@@ -15,6 +15,7 @@ const envSchema = z.object({
   // --- Server ---
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   PORT: z.coerce.number().default(3001),
+  LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"]).optional(),
 
   // --- Discord (optional - features degrade gracefully) ---
   DISCORD_BOT_TOKEN: optStr,

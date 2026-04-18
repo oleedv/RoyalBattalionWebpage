@@ -44,7 +44,8 @@ clans.post("/", zValidator("json", createClanSchema), async (c) => {
     const clan = await prisma.clan.create({ data: { name, tag } });
     await audit(c, "clan.create", "clan", clan.id, { name, tag });
     return success(c, toClan(clan), 201);
-  } catch {
+  } catch (err) {
+    logger.error("clans", "Failed to create clan", { name, tag, err });
     return fail(c, "Failed to create clan. Name or tag may already exist.");
   }
 });
@@ -77,7 +78,8 @@ clans.put("/:id", zValidator("json", updateClanSchema), async (c) => {
 
     await audit(c, "clan.update", "clan", id, { changes: body });
     return success(c, toClan(clan));
-  } catch {
+  } catch (err) {
+    logger.error("clans", "Failed to update clan", { id, err });
     return fail(c, "Failed to update clan");
   }
 });

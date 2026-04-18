@@ -212,7 +212,8 @@ whitelist.post("/", requirePermission("manage:whitelist"), rateLimit(30), zValid
       : undefined;
 
     return success(c, { ...result, warnings }, 201);
-  } catch {
+  } catch (err) {
+    logger.error("whitelist", "Failed to add whitelist entry", { steamId, server, err });
     return fail(c, "Failed to add whitelist entry.");
   }
 });
@@ -274,8 +275,8 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), zVa
           },
         });
         created++;
-      } catch {
-        // Race condition or other DB error — classify as existing duplicate
+      } catch (err) {
+        logger.warn("whitelist", "Bulk add race/duplicate classified as existing", { steamId: entry.steamId, server, err });
         skipped.push({ steamId: entry.steamId, reason: "duplicate_existing" });
       }
     }
@@ -416,7 +417,8 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
     audit(c, "whitelist.update", "WhitelistEntry", id, { steamId: existing.steamId, changes: body });
 
     return success(c, toEntry(entry));
-  } catch {
+  } catch (err) {
+    logger.error("whitelist", "Failed to update whitelist entry", { id, err });
     return fail(c, "Failed to update whitelist entry.");
   }
 });

@@ -8,6 +8,7 @@ import { resyncAllMatches } from "../lib/match-sync";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { audit } from "../lib/audit";
+import { logger } from "../lib/logger";
 
 const matches = new Hono();
 
@@ -103,7 +104,8 @@ matches.put("/:id", requirePermission("manage:matches"), zValidator("json", upda
 
     await audit(c, "match.update", "match", id, { changes: body });
     return success(c, toMatch(entry));
-  } catch {
+  } catch (err) {
+    logger.error("matches", "Failed to update match", { id, err });
     return fail(c, "Failed to update match");
   }
 });

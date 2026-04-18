@@ -16,7 +16,9 @@ function broadcastPresence() {
   for (const u of users) seen.set(u.userId, u);
   const payload = JSON.stringify({ type: "presence", users: Array.from(seen.values()) });
   for (const ws of presenceClients) {
-    try { ws.send(payload); } catch {}
+    try { ws.send(payload); } catch (err) {
+      logger.debug("presence", "Failed to send presence payload", { userId: ws.data.userId, err });
+    }
   }
 }
 
@@ -34,7 +36,9 @@ export function handlePresenceMessage(ws: ServerWebSocket<WSData>, message: stri
       ws.data.currentPage = msg.page;
       broadcastPresence();
     }
-  } catch {}
+  } catch (err) {
+    logger.warn("presence", "Failed to parse presence message", { userId: ws.data.userId, err });
+  }
 }
 
 export function handlePresenceClose(ws: ServerWebSocket<WSData>) {

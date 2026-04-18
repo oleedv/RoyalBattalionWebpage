@@ -8,6 +8,7 @@ import { findOrThrow, success, fail } from "../lib/crud-helpers";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { audit } from "../lib/audit";
+import { logger } from "../lib/logger";
 
 const roles = new Hono();
 
@@ -69,7 +70,8 @@ roles.post("/", zValidator("json", createRoleSchema), async (c) => {
     audit(c, "role.create", "DiscordRole", role.id, { name, discordRoleId, permissions });
 
     return success(c, result, 201);
-  } catch {
+  } catch (err) {
+    logger.error("roles", "Failed to create role", { name, discordRoleId, err });
     return fail(c, "Failed to create role. The Discord role ID may already be mapped.");
   }
 });

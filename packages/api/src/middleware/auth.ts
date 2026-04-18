@@ -3,6 +3,7 @@ import { jwtVerify } from "jose";
 import type { Permission } from "shared";
 import { env } from "../lib/env";
 import prisma from "../lib/db";
+import { logger, updateContext } from "../lib/logger";
 
 type AuthVariables = {
   userId: string;
@@ -36,13 +37,19 @@ export const authMiddleware = createMiddleware<{
       select: { disabled: true },
     });
     if (!user || user.disabled) {
+      logger.warn("auth", "Disabled account token rejected", { userId });
       return c.json({ success: false, error: "ACCOUNT_DISABLED" }, 403);
     }
 
     c.set("userId", userId);
     c.set("permissions", permissions);
+    updateContext({ userId });
     await next();
-  } catch {
+  } catch (err) {
+    logger.warn("auth", "JWT verification failed", {
+      err: err instanceof Error ? err : new Error(String(err)),
+      errName: err instanceof Error ? err.name : "Unknown",
+    });
     return c.json({ success: false, error: "Invalid or expired token" }, 401);
   }
 });

@@ -18,16 +18,18 @@ export async function audit(
       select: { discordName: true },
     });
 
+    const userName = user?.discordName ?? "Unknown";
     await prisma.auditLog.create({
       data: {
         userId,
-        userName: user?.discordName ?? "Unknown",
+        userName,
         action,
         resource,
         resourceId: resourceId ?? undefined,
         detail: detail ?? undefined,
       },
     });
+    logger.info("audit", action, { resource, resourceId: resourceId ?? null, userId, userName, detail: detail ?? null });
   } catch (err) {
     logger.error("audit", "Failed to create audit log", err);
   }
@@ -52,6 +54,7 @@ export async function auditDirect(
         detail: detail ?? undefined,
       },
     });
+    logger.info("audit", action, { resource, resourceId: resourceId ?? null, userId, userName, detail: detail ?? null });
   } catch (err) {
     logger.error("audit", "Failed to create audit log", err);
   }

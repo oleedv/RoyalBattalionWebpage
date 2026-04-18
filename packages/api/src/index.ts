@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { globalRateLimit } from "./middleware/rate-limit";
+import { requestLog } from "./middleware/request-log";
 import { jwtVerify } from "jose";
 import auth from "./routes/auth";
 import users from "./routes/users";
@@ -41,6 +42,7 @@ import type { WSData } from "./ws/types";
 const app = new Hono();
 
 app.use("*", secureHeaders());
+app.use("*", requestLog());
 app.use("*", globalRateLimit(200));
 
 const origins = [
@@ -102,13 +104,16 @@ app.get("/health", async (c) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
     dbOk = true;
-  } catch {}
+  } catch (err) {
+    logger.warn("health", "Primary DB health check failed", err);
+  }
   try {
     if (env.SECRETARY_DATABASE_URL) {
       await getSecretaryDb().$queryRaw(Prisma.sql`SELECT 1`);
       secretaryDbOk = true;
     }
-  } catch {
+  } catch (err) {
+    logger.warn("health", "Secretary DB health check failed; resetting pool", err);
     resetSecretaryDb();
   }
   const allOk = dbOk && (secretaryDbOk || !env.SECRETARY_DATABASE_URL);

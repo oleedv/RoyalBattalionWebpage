@@ -52,13 +52,24 @@ async function deployForServer(server: string): Promise<void> {
   const cfg = await generateAdminsCfg(server);
   const sftp = new SFTPClient();
   const filePath = normalizeSftpPath(remotePath);
+  const started = performance.now();
+  logger.info("sftp", "Deploy start", { server, host, port, filePath, bytes: Buffer.byteLength(cfg, "utf-8") });
 
   try {
     await sftp.connect({ host, port, username, password });
     await sftp.put(Buffer.from(cfg, "utf-8"), filePath);
-    logger.info("sftp", `Uploaded admins.cfg for server "${server}" to ${filePath}`);
+    const duration_ms = Math.round(performance.now() - started);
+    logger.info("sftp", "Deploy success", { server, host, filePath, duration_ms });
+  } catch (err) {
+    const duration_ms = Math.round(performance.now() - started);
+    logger.error("sftp", "Deploy failed", { server, host, port, filePath, duration_ms, err });
+    throw err;
   } finally {
-    await sftp.end();
+    try {
+      await sftp.end();
+    } catch (err) {
+      logger.warn("sftp", "Failed to close SFTP connection", { server, host, err });
+    }
   }
 }
 
@@ -76,13 +87,24 @@ async function deployWithEnvVars(server?: string): Promise<void> {
   const cfg = await generateAdminsCfg(server);
   const sftp = new SFTPClient();
   const filePath = normalizeSftpPath(remotePath);
+  const started = performance.now();
+  logger.info("sftp", "Deploy start (env vars)", { server: server ?? null, host, port, filePath, bytes: Buffer.byteLength(cfg, "utf-8") });
 
   try {
     await sftp.connect({ host, port, username, password });
     await sftp.put(Buffer.from(cfg, "utf-8"), filePath);
-    logger.info("sftp", `Uploaded admins.cfg to ${filePath} (env vars)`);
+    const duration_ms = Math.round(performance.now() - started);
+    logger.info("sftp", "Deploy success (env vars)", { server: server ?? null, host, filePath, duration_ms });
+  } catch (err) {
+    const duration_ms = Math.round(performance.now() - started);
+    logger.error("sftp", "Deploy failed (env vars)", { server: server ?? null, host, port, filePath, duration_ms, err });
+    throw err;
   } finally {
-    await sftp.end();
+    try {
+      await sftp.end();
+    } catch (err) {
+      logger.warn("sftp", "Failed to close SFTP connection", { server: server ?? null, host, err });
+    }
   }
 }
 

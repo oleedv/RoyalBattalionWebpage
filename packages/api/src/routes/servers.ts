@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { ApiResponse } from "shared";
 import { env } from "../lib/env";
+import { logger } from "../lib/logger";
 
 const servers = new Hono();
 
@@ -69,7 +70,8 @@ async function fetchServerStatus(serverId: string): Promise<ServerStatus | null>
       reserveQueue: 0,
       metricHistory: [],
     };
-  } catch {
+  } catch (err) {
+    logger.warn("servers", "BattleMetrics fetch failed", { serverId, err });
     return null;
   }
 }

@@ -7,6 +7,7 @@ import { findOrThrow, success, fail } from "../lib/crud-helpers";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { audit } from "../lib/audit";
+import { logger } from "../lib/logger";
 
 const adminGroups = new Hono();
 
@@ -59,7 +60,8 @@ adminGroups.post("/", zValidator("json", createGroupSchema), async (c) => {
     await audit(c, "admin_group.create", "admin_group", group.id, { name });
 
     return success(c, toAdminGroup(group), 201);
-  } catch {
+  } catch (err) {
+    logger.error("admin-groups", "Failed to create admin group", { name, err });
     return fail(c, "Failed to create group. Name may already exist.");
   }
 });
@@ -83,7 +85,8 @@ adminGroups.put("/:id", zValidator("json", updateGroupSchema), async (c) => {
     await audit(c, "admin_group.update", "admin_group", id, { changes: body });
 
     return success(c, toAdminGroup(group));
-  } catch {
+  } catch (err) {
+    logger.error("admin-groups", "Failed to update admin group", { id, err });
     return fail(c, "Failed to update group");
   }
 });

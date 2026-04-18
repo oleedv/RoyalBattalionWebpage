@@ -1,5 +1,6 @@
 import type { AuthOptions } from "next-auth";
 import DiscordProvider from "next-auth/providers/discord";
+import { logger, nextAuthLogger } from "./logger";
 
 declare module "next-auth" {
   interface Session {
@@ -30,7 +31,9 @@ async function refreshDiscordToken(refreshToken: string) {
   });
 
   if (!response.ok) {
-    throw new Error("Failed to refresh Discord token");
+    const body = await response.text().catch(() => "");
+    logger.warn("auth", "Discord token refresh non-2xx", { status: response.status, body: body.slice(0, 500) });
+    throw new Error(`Failed to refresh Discord token: ${response.status}`);
   }
 
   const data = await response.json();
@@ -82,7 +85,8 @@ export const authOptions: AuthOptions = {
           token.refreshToken = refreshed.refreshToken;
           token.accessTokenExpires = refreshed.expiresAt;
           delete token.error;
-        } catch {
+        } catch (err) {
+          logger.warn("auth", "Discord token refresh failed", { err });
           token.error = "RefreshTokenError";
         }
       }
@@ -101,4 +105,5 @@ export const authOptions: AuthOptions = {
     signIn: "/login",
     signOut: "/signout",
   },
+  logger: nextAuthLogger,
 };

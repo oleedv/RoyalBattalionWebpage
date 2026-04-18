@@ -1,5 +1,6 @@
 import type { SquadJSPlugin } from "shared";
 import { env } from "./env";
+import { logger } from "./logger";
 
 const REPO = "oleedv/Royal-Battalion-SquadJS";
 const BRANCH = "main";
@@ -191,10 +192,14 @@ async function fetchPluginSources(): Promise<{ name: string; content: string }[]
       batch.map(async (file) => {
         try {
           const res = await fetch(file.download_url);
-          if (!res.ok) return null;
+          if (!res.ok) {
+            logger.warn("github-config", "Plugin file fetch non-2xx", { name: file.name, status: res.status });
+            return null;
+          }
           const content = await res.text();
           return { name: file.name, content };
-        } catch {
+        } catch (err) {
+          logger.warn("github-config", "Plugin file fetch failed", { name: file.name, err });
           return null;
         }
       })

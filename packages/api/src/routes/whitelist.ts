@@ -171,8 +171,17 @@ whitelist.post("/", requirePermission("manage:whitelist"), rateLimit(30), zValid
   const userId = c.get("userId");
   const { steamId, server, name, clan, clanId, role, groupId, reason, expiresAt } = c.req.valid("json");
 
+  // Explicit duplicate check on this server (unique constraint is [steamId, server])
+  const existing = await prisma.whitelistEntry.findUnique({
+    where: { steamId_server: { steamId, server } },
+    select: { id: true },
+  });
+  if (existing) {
+    return fail(c, `Steam ID ${steamId} is already whitelisted on "${server}".`, 409);
+  }
+
   try {
-    // Check for duplicates on other servers
+    // Check for duplicates on other servers (informational warning only)
     const duplicates = await prisma.whitelistEntry.findMany({
       where: { steamId, server: { not: server } },
       select: { server: true },
@@ -204,7 +213,7 @@ whitelist.post("/", requirePermission("manage:whitelist"), rateLimit(30), zValid
 
     return success(c, { ...result, warnings }, 201);
   } catch {
-    return fail(c, "Failed to add whitelist entry. The Steam ID may already be whitelisted on this server.");
+    return fail(c, "Failed to add whitelist entry.");
   }
 });
 
@@ -227,11 +236,29 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), zVa
   const userId = c.get("userId");
   const { server, entries } = c.req.valid("json");
 
+  const submittedSteamIds = entries.map((e) => e.steamId);
+  const existingRows = await prisma.whitelistEntry.findMany({
+    where: { server, steamId: { in: submittedSteamIds } },
+    select: { steamId: true },
+  });
+  const existingSet = new Set(existingRows.map((e) => e.steamId));
+
   const result = await prisma.$transaction(async (tx) => {
+    const seenInBatch = new Set<string>();
     let created = 0;
-    let skipped = 0;
+    const skipped: { steamId: string; reason: "duplicate_existing" | "duplicate_in_batch" }[] = [];
 
     for (const entry of entries) {
+      if (existingSet.has(entry.steamId)) {
+        skipped.push({ steamId: entry.steamId, reason: "duplicate_existing" });
+        continue;
+      }
+      if (seenInBatch.has(entry.steamId)) {
+        skipped.push({ steamId: entry.steamId, reason: "duplicate_in_batch" });
+        continue;
+      }
+      seenInBatch.add(entry.steamId);
+
       try {
         await tx.whitelistEntry.create({
           data: {
@@ -248,7 +275,8 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), zVa
         });
         created++;
       } catch {
-        skipped++;
+        // Race condition or other DB error — classify as existing duplicate
+        skipped.push({ steamId: entry.steamId, reason: "duplicate_existing" });
       }
     }
 
@@ -256,7 +284,7 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), zVa
   });
 
   deployInBackground(server);
-  audit(c, "whitelist.bulk_add", "WhitelistEntry", null, { server, created: result.created, skipped: result.skipped, total: entries.length });
+  audit(c, "whitelist.bulk_add", "WhitelistEntry", null, { server, created: result.created, skipped: result.skipped.length, total: entries.length });
 
   return success(c, { created: result.created, skipped: result.skipped }, 201);
 });
@@ -354,6 +382,17 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
   const body = c.req.valid("json");
 
   const existing = await findOrThrow(prisma.whitelistEntry, { id }, "Whitelist entry");
+
+  // If steamId is being changed, enforce per-server uniqueness explicitly
+  if (body.steamId !== undefined && body.steamId !== existing.steamId) {
+    const collision = await prisma.whitelistEntry.findUnique({
+      where: { steamId_server: { steamId: body.steamId, server: existing.server } },
+      select: { id: true },
+    });
+    if (collision) {
+      return fail(c, `Steam ID ${body.steamId} is already whitelisted on "${existing.server}".`, 409);
+    }
+  }
 
   try {
     const entry = await prisma.whitelistEntry.update({

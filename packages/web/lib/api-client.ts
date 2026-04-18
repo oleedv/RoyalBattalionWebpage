@@ -132,12 +132,22 @@ export const updateWhitelistEntry = (
 ) => whitelistClient.update(token, id, data as Record<string, unknown>);
 export const deleteWhitelistEntry = whitelistClient.remove;
 
+export type BulkAddSkippedEntry = {
+  steamId: string;
+  reason: "duplicate_existing" | "duplicate_in_batch";
+};
+
+export type BulkAddWhitelistResult = {
+  created: number;
+  skipped: BulkAddSkippedEntry[];
+};
+
 export function bulkAddWhitelist(
   token: string,
   entries: { steamId: string; name?: string; clanId?: string; clan?: string; role?: string; groupId?: string; reason?: string }[],
   server?: string
-): Promise<ApiResponse<{ created: number; skipped: number }>> {
-  return request<{ created: number; skipped: number }>("/whitelist/bulk", {
+): Promise<ApiResponse<BulkAddWhitelistResult>> {
+  return request<BulkAddWhitelistResult>("/whitelist/bulk", {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ entries, server: server || "main" }),

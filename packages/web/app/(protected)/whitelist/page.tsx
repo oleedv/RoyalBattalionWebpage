@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   getWhitelist,
   addWhitelistEntry,
@@ -43,6 +43,10 @@ const SQUAD_PERMISSIONS = [
 ];
 
 type Tab = "entries" | "requests" | "groups" | "clans" | "activity";
+
+// --- Sort types ---
+type SortKey = "steamId" | "name" | "clan" | "group" | "expires" | "created";
+type SortDir = "asc" | "desc";
 
 // --- Import modal types ---
 interface ParsedImportRow {
@@ -376,6 +380,19 @@ function EntriesTab({
   const [filterClan, setFilterClan] = useState("");
   const [filterGroup, setFilterGroup] = useState("");
   const [showExpired, setShowExpired] = useState(false);
+
+  // --- Sorting ---
+  const [sortKey, setSortKey] = useState<SortKey>("clan");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "expires" || key === "created" ? "desc" : "asc");
+    }
+  }
 
   // Add form
   const [newSteamId, setNewSteamId] = useState("");
@@ -792,7 +809,10 @@ function EntriesTab({
 
   async function confirmImport() {
     if (!apiToken) return;
-    const validRows = importRows.filter((r) => r.steamId.trim());
+    const validRows = importRows.filter((_, i) => {
+      const row = importRows[i];
+      return row.steamId.trim() && !importDupeMap.has(i);
+    });
     if (validRows.length === 0) return;
 
     setImporting(true);
@@ -812,7 +832,16 @@ function EntriesTab({
     );
 
     if (res.success && res.data) {
-      setImportStatus(`Imported ${res.data.created} entries, ${res.data.skipped} skipped`);
+      const { created, skipped } = res.data;
+      let msg = `Imported ${created} ${created === 1 ? "entry" : "entries"}`;
+      if (skipped.length > 0) {
+        const sample = skipped.slice(0, 5)
+          .map((s) => `${s.steamId} (${s.reason === "duplicate_existing" ? "already whitelisted" : "duplicate in batch"})`)
+          .join(", ");
+        const extra = skipped.length > 5 ? `, +${skipped.length - 5} more` : "";
+        msg += `. Skipped ${skipped.length}: ${sample}${extra}`;
+      }
+      setImportStatus(msg);
       const wlRes = await getWhitelist(apiToken, activeServer);
       if (wlRes.success && wlRes.data) setEntries(wlRes.data);
       setShowImportModal(false);
@@ -822,23 +851,99 @@ function EntriesTab({
     setImporting(false);
   }
 
-  const filtered = entries.filter((e) => {
-    if (!showExpired && e.expiresAt && new Date(e.expiresAt) < new Date()) return false;
-    if (filterClan && e.clanId !== filterClan) return false;
-    if (filterGroup && e.groupId !== filterGroup) return false;
-    if (search) {
-      const s = search.toLowerCase();
-      return (
-        e.steamId.includes(search) ||
-        e.addedBy.toLowerCase().includes(s) ||
-        e.name?.toLowerCase().includes(s) ||
-        e.clan?.toLowerCase().includes(s) ||
-        e.groupName?.toLowerCase().includes(s) ||
-        e.reason?.toLowerCase().includes(s)
-      );
-    }
-    return true;
-  });
+  // Classify import rows against the currently loaded whitelist (same server) and within the pasted batch
+  const importDupeMap = useMemo(() => {
+    const map = new Map<number, "existing" | "batch">();
+    const existingSteamIds = new Set(entries.map((e) => e.steamId));
+    const seen = new Set<string>();
+    importRows.forEach((row, i) => {
+      const sid = row.steamId.trim();
+      if (!sid) return;
+      if (existingSteamIds.has(sid)) {
+        map.set(i, "existing");
+      } else if (seen.has(sid)) {
+        map.set(i, "batch");
+      } else {
+        seen.add(sid);
+      }
+    });
+    return map;
+  }, [importRows, entries]);
+
+  const importCounts = useMemo(() => {
+    let newCount = 0;
+    let existingCount = 0;
+    let batchCount = 0;
+    let errorCount = 0;
+    importRows.forEach((row, i) => {
+      if (row.error) { errorCount++; return; }
+      if (!row.steamId.trim()) { errorCount++; return; }
+      const reason = importDupeMap.get(i);
+      if (reason === "existing") existingCount++;
+      else if (reason === "batch") batchCount++;
+      else newCount++;
+    });
+    return { newCount, existingCount, batchCount, errorCount };
+  }, [importRows, importDupeMap]);
+
+  const filtered = useMemo(() => {
+    const base = entries.filter((e) => {
+      if (!showExpired && e.expiresAt && new Date(e.expiresAt) < new Date()) return false;
+      if (filterClan && e.clanId !== filterClan) return false;
+      if (filterGroup && e.groupId !== filterGroup) return false;
+      if (search) {
+        const s = search.toLowerCase();
+        return (
+          e.steamId.includes(search) ||
+          e.addedBy.toLowerCase().includes(s) ||
+          e.name?.toLowerCase().includes(s) ||
+          e.clan?.toLowerCase().includes(s) ||
+          e.groupName?.toLowerCase().includes(s) ||
+          e.reason?.toLowerCase().includes(s)
+        );
+      }
+      return true;
+    });
+
+    const dir = sortDir === "desc" ? -1 : 1;
+    const nullsLast = <T,>(a: T | null | undefined, b: T | null | undefined): number | null => {
+      if (!a && !b) return 0;
+      if (!a) return 1;
+      if (!b) return -1;
+      return null;
+    };
+
+    return [...base].sort((a, b) => {
+      switch (sortKey) {
+        case "steamId":
+          return dir * a.steamId.localeCompare(b.steamId);
+        case "name": {
+          const n = nullsLast(a.name, b.name);
+          return n ?? dir * a.name!.localeCompare(b.name!);
+        }
+        case "clan": {
+          const av = a.clanName || a.clan;
+          const bv = b.clanName || b.clan;
+          const n = nullsLast(av, bv);
+          return n ?? dir * av!.localeCompare(bv!);
+        }
+        case "group": {
+          const av = a.groupName || a.role;
+          const bv = b.groupName || b.role;
+          const n = nullsLast(av, bv);
+          return n ?? dir * av!.localeCompare(bv!);
+        }
+        case "expires": {
+          const n = nullsLast(a.expiresAt, b.expiresAt);
+          return n ?? dir * (new Date(a.expiresAt!).getTime() - new Date(b.expiresAt!).getTime());
+        }
+        case "created":
+          return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        default:
+          return 0;
+      }
+    });
+  }, [entries, search, filterClan, filterGroup, showExpired, sortKey, sortDir]);
 
   return (
     <>
@@ -968,12 +1073,31 @@ function EntriesTab({
                     />
                   </th>
                 )}
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Steam ID</th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Name</th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Clan</th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Group</th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Expires</th>
-                <th className="px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Added</th>
+                {(
+                  [
+                    { key: "steamId" as SortKey, label: "Steam ID" },
+                    { key: "name" as SortKey, label: "Name" },
+                    { key: "clan" as SortKey, label: "Clan" },
+                    { key: "group" as SortKey, label: "Group" },
+                    { key: "expires" as SortKey, label: "Expires" },
+                    { key: "created" as SortKey, label: "Added" },
+                  ] as const
+                ).map(({ key, label }) => (
+                  <th
+                    key={label}
+                    onClick={() => toggleSort(key)}
+                    className="cursor-pointer select-none px-4 py-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase hover:text-text-primary"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {label}
+                      {sortKey === key && (
+                        <svg className="h-3 w-3" viewBox="0 0 12 12" fill="currentColor">
+                          {sortDir === "asc" ? <path d="M6 2l4 5H2z" /> : <path d="M6 10l4-5H2z" />}
+                        </svg>
+                      )}
+                    </span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -1463,6 +1587,18 @@ function EntriesTab({
                 </button>
               )}
             </div>
+            <div className="mb-3 flex flex-wrap gap-3 text-xs">
+              <span className="rounded-sm bg-accent/10 px-2 py-0.5 text-accent">{importCounts.newCount} new</span>
+              {importCounts.existingCount > 0 && (
+                <span className="rounded-sm bg-warning/10 px-2 py-0.5 text-warning">{importCounts.existingCount} already whitelisted</span>
+              )}
+              {importCounts.batchCount > 0 && (
+                <span className="rounded-sm bg-warning/10 px-2 py-0.5 text-warning">{importCounts.batchCount} duplicate{importCounts.batchCount === 1 ? "" : "s"} in paste</span>
+              )}
+              {importCounts.errorCount > 0 && (
+                <span className="rounded-sm bg-danger/10 px-2 py-0.5 text-danger">{importCounts.errorCount} error{importCounts.errorCount === 1 ? "" : "s"}</span>
+              )}
+            </div>
             <div className="mb-4 max-h-96 overflow-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -1475,23 +1611,31 @@ function EntriesTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {importRows.map((row, i) => (
-                    <tr key={i} className={`border-b border-border/50 ${row.error ? "bg-danger/10" : ""}`}>
-                      <td className="px-3 py-2"><input type="text" value={row.steamId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, steamId: e.target.value, error: false } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none" /></td>
+                  {importRows.map((row, i) => {
+                    const dupeReason = importDupeMap.get(i);
+                    const rowBg = row.error ? "bg-danger/10" : dupeReason ? "bg-warning/5" : "";
+                    return (
+                    <tr key={i} className={`border-b border-border/50 ${rowBg}`}>
+                      <td className="px-3 py-2">
+                        <input type="text" value={row.steamId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, steamId: e.target.value, error: false } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-accent focus:border-accent focus:outline-none" />
+                        {dupeReason === "existing" && <span className="mt-1 block text-[10px] text-warning">Already whitelisted</span>}
+                        {dupeReason === "batch" && <span className="mt-1 block text-[10px] text-warning">Duplicate in paste</span>}
+                      </td>
                       <td className="px-3 py-2"><input type="text" value={row.name} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, name: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none" /></td>
                       <td className="px-3 py-2"><select value={row.clanId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, clanId: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"><option value="">No Clan</option>{clans.map((c) => <option key={c.id} value={c.id}>[{c.tag}] {c.name}</option>)}</select></td>
                       <td className="px-3 py-2"><select value={row.groupId} onChange={(e) => setImportRows((prev) => prev.map((r, j) => j === i ? { ...r, groupId: e.target.value } : r))} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none"><option value="">No group</option>{groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></td>
                       <td className="px-3 py-2"><button onClick={() => setImportRows((prev) => prev.filter((_, j) => j !== i))} className="text-xs text-text-muted transition-colors hover:text-danger">x</button></td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-text-muted">{importRows.filter((r) => r.steamId.trim()).length} valid entries</span>
+              <span className="text-sm text-text-muted">{importCounts.newCount} new {importCounts.newCount === 1 ? "entry" : "entries"} will be imported</span>
               <div className="flex gap-3">
                 <button onClick={() => setImportStep("paste")} className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary">Back</button>
-                <button onClick={confirmImport} disabled={importing || importRows.filter((r) => r.steamId.trim()).length === 0} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">
+                <button onClick={confirmImport} disabled={importing || importCounts.newCount === 0} className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50">
                   {importing ? "Importing..." : "Import"}
                 </button>
               </div>

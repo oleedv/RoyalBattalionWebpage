@@ -41,8 +41,17 @@ function parseAttachments(raw: string | string[] | null): string[] {
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+function stripQuery(url: string): string {
+  const q = url.indexOf("?");
+  return q === -1 ? url : url.slice(0, q);
+}
+
 function isImageUrl(url: string): boolean {
-  return /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url) || url.includes("cdn.discordapp.com");
+  return /\.(png|jpe?g|gif|webp)$/i.test(stripQuery(url));
+}
+
+function isVideoUrl(url: string): boolean {
+  return /\.(mp4|webm|mov|m4v)$/i.test(stripQuery(url));
 }
 
 const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
@@ -70,17 +79,41 @@ function MessageAttachments({ attachments }: { attachments: string | null }) {
 
   return (
     <div className="mt-2 flex flex-wrap gap-2">
-      {urls.map((url, i) =>
-        isImageUrl(url) ? (
-          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
-            <img
-              src={url}
-              alt={`Attachment ${i + 1}`}
-              className="max-h-32 max-w-48 rounded-sm border border-border/50 object-cover transition-opacity hover:opacity-80"
-              loading="lazy"
-            />
-          </a>
-        ) : (
+      {urls.map((url, i) => {
+        if (isVideoUrl(url)) {
+          return (
+            <div key={i} className="flex flex-col gap-1">
+              <video
+                src={url}
+                controls
+                preload="metadata"
+                className="max-h-64 max-w-96 rounded-sm border border-border/50"
+              />
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                download
+                className="self-start text-xs text-accent underline hover:text-accent-bright"
+              >
+                Download
+              </a>
+            </div>
+          );
+        }
+        if (isImageUrl(url)) {
+          return (
+            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
+              <img
+                src={url}
+                alt={`Attachment ${i + 1}`}
+                className="max-h-32 max-w-48 rounded-sm border border-border/50 object-cover transition-opacity hover:opacity-80"
+                loading="lazy"
+              />
+            </a>
+          );
+        }
+        return (
           <a
             key={i}
             href={url}
@@ -90,8 +123,8 @@ function MessageAttachments({ attachments }: { attachments: string | null }) {
           >
             Attachment {i + 1}
           </a>
-        )
-      )}
+        );
+      })}
     </div>
   );
 }

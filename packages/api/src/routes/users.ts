@@ -26,6 +26,14 @@ users.post("/link-steam", authMiddleware, rateLimit(10), zValidator("json", link
   const userId = c.get("userId");
   const { steamId } = c.req.valid("json");
 
+  const collision = await prisma.user.findUnique({
+    where: { steamId },
+    select: { id: true, discordName: true },
+  });
+  if (collision && collision.id !== userId) {
+    return fail(c, `Steam ID ${steamId} is already linked to Discord user @${collision.discordName}.`, 409);
+  }
+
   try {
     const user = await prisma.user.update({
       where: { id: userId },
@@ -35,7 +43,7 @@ users.post("/link-steam", authMiddleware, rateLimit(10), zValidator("json", link
     return success(c, { steamId: user.steamId! });
   } catch (err) {
     logger.error("users", "Failed to link Steam ID", { userId, steamId, err });
-    return fail(c, "Failed to link Steam ID. It may already be linked to another account.");
+    return fail(c, "Failed to link Steam ID.");
   }
 });
 
@@ -431,6 +439,25 @@ users.put("/:id", authMiddleware, requirePermission("manage:members"), zValidato
     }
   }
 
+  if (body.steamId) {
+    const collision = await prisma.user.findUnique({
+      where: { steamId: body.steamId },
+      select: { id: true, discordName: true },
+    });
+    if (collision && collision.id !== id) {
+      return fail(c, `Steam ID ${body.steamId} is already linked to Discord user @${collision.discordName}.`, 409);
+    }
+  }
+  if (body.eosId) {
+    const collision = await prisma.user.findUnique({
+      where: { eosId: body.eosId },
+      select: { id: true, discordName: true },
+    });
+    if (collision && collision.id !== id) {
+      return fail(c, `EOS ID ${body.eosId} is already linked to Discord user @${collision.discordName}.`, 409);
+    }
+  }
+
   try {
     const updated = await prisma.user.update({
       where: { id },
@@ -453,7 +480,7 @@ users.put("/:id", authMiddleware, requirePermission("manage:members"), zValidato
     return success(c, mapUserWithComments(updated, activityMap, playtimeMap));
   } catch (err) {
     logger.error("users", "Failed to update user", { id, err });
-    return fail(c, "Failed to update user. The Steam ID may already be linked to another account.");
+    return fail(c, "Failed to update user.");
   }
 });
 

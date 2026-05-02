@@ -150,6 +150,8 @@ export const deleteWhitelistEntry = whitelistClient.remove;
 export type BulkAddSkippedEntry = {
   steamId: string;
   reason: "duplicate_existing" | "duplicate_in_batch";
+  existingName?: string | null;
+  existingExpiresAt?: string | null;
 };
 
 export type BulkAddWhitelistResult = {

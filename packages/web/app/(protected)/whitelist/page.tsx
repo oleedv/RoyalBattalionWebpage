@@ -835,8 +835,21 @@ function EntriesTab({
       const { created, skipped } = res.data;
       let msg = `Imported ${created} ${created === 1 ? "entry" : "entries"}`;
       if (skipped.length > 0) {
+        const now = Date.now();
         const sample = skipped.slice(0, 5)
-          .map((s) => `${s.steamId} (${s.reason === "duplicate_existing" ? "already whitelisted" : "duplicate in batch"})`)
+          .map((s) => {
+            if (s.reason === "duplicate_in_batch") return `${s.steamId} (duplicate in batch)`;
+            const who = s.existingName ? ` as "${s.existingName}"` : "";
+            let when = "";
+            if (s.existingExpiresAt) {
+              const exp = new Date(s.existingExpiresAt);
+              const expIso = s.existingExpiresAt.slice(0, 10);
+              when = exp.getTime() < now ? `, expired ${expIso}` : `, expires ${expIso}`;
+            } else if (s.existingName !== undefined) {
+              when = ", no expiry";
+            }
+            return `${s.steamId} (already whitelisted${who}${when})`;
+          })
           .join(", ");
         const extra = skipped.length > 5 ? `, +${skipped.length - 5} more` : "";
         msg += `. Skipped ${skipped.length}: ${sample}${extra}`;

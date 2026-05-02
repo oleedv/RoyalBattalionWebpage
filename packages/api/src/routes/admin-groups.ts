@@ -52,6 +52,9 @@ adminGroups.get("/", async (c) => {
 adminGroups.post("/", zValidator("json", createGroupSchema), async (c) => {
   const { name, permissions, sortOrder } = c.req.valid("json");
 
+  const collision = await prisma.adminGroup.findUnique({ where: { name }, select: { id: true } });
+  if (collision) return fail(c, `Admin group "${name}" already exists.`, 409);
+
   try {
     const group = await prisma.adminGroup.create({
       data: { name, permissions, sortOrder },
@@ -62,7 +65,7 @@ adminGroups.post("/", zValidator("json", createGroupSchema), async (c) => {
     return success(c, toAdminGroup(group), 201);
   } catch (err) {
     logger.error("admin-groups", "Failed to create admin group", { name, err });
-    return fail(c, "Failed to create group. Name may already exist.");
+    return fail(c, "Failed to create group.");
   }
 });
 

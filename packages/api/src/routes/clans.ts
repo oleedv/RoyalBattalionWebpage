@@ -40,13 +40,21 @@ clans.get("/", async (c) => {
 
 clans.post("/", zValidator("json", createClanSchema), async (c) => {
   const { name, tag } = c.req.valid("json");
+
+  const [byName, byTag] = await Promise.all([
+    prisma.clan.findUnique({ where: { name }, select: { name: true, tag: true } }),
+    prisma.clan.findUnique({ where: { tag }, select: { name: true, tag: true } }),
+  ]);
+  if (byName) return fail(c, `Clan name "${name}" is already used by [${byName.tag}] ${byName.name}.`, 409);
+  if (byTag) return fail(c, `Clan tag "${tag}" is already used by [${byTag.tag}] ${byTag.name}.`, 409);
+
   try {
     const clan = await prisma.clan.create({ data: { name, tag } });
     await audit(c, "clan.create", "clan", clan.id, { name, tag });
     return success(c, toClan(clan), 201);
   } catch (err) {
     logger.error("clans", "Failed to create clan", { name, tag, err });
-    return fail(c, "Failed to create clan. Name or tag may already exist.");
+    return fail(c, "Failed to create clan.");
   }
 });
 

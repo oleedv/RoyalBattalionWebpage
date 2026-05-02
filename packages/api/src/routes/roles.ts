@@ -46,6 +46,14 @@ roles.get("/", async (c) => {
 roles.post("/", zValidator("json", createRoleSchema), async (c) => {
   const { discordRoleId, name, permissions } = c.req.valid("json");
 
+  const collision = await prisma.discordRole.findUnique({
+    where: { discordRoleId },
+    select: { name: true },
+  });
+  if (collision) {
+    return fail(c, `Discord role ID ${discordRoleId} is already mapped to "${collision.name}".`, 409);
+  }
+
   try {
     const role = await prisma.discordRole.create({
       data: {
@@ -72,7 +80,7 @@ roles.post("/", zValidator("json", createRoleSchema), async (c) => {
     return success(c, result, 201);
   } catch (err) {
     logger.error("roles", "Failed to create role", { name, discordRoleId, err });
-    return fail(c, "Failed to create role. The Discord role ID may already be mapped.");
+    return fail(c, "Failed to create role.");
   }
 });
 

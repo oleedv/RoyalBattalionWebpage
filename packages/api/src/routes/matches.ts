@@ -75,11 +75,20 @@ function toMatch(e: {
 }
 
 matches.get("/", requirePermission("manage:matches"), async (c) => {
-  const entries = await prisma.match.findMany({
-    orderBy: { date: "desc" },
-  });
+  const page = Math.max(1, Number(c.req.query("page") || "1"));
+  const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") || "20")));
+  const skip = (page - 1) * limit;
 
-  return success(c, entries.map(toMatch));
+  const [entries, total] = await Promise.all([
+    prisma.match.findMany({
+      orderBy: { date: "desc" },
+      skip,
+      take: limit,
+    }),
+    prisma.match.count(),
+  ]);
+
+  return success(c, { items: entries.map(toMatch), total });
 });
 
 matches.put("/:id", requirePermission("manage:matches"), zValidator("json", updateMatchSchema), async (c) => {

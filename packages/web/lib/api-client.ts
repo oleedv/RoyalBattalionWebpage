@@ -516,12 +516,24 @@ export function getProspect(
 
 // Matches
 const matchesClient = createCrudClient<Match>("/matches");
-export const getMatches = matchesClient.getAll;
 export const updateMatch = (
   token: string,
   id: string,
   data: { date?: string; map?: string; layer?: string; result?: string; vodUrl?: string | null; hidden?: boolean; server?: string }
 ) => matchesClient.update(token, id, data as Record<string, unknown>);
+
+export function getMatches(
+  token: string,
+  params: { page?: number; limit?: number } = {}
+): Promise<ApiResponse<Paginated<Match>>> {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
+  const q = qs.toString();
+  return request<Paginated<Match>>(`/matches${q ? `?${q}` : ""}`, {
+    headers: authHeaders(token),
+  });
+}
 
 export function getPublicMatches(
   page = 1,

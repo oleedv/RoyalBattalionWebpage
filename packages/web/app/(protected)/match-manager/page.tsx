@@ -13,11 +13,17 @@ import { DataTable, type Column } from "@/components/data-table";
 import { formatDate } from "@/lib/format";
 import type { Match } from "shared";
 
+const PAGE_SIZE = 20;
+
 export default function MatchesPage() {
   const { apiToken } = usePermissions();
   const [matches, setMatches] = useState<Match[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Resync state
   const [resyncing, setResyncing] = useState(false);
@@ -33,32 +39,39 @@ export default function MatchesPage() {
   const [editServer, setEditServer] = useState("Main Server");
   const [editError, setEditError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function init() {
-      if (!apiToken) return;
-      try {
-        const res = await getMatches(apiToken);
-        if (res.success && res.data) {
-          setMatches(res.data);
-        } else {
-          setError(res.error || "Failed to load matches");
-        }
-      } catch {
-        setError("Failed to initialize");
-      } finally {
-        setLoading(false);
+  const fetchMatches = useCallback(async () => {
+    if (!apiToken) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await getMatches(apiToken, { page, limit: PAGE_SIZE });
+      if (res.success && res.data) {
+        setMatches(res.data.items);
+        setTotal(res.data.total);
+      } else {
+        setError(res.error || "Failed to load matches");
       }
+    } catch {
+      setError("Failed to initialize");
+    } finally {
+      setLoading(false);
     }
-    init();
-  }, [apiToken]);
+  }, [apiToken, page]);
+
+  useEffect(() => {
+    fetchMatches();
+  }, [fetchMatches]);
 
   const refreshMatches = useCallback(async () => {
     if (!apiToken) return;
     try {
-      const res = await getMatches(apiToken);
-      if (res.success && res.data) setMatches(res.data);
+      const res = await getMatches(apiToken, { page, limit: PAGE_SIZE });
+      if (res.success && res.data) {
+        setMatches(res.data.items);
+        setTotal(res.data.total);
+      }
     } catch { /* silent */ }
-  }, [apiToken]);
+  }, [apiToken, page]);
 
   useAutoRefresh(refreshMatches, 20_000, !!apiToken && !editingId);
 
@@ -312,7 +325,7 @@ export default function MatchesPage() {
             {resyncing ? "Resyncing..." : "Resync"}
           </button>
           <span className="rounded-sm border border-accent/20 bg-accent/10 px-3 py-1 text-sm text-accent">
-            {matches.length} matches
+            {total} matches
           </span>
         </div>
       </div>
@@ -326,6 +339,31 @@ export default function MatchesPage() {
           emptyMessage="No matches yet"
         />
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between">
+          <div className="text-xs text-text-muted">
+            Page {page} of {totalPages}
+          </div>
+          <div className="flex gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="rounded-sm border border-border px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              Previous
+            </button>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded-sm border border-border px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

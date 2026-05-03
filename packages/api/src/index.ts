@@ -32,10 +32,16 @@ import { env } from "./lib/env";
 import { bootstrap } from "./lib/bootstrap";
 import { initLiveServerRelay, handleLiveServerOpen, handleLiveServerMessage, handleLiveServerClose } from "./ws/live-server";
 import { handlePresenceOpen, handlePresenceMessage, handlePresenceClose } from "./ws/presence";
+import { printStartupBanner, printReadyBanner, printShutdownBanner } from "./lib/print-banner";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { Permission } from "shared";
 import type { ServerWebSocket } from "bun";
 import type { WSData } from "./ws/types";
+
+// --- Startup banner ---
+
+const bootStartedAt = Date.now();
+printStartupBanner();
 
 // --- Hono app setup ---
 
@@ -143,6 +149,48 @@ bootstrap().catch((err) => logger.error("bootstrap", "Bootstrap failed", err));
 // --- WebSocket relay ---
 
 initLiveServerRelay();
+
+// --- Ready banner (fires after Bun begins listening) ---
+
+async function emitReadyBanner() {
+  await new Promise((r) => setTimeout(r, 50));
+  const dbStatus: Record<string, boolean> = {};
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    dbStatus.primary = true;
+  } catch {
+    dbStatus.primary = false;
+  }
+  if (env.SECRETARY_DATABASE_URL) {
+    try {
+      await getSecretaryDb().$queryRaw(Prisma.sql`SELECT 1`);
+      dbStatus.secretary = true;
+    } catch {
+      dbStatus.secretary = false;
+    }
+  }
+
+  printReadyBanner({
+    port: env.PORT,
+    routeCount: app.routes.length,
+    wsEndpoints: ["/live-server/ws", "/presence/ws"],
+    dbStatus,
+    bootMs: Date.now() - bootStartedAt,
+  });
+}
+emitReadyBanner().catch((err) => logger.error("banner", "Ready banner failed", err));
+
+// --- Shutdown banner ---
+
+let shuttingDown = false;
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    printShutdownBanner(signal, bootStartedAt);
+    process.exit(0);
+  });
+}
 
 // --- Token verification for WebSocket upgrades ---
 

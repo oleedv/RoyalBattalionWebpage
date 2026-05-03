@@ -30,6 +30,7 @@ import type {
   Paginated,
   TicketTimeout,
   PlaytimeStats,
+  UserProfile,
   SeedTrackerLeaderboardEntry,
   SeedTrackerPlayerDetail,
   SeedTrackerStats,
@@ -893,6 +894,31 @@ export function getMentorGroups(
   token: string
 ): Promise<ApiResponse<import("shared").MentorGroup[]>> {
   return request<import("shared").MentorGroup[]>("/discord-bot/prospects/mentors", {
+    headers: authHeaders(token),
+  });
+}
+
+// Unified User Profile
+export function getUserProfile(token: string, id: string): Promise<ApiResponse<UserProfile>> {
+  return request<UserProfile>(`/users/${id}/profile`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function getUserProfileBySteamId(token: string, steamId: string): Promise<ApiResponse<UserProfile>> {
+  return request<UserProfile>(`/users/profile/by-steamid/${steamId}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function getUserIdBySteamId(token: string, steamId: string): Promise<ApiResponse<{ id: string }>> {
+  return request<{ id: string }>(`/users/by-steamid/${steamId}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function getUserIdByEosId(token: string, eosId: string): Promise<ApiResponse<{ id: string }>> {
+  return request<{ id: string }>(`/users/by-eosid/${eosId}`, {
     headers: authHeaders(token),
   });
 }

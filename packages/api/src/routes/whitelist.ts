@@ -27,6 +27,7 @@ function toEntry(e: {
   role: string | null;
   groupId: string | null;
   group?: { name: string } | null;
+  userId?: string | null;
   addedBy: string;
   reason: string | null;
   expiresAt: Date | null;
@@ -43,6 +44,7 @@ function toEntry(e: {
     role: e.role,
     groupId: e.groupId,
     groupName: e.group?.name ?? null,
+    userId: e.userId ?? null,
     addedBy: e.addedBy,
     reason: e.reason,
     expiresAt: e.expiresAt?.toISOString() ?? null,
@@ -72,6 +74,11 @@ function deployInBackground(server?: string) {
   triggerSftpDeploy(server).catch((err) =>
     logger.error("sftp", "Deploy failed", err)
   );
+}
+
+async function findUserIdForSteam(steamId: string): Promise<string | null> {
+  const user = await prisma.user.findUnique({ where: { steamId }, select: { id: true } });
+  return user?.id ?? null;
 }
 
 function formatDuplicateError(
@@ -209,6 +216,7 @@ whitelist.post("/", requirePermission("manage:whitelist"), rateLimit(30), zValid
       select: { server: true, name: true, expiresAt: true },
     });
 
+    const linkedUserId = await findUserIdForSteam(steamId);
     const entry = await prisma.whitelistEntry.create({
       data: {
         steamId,
@@ -218,6 +226,7 @@ whitelist.post("/", requirePermission("manage:whitelist"), rateLimit(30), zValid
         clanId: clanId ?? null,
         role: role ?? null,
         groupId: groupId ?? null,
+        userId: linkedUserId,
         addedBy: userId,
         reason: reason ?? null,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
@@ -300,6 +309,7 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), zVa
       seenInBatch.add(entry.steamId);
 
       try {
+        const linkedUser = await tx.user.findUnique({ where: { steamId: entry.steamId }, select: { id: true } });
         await tx.whitelistEntry.create({
           data: {
             steamId: entry.steamId,
@@ -309,6 +319,7 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), zVa
             clanId: entry.clanId ?? null,
             role: entry.role ?? null,
             groupId: entry.groupId ?? null,
+            userId: linkedUser?.id ?? null,
             addedBy: userId,
             reason: entry.reason ?? null,
           },
@@ -435,6 +446,12 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
   }
 
   try {
+    const newSteamId = body.steamId !== undefined ? body.steamId : existing.steamId;
+    const linkedUserId =
+      body.steamId !== undefined && body.steamId !== existing.steamId
+        ? await findUserIdForSteam(newSteamId)
+        : undefined;
+
     const entry = await prisma.whitelistEntry.update({
       where: { id },
       data: {
@@ -448,6 +465,7 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
         ...(body.expiresAt !== undefined && {
           expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
         }),
+        ...(linkedUserId !== undefined && { userId: linkedUserId }),
       },
       include: { group: true, clanRef: true },
     });

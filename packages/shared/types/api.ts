@@ -48,6 +48,7 @@ export interface WhitelistEntry {
   role: string | null;
   groupId: string | null;
   groupName: string | null;
+  userId: string | null;
   addedBy: string;
   reason: string | null;
   expiresAt: string | null;

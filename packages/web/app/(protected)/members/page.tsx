@@ -136,10 +136,6 @@ export default function MembersPage() {
   const [filterSeedMax30, setFilterSeedMax30] = useState("");
   const [filterSeedMin90, setFilterSeedMin90] = useState("");
   const [filterSeedMax90, setFilterSeedMax90] = useState("");
-  const [filterActivityMin30, setFilterActivityMin30] = useState("");
-  const [filterActivityMax30, setFilterActivityMax30] = useState("");
-  const [filterActivityMin90, setFilterActivityMin90] = useState("");
-  const [filterActivityMax90, setFilterActivityMax90] = useState("");
   const [filterJoinFrom, setFilterJoinFrom] = useState("");
   const [filterJoinTo, setFilterJoinTo] = useState("");
   const [filterMemberFrom, setFilterMemberFrom] = useState("");
@@ -234,8 +230,6 @@ export default function MembersPage() {
     setFilterPlaytimeMin90(""); setFilterPlaytimeMax90("");
     setFilterSeedMin30(""); setFilterSeedMax30("");
     setFilterSeedMin90(""); setFilterSeedMax90("");
-    setFilterActivityMin30(""); setFilterActivityMax30("");
-    setFilterActivityMin90(""); setFilterActivityMax90("");
     setFilterJoinFrom(""); setFilterJoinTo("");
     setFilterMemberFrom(""); setFilterMemberTo("");
   }
@@ -249,12 +243,10 @@ export default function MembersPage() {
     if (filterPlaytimeMin90 || filterPlaytimeMax90) count++;
     if (filterSeedMin30 || filterSeedMax30) count++;
     if (filterSeedMin90 || filterSeedMax90) count++;
-    if (filterActivityMin30 || filterActivityMax30) count++;
-    if (filterActivityMin90 || filterActivityMax90) count++;
     if (filterJoinFrom || filterJoinTo) count++;
     if (filterMemberFrom || filterMemberTo) count++;
     return count;
-  }, [filterRoles, filterCountry, filterLoggedIn, filterPlaytimeMin30, filterPlaytimeMax30, filterPlaytimeMin90, filterPlaytimeMax90, filterSeedMin30, filterSeedMax30, filterSeedMin90, filterSeedMax90, filterActivityMin30, filterActivityMax30, filterActivityMin90, filterActivityMax90, filterJoinFrom, filterJoinTo, filterMemberFrom, filterMemberTo]);
+  }, [filterRoles, filterCountry, filterLoggedIn, filterPlaytimeMin30, filterPlaytimeMax30, filterPlaytimeMin90, filterPlaytimeMax90, filterSeedMin30, filterSeedMax30, filterSeedMin90, filterSeedMax90, filterJoinFrom, filterJoinTo, filterMemberFrom, filterMemberTo]);
 
   const memberRoleIds = useMemo(
     () => new Set(allRoles.filter((r) => r.isMemberRole).map((r) => r.id)),
@@ -315,12 +307,6 @@ export default function MembersPage() {
     if (filterSeedMin90 || filterSeedMax90) {
       result = result.filter((u) => inRange(u.seed90, filterSeedMin90, filterSeedMax90));
     }
-    if (filterActivityMin30 || filterActivityMax30) {
-      result = result.filter((u) => inRange(u.activity30, filterActivityMin30, filterActivityMax30));
-    }
-    if (filterActivityMin90 || filterActivityMax90) {
-      result = result.filter((u) => inRange(u.activity90, filterActivityMin90, filterActivityMax90));
-    }
 
     if (filterJoinFrom) {
       result = result.filter((u) => u.createdAt >= filterJoinFrom);
@@ -363,7 +349,7 @@ export default function MembersPage() {
     });
 
     return result;
-  }, [users, search, memberRoleIds, sortKey, sortDir, filterRoles, filterCountry, filterLoggedIn, filterPlaytimeMin30, filterPlaytimeMax30, filterPlaytimeMin90, filterPlaytimeMax90, filterSeedMin30, filterSeedMax30, filterSeedMin90, filterSeedMax90, filterActivityMin30, filterActivityMax30, filterActivityMin90, filterActivityMax90, filterJoinFrom, filterJoinTo, filterMemberFrom, filterMemberTo]);
+  }, [users, search, memberRoleIds, sortKey, sortDir, filterRoles, filterCountry, filterLoggedIn, filterPlaytimeMin30, filterPlaytimeMax30, filterPlaytimeMin90, filterPlaytimeMax90, filterSeedMin30, filterSeedMax30, filterSeedMin90, filterSeedMax90, filterJoinFrom, filterJoinTo, filterMemberFrom, filterMemberTo]);
 
   // --- Detail modal ---
 
@@ -733,15 +719,11 @@ export default function MembersPage() {
               </div>
             </div>
 
-            {/* Playtime ranges */}
-            <RangeFilter label="Playtime 30d" min={filterPlaytimeMin30} max={filterPlaytimeMax30} onMinChange={setFilterPlaytimeMin30} onMaxChange={setFilterPlaytimeMax30} unit="hrs" />
-            <RangeFilter label="Playtime 90d" min={filterPlaytimeMin90} max={filterPlaytimeMax90} onMinChange={setFilterPlaytimeMin90} onMaxChange={setFilterPlaytimeMax90} unit="hrs" />
+            {/* Activity (hours played) ranges */}
+            <RangeFilter label="Activity 30d" min={filterPlaytimeMin30} max={filterPlaytimeMax30} onMinChange={setFilterPlaytimeMin30} onMaxChange={setFilterPlaytimeMax30} unit="hrs" />
+            <RangeFilter label="Activity 90d" min={filterPlaytimeMin90} max={filterPlaytimeMax90} onMinChange={setFilterPlaytimeMin90} onMaxChange={setFilterPlaytimeMax90} unit="hrs" />
             <RangeFilter label="Seed Time 30d" min={filterSeedMin30} max={filterSeedMax30} onMinChange={setFilterSeedMin30} onMaxChange={setFilterSeedMax30} unit="hrs" />
             <RangeFilter label="Seed Time 90d" min={filterSeedMin90} max={filterSeedMax90} onMinChange={setFilterSeedMin90} onMaxChange={setFilterSeedMax90} unit="hrs" />
-
-            {/* Activity ranges */}
-            <RangeFilter label="Activity 30d" min={filterActivityMin30} max={filterActivityMax30} onMinChange={setFilterActivityMin30} onMaxChange={setFilterActivityMax30} unit="matches" />
-            <RangeFilter label="Activity 90d" min={filterActivityMin90} max={filterActivityMax90} onMinChange={setFilterActivityMin90} onMaxChange={setFilterActivityMax90} unit="matches" />
 
             {/* Date ranges */}
             <div>
@@ -1219,19 +1201,7 @@ export default function MembersPage() {
                 <span className="text-text-secondary">{formatDate(selectedUser.createdAt)}</span>
               </InfoField>
 
-              <InfoField label="Activity (30d)">
-                <span className={selectedUser.activity30 > 0 ? "text-success" : "text-text-muted"}>
-                  {selectedUser.activity30} matches
-                </span>
-              </InfoField>
-
-              <InfoField label="Activity (90d)">
-                <span className={selectedUser.activity90 > 0 ? "text-text-secondary" : "text-text-muted"}>
-                  {selectedUser.activity90} matches
-                </span>
-              </InfoField>
-
-              <InfoField label="Playtime (30/90d)">
+              <InfoField label="Activity (30/90d)">
                 <span className="text-text-secondary">{selectedUser.playtime30}h / {selectedUser.playtime90}h</span>
               </InfoField>
               <InfoField label="Seed Time (30/90d)">

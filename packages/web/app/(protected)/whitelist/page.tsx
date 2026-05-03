@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import {
   getWhitelist,
   addWhitelistEntry,
@@ -1149,7 +1150,17 @@ function EntriesTab({
                         </td>
                       )}
                       <td className="px-4 py-3">
-                        <code className="text-accent">{entry.steamId}</code>
+                        <div className="flex items-center gap-2">
+                          <code className="text-accent">{entry.steamId}</code>
+                          <Link
+                            href={entry.userId ? `/users/${entry.userId}` : `/users/by-steamid/${entry.steamId}`}
+                            onClick={(e) => e.stopPropagation()}
+                            title="Open unified profile"
+                            className="rounded-sm border border-border/50 px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:border-accent/40 hover:text-accent"
+                          >
+                            profile →
+                          </Link>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-text-secondary">
                         {entry.name || <span className="text-text-muted">--</span>}

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import type { Player } from "../lib/types";
 import { formatRole } from "../lib/format-role";
 
@@ -49,6 +50,16 @@ export const PlayerRow = React.memo(function PlayerRow({
         >
           {player.name}
         </button>
+        {player.steamID && (
+          <Link
+            href={`/users/by-steamid/${player.steamID}`}
+            onClick={(e) => e.stopPropagation()}
+            title="Open unified profile"
+            className="flex-shrink-0 rounded-sm border border-border/40 px-1 py-0 text-[9px] text-text-muted transition-colors hover:border-accent/40 hover:text-accent"
+          >
+            profile
+          </Link>
+        )}
         {player.role && (
           <span className="flex-shrink-0 text-[10px] text-text-muted">{formatRole(player.role)}</span>
         )}

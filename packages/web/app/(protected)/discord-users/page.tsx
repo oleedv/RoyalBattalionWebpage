@@ -406,19 +406,7 @@ export default function DiscordUsersPage() {
                 <span className="text-text-secondary">{formatDate(selectedUser.createdAt)}</span>
               </InfoField>
 
-              <InfoField label="Activity (30d)">
-                <span className={selectedUser.activity30 > 0 ? "text-success" : "text-text-muted"}>
-                  {selectedUser.activity30} matches
-                </span>
-              </InfoField>
-
-              <InfoField label="Activity (90d)">
-                <span className={selectedUser.activity90 > 0 ? "text-text-secondary" : "text-text-muted"}>
-                  {selectedUser.activity90} matches
-                </span>
-              </InfoField>
-
-              <InfoField label="Playtime (30/90d)">
+              <InfoField label="Activity (30/90d)">
                 <span className="text-text-secondary">{selectedUser.playtime30}h / {selectedUser.playtime90}h</span>
               </InfoField>
               <InfoField label="Seed Time (30/90d)">

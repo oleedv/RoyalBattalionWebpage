@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { getAuditLogs } from "@/lib/api-client";
+import { getAuditLogs, deleteAuditLog } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
 import { DataTable, type Column } from "@/components/data-table";
@@ -126,7 +126,8 @@ function DetailView({ detail }: { detail: Record<string, unknown> | null }) {
 }
 
 export default function AuditLogsPage() {
-  const { apiToken } = usePermissions();
+  const { apiToken, hasPermission } = usePermissions();
+  const canDelete = hasPermission("developer");
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -142,6 +143,17 @@ export default function AuditLogsPage() {
 
   // Expanded row
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  async function handleDelete(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!apiToken || !canDelete) return;
+    if (!confirm("Delete this audit log entry? This cannot be undone.")) return;
+    const res = await deleteAuditLog(apiToken, id);
+    if (res.success) {
+      setLogs((prev) => prev.filter((l) => l.id !== id));
+      setTotal((t) => Math.max(0, t - 1));
+    }
+  }
 
   const fetchLogs = useCallback(async () => {
     if (!apiToken) return;
@@ -271,7 +283,22 @@ export default function AuditLogsPage() {
         return <span className="text-text-muted">--</span>;
       },
     },
-  ], [expandedId]);
+    ...(canDelete
+      ? [{
+          key: "actions",
+          header: "",
+          render: (log: AuditLogEntry) => (
+            <button
+              onClick={(e) => handleDelete(log.id, e)}
+              className="text-xs text-text-muted transition-colors hover:text-danger"
+              title="Delete audit log entry (developer only)"
+            >
+              Delete
+            </button>
+          ),
+        }]
+      : []),
+  ], [expandedId, canDelete]);
 
   return (
     <div>

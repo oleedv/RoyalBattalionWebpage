@@ -897,6 +897,21 @@ export function getMentorGroups(
   });
 }
 
+export function deleteAuditLog(token: string, id: string): Promise<ApiResponse<{ deleted: true }>> {
+  return request<{ deleted: true }>(`/audit-logs/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export function bulkDeleteAuditLogs(token: string, ids: string[]): Promise<ApiResponse<{ deleted: number }>> {
+  return request<{ deleted: number }>(`/audit-logs/bulk-delete`, {
+    method: "POST",
+    headers: { ...authHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+}
+
 // Audit Logs
 export function getAuditLogs(
   token: string,

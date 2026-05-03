@@ -1,6 +1,9 @@
 import { Hono } from "hono";
+import { z } from "zod";
+import { zValidator } from "@hono/zod-validator";
 import type { ApiResponse, AuditLogEntry, Paginated } from "shared";
 import prisma from "../lib/db";
+import { success, fail } from "../lib/crud-helpers";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 
@@ -64,6 +67,26 @@ auditLogs.get("/", async (c) => {
     success: true,
     data: { items: entries, total },
   });
+});
+
+// --- Developer-only deletion ---
+
+const bulkDeleteSchema = z.object({
+  ids: z.array(z.string()).min(1).max(500),
+});
+
+auditLogs.post("/bulk-delete", requirePermission("developer"), zValidator("json", bulkDeleteSchema), async (c) => {
+  const { ids } = c.req.valid("json");
+  const result = await prisma.auditLog.deleteMany({ where: { id: { in: ids } } });
+  return success(c, { deleted: result.count });
+});
+
+auditLogs.delete("/:id", requirePermission("developer"), async (c) => {
+  const id = c.req.param("id");
+  const existing = await prisma.auditLog.findUnique({ where: { id }, select: { id: true } });
+  if (!existing) return fail(c, "Audit log entry not found", 404);
+  await prisma.auditLog.delete({ where: { id } });
+  return success(c, { deleted: true as const });
 });
 
 export default auditLogs;

@@ -290,7 +290,7 @@ export default function AuditLogsPage() {
           render: (log: AuditLogEntry) => (
             <button
               onClick={(e) => handleDelete(log.id, e)}
-              className="text-xs text-text-muted transition-colors hover:text-danger"
+              className="text-xs text-text-muted opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-danger"
               title="Delete audit log entry (developer only)"
             >
               Delete
@@ -396,6 +396,7 @@ export default function AuditLogsPage() {
           keyExtractor={(log) => log.id}
           emptyMessage={loading ? "Loading..." : "No audit log entries found"}
           onRowClick={(log) => setExpandedId(expandedId === log.id ? null : log.id)}
+          rowClassName="group"
         />
       </div>
 

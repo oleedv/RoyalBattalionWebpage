@@ -140,8 +140,9 @@ export default function HomePage() {
           </div>
 
           <p className="animate-fade-in-up delay-500 mx-auto mb-10 max-w-xl text-base leading-relaxed text-text-secondary sm:text-lg">
-            Tactical Squad on two dedicated servers. Active admins, organized
-            rounds and priority whitelist earned by helping keep the lights on.
+            Tactical Squad across two community servers. Active admins,
+            organized rounds and priority whitelist earned by helping keep the
+            lights on.
           </p>
 
           {/* CTA Buttons */}

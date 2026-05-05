@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
-import { globalRateLimit } from "./middleware/rate-limit";
+import { globalRateLimit, rateLimit } from "./middleware/rate-limit";
 import { requestLog } from "./middleware/request-log";
 import { jwtVerify } from "jose";
 import auth from "./routes/auth";
@@ -102,6 +102,27 @@ app.get("/admins.cfg", async (c) => {
   const server = c.req.query("server");
   const cfg = await generateAdminsCfg(server || undefined);
   return c.text(cfg, 200, { "Content-Type": "text/plain; charset=utf-8" });
+});
+
+// Public count of staff-tier whitelist entries (admin / superadmin / founder / owner).
+// Filters at the DB level (only staff-tier rows fetched), dedupes by steamId, and
+// rate-limited per IP on top of the global limiter to prevent abuse of the public route.
+app.get("/admins/team-count", rateLimit(30), async (c) => {
+  const tierMatch = ["admin", "owner", "founder"].flatMap((kw) => [
+    { role: { contains: kw } },
+    { group: { is: { name: { contains: kw } } } },
+  ]);
+  const rows = await prisma.whitelistEntry.findMany({
+    where: {
+      AND: [
+        { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+        { OR: tierMatch },
+      ],
+    },
+    select: { steamId: true },
+    distinct: ["steamId"],
+  });
+  return c.json({ success: true, data: { count: rows.length } });
 });
 
 app.get("/health", async (c) => {

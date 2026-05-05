@@ -598,6 +598,10 @@ export function getServerStatus(): Promise<ApiResponse<ServerStatus[]>> {
   return request<ServerStatus[]>("/servers/status");
 }
 
+export function getAdminTeamCount(): Promise<ApiResponse<{ count: number }>> {
+  return request<{ count: number }>("/admins/team-count");
+}
+
 export const deleteMatch = matchesClient.remove;
 
 // Server Config

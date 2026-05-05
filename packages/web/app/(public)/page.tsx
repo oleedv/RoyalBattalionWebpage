@@ -2,49 +2,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { NavAuthButton } from "@/components/nav-auth-button";
 
-const FEATURES = [
-  {
-    title: "Active Squad Server",
-    description:
-      "Join our 100-player Squad server with active administration, balanced teams, and a strong tactical community.",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-6 w-6">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
-      </svg>
-    ),
-  },
-  {
-    title: "Organized Gameplay",
-    description:
-      "We run regular events, training sessions, and competitive matches for clan members at all skill levels.",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-6 w-6">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
-      </svg>
-    ),
-  },
-  {
-    title: "Priority Whitelist",
-    description:
-      "Members get priority queue access to our server through our automated whitelisting system linked to Discord.",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-6 w-6">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-      </svg>
-    ),
-  },
-  {
-    title: "Active Community",
-    description:
-      "Our Discord is home to a growing community of Squad players who value teamwork and communication.",
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-6 w-6">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-      </svg>
-    ),
-  },
-];
-
 export default function HomePage() {
   return (
     <div className="min-h-screen overflow-hidden">
@@ -156,8 +113,7 @@ export default function HomePage() {
           </div>
 
           {/* Badge */}
-          <div className="animate-fade-in-up delay-200 mb-6 inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent/5 px-5 py-1.5">
-            <div className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+          <div className="animate-fade-in-up delay-200 mb-6 inline-flex items-center gap-3 rounded-full border border-accent/20 bg-accent/5 px-5 py-1.5">
             <span className="text-xs font-medium tracking-[0.2em] text-accent/80 uppercase">
               Squad Gaming Community
             </span>
@@ -184,8 +140,8 @@ export default function HomePage() {
           </div>
 
           <p className="animate-fade-in-up delay-500 mx-auto mb-10 max-w-xl text-base leading-relaxed text-text-secondary sm:text-lg">
-            A tactical gaming community built around Squad. Dedicated servers,
-            active admins, organized events, and priority whitelist for members.
+            Tactical Squad on two dedicated servers. Active admins, organized
+            rounds and priority whitelist earned by helping keep the lights on.
           </p>
 
           {/* CTA Buttons */}
@@ -290,45 +246,6 @@ export default function HomePage() {
                 Connect via Steam
               </div>
             </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="relative py-28">
-        <div className="mx-auto max-w-7xl px-6">
-          <div className="mb-16 text-center">
-            <div className="mb-4 flex items-center justify-center gap-3">
-              <div className="h-px w-12 bg-gradient-to-r from-transparent to-accent/40" />
-              <div className="h-1.5 w-1.5 rotate-45 bg-accent/50" />
-              <div className="h-px w-12 bg-gradient-to-l from-transparent to-accent/40" />
-            </div>
-            <h2 className="font-display mb-4 text-3xl font-bold tracking-wide sm:text-4xl">
-              Why Royal Battalion
-            </h2>
-            <p className="mx-auto max-w-xl text-text-secondary">
-              More than just a server -- a community of tactical players
-              who value coordination, communication, and fair play.
-            </p>
-          </div>
-
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {FEATURES.map((feature, i) => (
-              <div
-                key={feature.title}
-                className="facet-border group rounded-sm bg-bg-card p-7 transition-all hover:bg-bg-card-hover hover:shadow-[0_0_40px_rgba(200,168,78,0.05)]"
-              >
-                <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-sm border border-accent/15 bg-accent/8 text-accent transition-colors group-hover:bg-accent/15">
-                  {feature.icon}
-                </div>
-                <h3 className="font-display mb-2 text-base font-semibold tracking-wide text-text-primary">
-                  {feature.title}
-                </h3>
-                <p className="text-sm leading-relaxed text-text-secondary">
-                  {feature.description}
-                </p>
-              </div>
-            ))}
           </div>
         </div>
       </section>

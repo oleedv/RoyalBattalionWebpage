@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { NavAuthButton } from "@/components/nav-auth-button";
-import { getServerStatus, createLobby } from "@/lib/api-client";
+import { getServerStatus, createLobby, getAdminTeamCount } from "@/lib/api-client";
 import type { ServerStatus } from "@/lib/api-client";
 
 const SERVERS = [
@@ -217,6 +217,7 @@ function ServerCard({
 export default function ServerPage() {
   const [statuses, setStatuses] = useState<ServerStatus[]>([]);
   const [loading, setLoading] = useState(true);
+  const [adminCount, setAdminCount] = useState<number | null>(null);
 
   useEffect(() => {
     async function fetch() {
@@ -230,6 +231,12 @@ export default function ServerPage() {
     fetch();
     const interval = setInterval(fetch, 30_000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    getAdminTeamCount().then((res) => {
+      if (res.success && res.data) setAdminCount(res.data.count);
+    });
   }, []);
 
   return (
@@ -318,8 +325,8 @@ export default function ServerPage() {
               { label: "Max Players", value: "100" },
               { label: "Region", value: "Europe" },
               { label: "Tickrate", value: "64" },
-              { label: "Administration", value: "Active" },
-              { label: "Whitelist", value: "Discord Linked" },
+              { label: "Admin Team", value: adminCount === null ? "--" : `${adminCount} on duty` },
+              { label: "Reserved Slots", value: "Whitelist" },
             ].map((item) => (
               <div
                 key={item.label}

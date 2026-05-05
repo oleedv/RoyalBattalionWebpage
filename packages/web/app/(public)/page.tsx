@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { NavAuthButton } from "@/components/nav-auth-button";
+import { LiveSnapshot } from "@/components/live-snapshot";
 
 export default function HomePage() {
   return (
@@ -251,7 +252,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* CTA */}
+      {/* Live Snapshot */}
       <section className="relative border-t border-border bg-bg-secondary py-24">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.02]"
@@ -261,31 +262,25 @@ export default function HomePage() {
             backgroundSize: "30px 30px",
           }}
         />
-        <div className="relative mx-auto max-w-3xl px-6 text-center">
-          <div className="mb-6 flex justify-center">
-            <Image
-              src="/img/rb_newlion2024_4_RS.png"
-              alt=""
-              width={60}
-              height={60}
-              className="opacity-60"
-            />
+        <div className="relative mx-auto max-w-5xl px-6">
+          <div className="mb-12 flex flex-col items-center gap-3 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent/5 px-4 py-1.5">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+              </span>
+              <span className="text-[10px] font-medium tracking-[0.25em] text-accent/80 uppercase">
+                Live
+              </span>
+            </div>
+            <h2 className="font-display text-3xl font-bold tracking-wide sm:text-4xl">
+              Right Now on the Field
+            </h2>
+            <p className="max-w-md text-sm text-text-secondary">
+              The state of Royal Battalion at this exact moment.
+            </p>
           </div>
-          <h2 className="font-display mb-4 text-3xl font-bold tracking-wide sm:text-4xl">
-            Ready to Join?
-          </h2>
-          <p className="mb-10 text-text-secondary text-lg">
-            Hop on our Discord, link your Steam account, and get whitelisted to
-            join the fight.
-          </p>
-          <a
-            href="https://discord.gg/royalbattalion"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="glow-button inline-flex items-center gap-2.5 rounded-sm bg-accent px-10 py-4 text-sm font-semibold tracking-wide text-bg-primary transition-all hover:bg-accent-bright hover:shadow-[0_0_40px_rgba(200,168,78,0.25)]"
-          >
-            Get Started
-          </a>
+          <LiveSnapshot />
         </div>
       </section>
     </div>

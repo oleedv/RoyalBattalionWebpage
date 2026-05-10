@@ -423,6 +423,7 @@ function EntriesTab({
   const [activityLogs, setActivityLogs] = useState<AuditLogEntry[]>([]);
   const [activityOpen, setActivityOpen] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [expandedActivity, setExpandedActivity] = useState<Set<string>>(new Set());
   const [playtimeStats, setPlaytimeStats] = useState<PlaytimeStats | null>(null);
   const [playtimeLoading, setPlaytimeLoading] = useState(false);
 
@@ -460,6 +461,7 @@ function EntriesTab({
       setCommentText("");
       setActivityLogs([]);
       setActivityOpen(false);
+      setExpandedActivity(new Set());
       setPlaytimeStats(null);
       setPlaytimeLoading(true);
       getPlaytime(apiToken, res.data.steamId)
@@ -476,6 +478,7 @@ function EntriesTab({
     setCommentText("");
     setActivityLogs([]);
     setActivityOpen(false);
+    setExpandedActivity(new Set());
   }
 
   function startEdit() {
@@ -576,6 +579,65 @@ function EntriesTab({
       case "whitelist.bulk_delete": return "bulk deleted";
       default: return action;
     }
+  }
+
+  const fieldLabels: Record<string, string> = {
+    steamId: "Steam ID",
+    name: "Name",
+    clan: "Clan",
+    clanId: "Clan link",
+    role: "Role",
+    groupId: "Group",
+    reason: "Reason",
+    expiresAt: "Expires",
+    userId: "Linked user",
+  };
+
+  function formatFieldLabel(field: string): string {
+    return fieldLabels[field] ?? field;
+  }
+
+  function formatFieldValue(field: string, value: unknown): string {
+    if (value === null || value === undefined || value === "") return "—";
+    if (field === "groupId") {
+      return groups.find((g) => g.id === value)?.name ?? String(value);
+    }
+    if (field === "clanId") {
+      return clans.find((cl) => cl.id === value)?.name ?? String(value);
+    }
+    if (field === "expiresAt" && typeof value === "string") {
+      return new Date(value).toLocaleDateString();
+    }
+    return String(value);
+  }
+
+  type WhitelistUpdateChanges = Record<string, { from: unknown; to: unknown }>;
+
+  function getUpdateChanges(log: AuditLogEntry): WhitelistUpdateChanges | null {
+    if (log.action !== "whitelist.update") return null;
+    const changes = (log.detail as { changes?: unknown } | null)?.changes;
+    if (!changes || typeof changes !== "object") return null;
+    const entries = Object.entries(changes as Record<string, unknown>).filter(
+      (entry): entry is [string, { from: unknown; to: unknown }] =>
+        !!entry[1] && typeof entry[1] === "object" && "from" in entry[1]! && "to" in entry[1]!,
+    );
+    if (entries.length === 0) return null;
+    return Object.fromEntries(entries);
+  }
+
+  function getCommentPreview(log: AuditLogEntry): string | null {
+    if (log.action !== "whitelist.comment.add") return null;
+    const preview = (log.detail as { textPreview?: unknown } | null)?.textPreview;
+    return typeof preview === "string" && preview.length > 0 ? preview : null;
+  }
+
+  function toggleExpandedActivity(id: string) {
+    setExpandedActivity((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   // --- Bulk actions ---
@@ -1470,13 +1532,57 @@ function EntriesTab({
                     <div className="text-xs text-text-muted">No activity recorded.</div>
                   ) : (
                     <div className="max-h-48 space-y-1.5 overflow-y-auto">
-                      {activityLogs.map((log) => (
-                        <div key={log.id} className="text-xs text-text-secondary">
-                          <span className="font-medium text-text-primary">{log.userName}</span>
-                          {" "}{getActionVerb(log.action)}
-                          <span className="ml-1.5 text-text-muted">{formatRelativeTime(log.createdAt)}</span>
-                        </div>
-                      ))}
+                      {activityLogs.map((log) => {
+                        const changes = getUpdateChanges(log);
+                        const commentPreview = getCommentPreview(log);
+                        const isExpanded = expandedActivity.has(log.id);
+                        const exactTime = new Date(log.createdAt).toLocaleString();
+                        const changeCount = changes ? Object.keys(changes).length : 0;
+                        return (
+                          <div key={log.id} className="text-xs text-text-secondary">
+                            <div className="flex items-baseline">
+                              <span className="font-medium text-text-primary">{log.userName}</span>
+                              <span className="ml-1">
+                                {" "}
+                                {changes ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleExpandedActivity(log.id)}
+                                    className="text-text-secondary hover:text-text-primary"
+                                  >
+                                    updated entry ({changeCount} {changeCount === 1 ? "change" : "changes"})
+                                    <span className="ml-1 inline-block">{isExpanded ? "▾" : "▸"}</span>
+                                  </button>
+                                ) : commentPreview ? (
+                                  <span title={commentPreview}>
+                                    added a comment: &ldquo;{commentPreview.length > 60 ? `${commentPreview.slice(0, 60)}…` : commentPreview}&rdquo;
+                                  </span>
+                                ) : (
+                                  getActionVerb(log.action)
+                                )}
+                              </span>
+                              <span
+                                className="ml-1.5 text-text-muted"
+                                title={exactTime}
+                              >
+                                {formatRelativeTime(log.createdAt)}
+                              </span>
+                            </div>
+                            {changes && isExpanded && (
+                              <ul className="mt-1 ml-3 space-y-0.5 text-text-muted">
+                                {Object.entries(changes).map(([field, { from, to }]) => (
+                                  <li key={field}>
+                                    <span className="text-text-secondary">{formatFieldLabel(field)}:</span>{" "}
+                                    <span>{formatFieldValue(field, from)}</span>
+                                    <span className="mx-1">→</span>
+                                    <span className="text-text-primary">{formatFieldValue(field, to)}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

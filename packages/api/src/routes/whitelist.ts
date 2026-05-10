@@ -471,7 +471,22 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
     });
 
     deployInBackground(existing.server);
-    audit(c, "whitelist.update", "WhitelistEntry", id, { steamId: existing.steamId, changes: body });
+
+    const trackedFields = [
+      "steamId", "name", "clan", "clanId", "role",
+      "groupId", "reason", "expiresAt", "userId",
+    ] as const;
+    const serialize = (v: unknown): unknown =>
+      v instanceof Date ? v.toISOString() : v ?? null;
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    for (const f of trackedFields) {
+      const before = serialize((existing as Record<string, unknown>)[f]);
+      const after = serialize((entry as Record<string, unknown>)[f]);
+      if (before !== after) {
+        changes[f] = { from: before, to: after };
+      }
+    }
+    audit(c, "whitelist.update", "WhitelistEntry", id, { steamId: existing.steamId, changes });
 
     return success(c, toEntry(entry));
   } catch (err) {
@@ -518,7 +533,10 @@ whitelist.post("/:id/comments", requirePermission("manage:whitelist"), zValidato
     },
   });
 
-  audit(c, "whitelist.comment.add", "WhitelistEntry", entryId, { commentId: comment.id });
+  audit(c, "whitelist.comment.add", "WhitelistEntry", entryId, {
+    commentId: comment.id,
+    textPreview: text.slice(0, 200),
+  });
 
   return success(c, mapComment(comment), 201);
 });

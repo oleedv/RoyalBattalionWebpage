@@ -45,7 +45,8 @@ async function deployForServer(server: string): Promise<void> {
   const remotePath = config.sftpPath;
 
   if (!host || !username || !password || !remotePath) {
-    logger.info("sftp", `Incomplete SFTP config for server "${server}", skipping`);
+    logger.info("sftp", `DB config for server "${server}" missing credentials, falling back to env vars`);
+    await deployWithEnvVars(server);
     return;
   }
 

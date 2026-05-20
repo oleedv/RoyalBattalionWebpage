@@ -12,6 +12,15 @@ import { requirePermission, getAllowedTicketTiers } from "../middleware/permissi
 import { rateLimit } from "../middleware/rate-limit";
 import type { Permission } from "shared";
 
+function parseEmbeds(raw: unknown): unknown[] | null {
+  if (!raw) return null;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+  return null;
+}
+
 const tickets = new Hono();
 
 // Apply auth middleware to all routes except /by-uuid/*
@@ -53,6 +62,14 @@ tickets.get("/by-uuid/prospect/:uuid", rateLimit(30), async (c) => {
   const voteRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
     SELECT id, prospect_id, voter_id, voter_tag, vote, reason, created_at
      FROM prospect_votes WHERE prospect_id = ${id} ORDER BY created_at ASC`
+  );
+
+  const forumRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+    SELECT id, prospect_id, message_id, author_id, author_tag, author_avatar,
+           is_bot, content, attachments, embeds, created_at
+      FROM prospect_forum_messages
+     WHERE prospect_id = ${id}
+     ORDER BY created_at ASC`
   );
 
   const prospect: Prospect = {
@@ -103,6 +120,19 @@ tickets.get("/by-uuid/prospect/:uuid", rateLimit(30), async (c) => {
       vote: v.vote,
       reason: v.reason,
       createdAt: new Date(v.created_at).toISOString(),
+    })),
+    forumMessages: forumRows.map((f) => ({
+      id: f.id,
+      prospectId: f.prospect_id,
+      messageId: f.message_id,
+      authorId: f.author_id,
+      authorTag: f.author_tag,
+      authorAvatar: f.author_avatar,
+      isBot: Boolean(f.is_bot),
+      content: f.content,
+      attachments: f.attachments,
+      embeds: parseEmbeds(f.embeds),
+      createdAt: new Date(f.created_at).toISOString(),
     })),
   };
 

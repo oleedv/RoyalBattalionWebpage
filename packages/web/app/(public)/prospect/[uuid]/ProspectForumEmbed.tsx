@@ -3,7 +3,7 @@
 import type { DiscordEmbed } from "shared";
 
 function colorToHex(color?: number): string {
-  if (!color) return "#5865f2";
+  if (color == null) return "#5865f2";
   return "#" + color.toString(16).padStart(6, "0");
 }
 

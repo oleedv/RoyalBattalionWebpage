@@ -1,0 +1,199 @@
+"use client";
+
+import type { ColumnDef } from "@tanstack/react-table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { StatusBadge } from "@/components/status-badge";
+import { EmptyState } from "@/components/empty-state";
+import { SearchInput } from "@/components/search-input-v2";
+import { FilterBar } from "@/components/filter-bar";
+import { DataTable } from "@/components/data-table-v2";
+import { PageHeader } from "@/components/page-header";
+import { StatCard } from "@/components/stat-card";
+import { Sparkline } from "@/components/sparkline";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { AppSidebar } from "@/components/shell/app-sidebar";
+
+type DemoRow = {
+  id: string;
+  name: string;
+  steamId: string;
+  clan: string;
+  expires: string;
+};
+
+const demoColumns: ColumnDef<DemoRow, unknown>[] = [
+  { accessorKey: "name", header: "Name" },
+  { accessorKey: "steamId", header: "Steam ID", meta: { mono: true } },
+  { accessorKey: "clan", header: "Clan" },
+  { accessorKey: "expires", header: "Expires", meta: { mono: true } },
+];
+
+const demoData: DemoRow[] = Array.from({ length: 25 }, (_, i) => ({
+  id: String(i),
+  name: `Player_${i}`,
+  steamId: `7656119801234${String(i).padStart(2, "0")}`,
+  clan: i % 3 === 0 ? "RB" : "",
+  expires: "2026-08-01",
+}));
+
+export function DesignGallery() {
+  return (
+    <div className="mx-auto max-w-5xl space-y-10 p-8">
+      <PageHeader
+        breadcrumb={["Design System"]}
+        title="GILDED REGIMENT"
+        description="Phase 0 component gallery. Toggle the theme to verify parchment."
+        actions={<ThemeToggle />}
+      />
+
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold">Buttons</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="gold">Gold</Button>
+          <Button variant="outlineGold">Outline Gold</Button>
+          <Button variant="secondary">Secondary</Button>
+          <Button variant="ghost">Ghost</Button>
+          <Button variant="outline">Outline</Button>
+          <Button variant="destructive">Destructive</Button>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold">Badges &amp; status</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge>Badge</Badge>
+          <Badge variant="secondary">Secondary</Badge>
+          <StatusBadge tone="success" pulse>
+            Online
+          </StatusBadge>
+          <StatusBadge tone="danger">Offline</StatusBadge>
+          <StatusBadge tone="warning">Pending</StatusBadge>
+          <StatusBadge tone="accent">Whitelist</StatusBadge>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold">Stats</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <StatCard label="Players Online" value="87/100" hint="Narva AAS v2">
+            <Sparkline values={[40, 55, 60, 72, 80, 87]} />
+          </StatCard>
+          <StatCard label="Queue" value="4">
+            <Sparkline values={[0, 2, 6, 3, 4, 4]} className="text-warning" />
+          </StatCard>
+          <StatCard label="Admins on Duty" value="3" />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold">
+          Search, filters &amp; table
+        </h2>
+        <div className="flex gap-2">
+          <SearchInput
+            onSearch={() => {}}
+            placeholder="Search steam ID, name, clan..."
+            className="flex-1"
+          />
+          <Button variant="outlineGold">Filters</Button>
+          <Button variant="gold">Add Entry</Button>
+        </div>
+        <FilterBar
+          activeFilters={[{ key: "clan", label: "Clan: RB" }]}
+          onClear={() => {}}
+          onClearAll={() => {}}
+        />
+        <DataTable
+          columns={demoColumns}
+          data={demoData}
+          getRowId={(r) => r.id}
+          enableSelection
+          pageSize={8}
+          bulkActions={(rows, clear) => (
+            <>
+              <span className="text-sm text-text-secondary">
+                {rows.length} selected
+              </span>
+              <Button variant="outlineGold" size="sm" onClick={clear}>
+                Clear
+              </Button>
+            </>
+          )}
+        />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold">Overlays &amp; inputs</h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <Dialog>
+            <DialogTrigger
+              render={<Button variant="outlineGold">Open Dialog</Button>}
+            />
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-display">Confirm Action</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-text-secondary">
+                Dialog body on the popover surface.
+              </p>
+            </DialogContent>
+          </Dialog>
+          <Tabs defaultValue="a" className="w-64">
+            <TabsList>
+              <TabsTrigger value="a">Entries</TabsTrigger>
+              <TabsTrigger value="b">Requests</TabsTrigger>
+            </TabsList>
+            <TabsContent value="a" className="text-sm text-text-secondary">
+              Tab A content
+            </TabsContent>
+            <TabsContent value="b" className="text-sm text-text-secondary">
+              Tab B content
+            </TabsContent>
+          </Tabs>
+          <Input placeholder="Plain input" className="w-48" />
+          <Skeleton className="h-8 w-32" />
+        </div>
+        <Card className="p-0">
+          <EmptyState
+            message="No whitelist entries match your filters."
+            action={
+              <Button variant="outlineGold" size="sm">
+                Clear filters
+              </Button>
+            }
+          />
+        </Card>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold">
+          Admin sidebar (embedded preview)
+        </h2>
+        <div className="h-[420px] overflow-hidden rounded-sm border border-border">
+          <SidebarProvider>
+            <AppSidebar permissions={["developer"]} />
+            <main className="flex-1 p-6">
+              <PageHeader breadcrumb={["Operations", "Whitelist"]} title="WHITELIST" />
+              <p className="text-sm text-text-secondary">
+                Collapse with the rail handle, the <kbd>[</kbd> key, or Ctrl/Cmd+B.
+              </p>
+            </main>
+          </SidebarProvider>
+        </div>
+      </section>
+    </div>
+  );
+}

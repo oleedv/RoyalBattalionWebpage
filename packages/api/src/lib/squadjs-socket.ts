@@ -684,26 +684,37 @@ class SquadJSSocketManager {
     });
   }
 
-  async executeRcon(serverKey: string, method: string, ...args: unknown[]): Promise<unknown> {
+  async executeRcon(serverKey: string, method: string, ...rest: unknown[]): Promise<unknown> {
+    // Detect an optional trailing options object: executeRcon(key, method, ...args, { dedupe })
+    let opts: { dedupe: boolean } = { dedupe: true };
+    let args = rest;
+    const last = rest[rest.length - 1];
+    if (last && typeof last === "object" && !Array.isArray(last)) {
+      opts = { dedupe: true, ...(last as { dedupe?: boolean }) };
+      args = rest.slice(0, -1);
+    }
+
     const state = this.servers.get(serverKey);
     if (!state || !state.connected) {
       throw new Error(`Not connected to ${serverKey}`);
     }
 
-    // Deduplication: prevent same command within 2 seconds
-    const dedupeKey = `${method}:${args.map(String).join(":")}`;
-    const now = Date.now();
-    const lastExec = state.lastRcon.get(dedupeKey);
-    if (lastExec && now - lastExec < 2000) {
-      logger.warn("squadjs", `Dedup: skipping duplicate rcon.${method} on ${serverKey}`);
-      return "deduplicated";
-    }
-    state.lastRcon.set(dedupeKey, now);
+    // Deduplication: prevent same command within 2 seconds (skippable for reads)
+    if (opts.dedupe) {
+      const dedupeKey = `${method}:${args.map(String).join(":")}`;
+      const now = Date.now();
+      const lastExec = state.lastRcon.get(dedupeKey);
+      if (lastExec && now - lastExec < 2000) {
+        logger.warn("squadjs", `Dedup: skipping duplicate rcon.${method} on ${serverKey}`);
+        return "deduplicated";
+      }
+      state.lastRcon.set(dedupeKey, now);
 
-    // Clean old entries every 50 commands
-    if (state.lastRcon.size > 50) {
-      for (const [k, t] of state.lastRcon) {
-        if (now - t > 5000) state.lastRcon.delete(k);
+      // Clean old entries every 50 commands
+      if (state.lastRcon.size > 50) {
+        for (const [k, t] of state.lastRcon) {
+          if (now - t > 5000) state.lastRcon.delete(k);
+        }
       }
     }
 
@@ -713,7 +724,7 @@ class SquadJSSocketManager {
       const timeout = setTimeout(() => reject(new Error("RCON timeout")), 10000);
       state.socket.emit(`rcon.${method}`, ...args, (result: unknown) => {
         clearTimeout(timeout);
-        if (result && typeof result === 'object' && 'error' in result) {
+        if (result && typeof result === "object" && "error" in result) {
           reject(new Error((result as { error: string }).error));
         } else {
           resolve(result);

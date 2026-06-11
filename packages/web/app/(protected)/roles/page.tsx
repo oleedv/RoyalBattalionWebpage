@@ -196,6 +196,11 @@ const PERMISSION_GROUPS: PermGroup[] = [
         label: "Randomize Teams",
         description: "Queue or run team randomization",
       },
+      {
+        perm: "manage:rcon-console",
+        label: "RCON Console",
+        description: "Run arbitrary RCON commands via the live console",
+      },
     ],
   },
   {

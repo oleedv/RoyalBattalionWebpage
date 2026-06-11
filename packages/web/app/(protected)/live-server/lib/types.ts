@@ -69,7 +69,8 @@ export type WSMessage =
   | { type: "event"; event: string; data: unknown; server?: string }
   | { type: "action_progress"; action: string; count: number; estimatedSeconds: number }
   | { type: "action_result"; success: boolean; error?: string; action?: string }
-  | { type: "online_clans"; data: OnlineClanData };
+  | { type: "online_clans"; data: OnlineClanData }
+  | { type: "rcon_response"; command: string; output: string; success: boolean; error?: string };
 
 export interface ConsoleEntry {
   time: string;

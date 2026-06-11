@@ -120,3 +120,26 @@ The verification agents left the tree dirty; reconciled rather than reverted (de
    PageHeader, StatCard, Sparkline (+ tests for pure logic & debounce)
 7. nav-config (corrected) + AppSidebar (render) + PublicHeader
 8. `/design` server+client gallery, verification, version bump
+
+## Post-implementation review outcomes
+
+A 3-reviewer adversarial review (theme/contrast, Base UI completeness, composite quality) plus
+per-finding verification ran after Phase 0. 41 findings; verification confirmed **one real
+blocker** and corrected the reviewer's analysis of it. Applied fixes:
+
+- **Contrast (real blocker):** light `--color-text-muted` was `#a39d8a` (~2.4:1 on parchment, fails
+  AA) and is consumed directly via the raw `text-text-muted` utility across existing pages.
+  Darkened to `#6a6353` (~5.2:1 on bg-primary, ~4.8:1 on bg-secondary). The shadcn
+  `text-muted-foreground` bridge was already fine (resolves to `--color-text-secondary` #5c574a,
+  6.27:1) — left untouched.
+- **Radius regression:** the global `@theme inline` radius-scale override (`--radius-sm..2xl`)
+  subtly altered existing pages' corners. Reverted the scale override; gilded sharpness stays via
+  explicit `rounded-sm` on button/badge/composites.
+- **a11y:** Sparkline aria-label now conveys trend; StatusBadge pulse dot `aria-hidden`; PageHeader
+  breadcrumb wrapped in `<nav aria-label="Breadcrumb">`; FilterBar chips use `role="list"`.
+
+Verified false positives (no action): "DialogClose/SheetClose render broken" (shadcn-shipped
+pattern), "DataTable selection persists / page not reset on sort" (TanStack `autoResetPageIndex`),
+text-secondary contrast (actually 6.27:1), BracketShortcut (already guards inputs; Shift+[ is `{`).
+Empirically confirmed the `DropdownMenuTrigger render={<Button/>}` + icon pattern renders correctly
+(served HTML shows the Moon SVG inside the trigger button).

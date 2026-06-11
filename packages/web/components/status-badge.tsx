@@ -30,7 +30,11 @@ export function StatusBadge({
       )}
     >
       {pulse && (
-        <span data-slot="pulse-dot" className="relative flex size-1.5">
+        <span
+          data-slot="pulse-dot"
+          aria-hidden="true"
+          className="relative flex size-1.5"
+        >
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
           <span className="relative inline-flex size-1.5 rounded-full bg-current" />
         </span>

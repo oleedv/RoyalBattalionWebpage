@@ -32,6 +32,19 @@ export function Sparkline({
   height?: number;
   className?: string;
 }) {
+  const first = values[0];
+  const last = values[values.length - 1];
+  const direction =
+    values.length < 2 || first === last
+      ? "flat"
+      : last > first
+        ? "rising"
+        : "falling";
+  const label =
+    values.length === 0
+      ? "No trend data"
+      : `Trend ${direction}, ${first} to ${last}`;
+
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
@@ -39,7 +52,7 @@ export function Sparkline({
       height={height}
       className={className}
       role="img"
-      aria-label="Trend sparkline"
+      aria-label={label}
     >
       <path
         d={sparklinePath(values, width, height)}

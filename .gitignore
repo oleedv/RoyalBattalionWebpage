@@ -8,3 +8,4 @@ dist/
 *.tsbuildinfo
 prisma/*.db
 packages/api/src/generated/
+.superpowers/

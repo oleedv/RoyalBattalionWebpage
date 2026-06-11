@@ -11,6 +11,7 @@ import { Sparkline } from "./components/sparkline";
 import { MapImg, getMapThumbnailUrls } from "./components/map-img";
 import { TeamColumn } from "./components/team-column";
 import { PlayerCard } from "./components/player-card";
+import { LiveServerTabs } from "./components/live-server-tabs";
 
 const WS_BASE =
   (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001").replace(
@@ -825,6 +826,7 @@ export default function LiveServerPage() {
   return (
     <div className="flex flex-col lg:h-[calc(100vh-3rem)] lg:overflow-hidden">
       <div className="shrink-0">
+      <LiveServerTabs active="monitor" canConsole={hasPermission("manage:rcon-console")} />
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div>

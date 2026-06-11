@@ -89,13 +89,15 @@ export async function handleLiveServerMessage(ws: ServerWebSocket<WSData>, messa
       return;
     }
 
-    // Free-form RCON console: gated solely by manage:rcon-console (developer bypasses)
-    if (msg.action === "rcon_console") {
+    // Console-tier actions: gated solely by manage:rcon-console (developer bypasses).
+    // Routed before the canManage gate so a standalone manage:rcon-console user can use them.
+    if (msg.action === "rcon_console" || msg.action === "listdisconnected") {
       if (!hasPermission(ws, "manage:rcon-console")) {
-        ws.send(JSON.stringify({ type: "rcon_response", command: msg.message ?? "", output: "", success: false, error: "manage:rcon-console permission required" }));
+        ws.send(JSON.stringify({ type: "rcon_response", command: msg.command ?? msg.message ?? "", output: "", success: false, error: "manage:rcon-console permission required" }));
         return;
       }
-      await handleRconConsole(ws, msg);
+      if (msg.action === "rcon_console") await handleRconConsole(ws, msg);
+      else await handleListDisconnected(ws);
       return;
     }
 
@@ -520,19 +522,24 @@ async function handleAdminAction(
         break;
       }
 
-      case "listdisconnected": {
-        const output = await squadjsSocket.executeRcon(serverKey, "execute", "AdminListDisconnectedPlayers", { dedupe: false });
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.listdisconnected", "LiveServer", serverKey, {});
-        ws.send(JSON.stringify({ type: "rcon_response", command: "AdminListDisconnectedPlayers", output: typeof output === "string" ? output : JSON.stringify(output), success: true }));
-        break;
-      }
-
       default:
         ws.send(JSON.stringify({ type: "action_result", success: false, error: `Unknown action: ${msg.action}` }));
     }
   } catch (err) {
     const error = err instanceof Error ? err.message : "Action failed";
     ws.send(JSON.stringify({ type: "action_result", success: false, error }));
+  }
+}
+
+async function handleListDisconnected(ws: ServerWebSocket<WSData>) {
+  const serverKey = ws.data.serverKey;
+  try {
+    const output = await squadjsSocket.executeRcon(serverKey, "execute", "AdminListDisconnectedPlayers", { dedupe: false });
+    auditDirect(ws.data.userId, ws.data.userName, "rcon.listdisconnected", "LiveServer", serverKey, {});
+    ws.send(JSON.stringify({ type: "rcon_response", command: "AdminListDisconnectedPlayers", output: typeof output === "string" ? output : JSON.stringify(output), success: true }));
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "Command failed";
+    ws.send(JSON.stringify({ type: "rcon_response", command: "AdminListDisconnectedPlayers", output: "", success: false, error }));
   }
 }
 

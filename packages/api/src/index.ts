@@ -234,7 +234,13 @@ async function verifyToken(token: string): Promise<WSData | null> {
       avatarUrl: user?.avatarUrl ?? null,
       permissions,
       canManage: isAdmin || permissions.includes("manage:live-server"),
-      canView: isAdmin || permissions.includes("view:live-server") || permissions.includes("manage:live-server"),
+      // manage:rcon-console is standalone-sufficient for the console, which uses this same
+      // WS transport — admit it at the upgrade (RCON access already implies seeing live data).
+      canView:
+        isAdmin ||
+        permissions.includes("view:live-server") ||
+        permissions.includes("manage:live-server") ||
+        permissions.includes("manage:rcon-console"),
       serverKey: "",
       currentPage: "",
     };

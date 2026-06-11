@@ -14,6 +14,7 @@ interface PlayerCardProps {
   onClose: () => void;
   onWarn: (p: Player) => void;
   onKick: (p: Player) => void;
+  onBan: (p: Player) => void;
   onSwitchTeam: (p: Player) => void;
   formatPlaytime: (s?: number) => string;
 }
@@ -25,6 +26,7 @@ export function PlayerCard({
   onClose,
   onWarn,
   onKick,
+  onBan,
   onSwitchTeam,
   formatPlaytime,
 }: PlayerCardProps) {
@@ -124,6 +126,12 @@ export function PlayerCard({
                 className="flex-1 rounded-sm border border-danger/20 py-1.5 text-xs text-danger transition-colors hover:bg-danger/10"
               >
                 Kick
+              </button>
+              <button
+                onClick={() => { onBan(player); onClose(); }}
+                className="flex-1 rounded-sm border border-danger/40 py-1.5 text-xs text-danger transition-colors hover:bg-danger/20"
+              >
+                Ban
               </button>
             </div>
           )}

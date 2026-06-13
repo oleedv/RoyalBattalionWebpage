@@ -34,6 +34,7 @@ import type {
   SeedTrackerLeaderboardEntry,
   SeedTrackerPlayerDetail,
   SeedTrackerStats,
+  PlayerStats,
 } from "shared";
 
 const BASE_URL =
@@ -1074,6 +1075,13 @@ export function getSeedTrackerStats(
   token: string
 ): Promise<ApiResponse<SeedTrackerStats>> {
   return request(`/seeding-tracker/stats`, {
+    headers: authHeaders(token),
+  });
+}
+
+// Personal Squad stats (own stats, requires linked steamId)
+export function getPlayerStats(token: string): Promise<ApiResponse<PlayerStats>> {
+  return request<PlayerStats>("/player-stats", {
     headers: authHeaders(token),
   });
 }

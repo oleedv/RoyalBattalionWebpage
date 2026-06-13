@@ -7,6 +7,7 @@ import { linkSteam, getDashboardStats } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import type { UserWithRoles } from "shared";
 import type { DashboardStats, ServerStatus } from "@/lib/api-client";
+import PlayerStatsSection from "./player-stats-section";
 
 const CONNECT_URLS: Record<string, string> = {
   "37.153.157.204:27050": "steam://connect/37.153.157.204:27050",
@@ -423,6 +424,9 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* ── My Squad Stats ─────────────────────────────────────────── */}
+      <PlayerStatsSection />
 
       {/* ── Server Status ──────────────────────────────────────────── */}
       {statsLoading ? (

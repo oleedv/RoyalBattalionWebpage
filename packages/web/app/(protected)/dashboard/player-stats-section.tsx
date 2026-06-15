@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -48,21 +48,96 @@ function shortDate(iso: string): string {
 
 /* ── small pieces ────────────────────────────────────────────────────── */
 
+/**
+ * Small "i" info tooltip. Opens on hover + focus + tap (so it works on touch and
+ * for keyboard users), closes on outside-click / Escape / blur. Themed to match the
+ * dashboard; the popover floats above the icon and overrides the label's
+ * uppercase/tracking styling so the explanation reads as normal prose.
+ */
+function InfoTip({ text, label }: { text: string; label: string }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <span
+      ref={ref}
+      className="relative inline-flex"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        aria-label={`${label} — what's this?`}
+        aria-describedby={open ? id : undefined}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        className="flex items-center justify-center rounded-full text-text-muted/60 transition-colors hover:text-accent focus-visible:text-accent focus:outline-none"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-3.5 w-3.5"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 16v-4" />
+          <path d="M12 8h.01" />
+        </svg>
+      </button>
+      {open && (
+        <span
+          id={id}
+          role="tooltip"
+          className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 w-max max-w-[220px] -translate-x-1/2 rounded-sm border border-white/10 bg-[rgba(18,17,13,0.97)] px-2.5 py-1.5 text-[11px] leading-snug font-normal normal-case tracking-normal text-text-secondary shadow-lg"
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function StatTile({
   label,
   value,
   sub,
   accent,
+  tip,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   accent?: boolean;
+  tip?: string;
 }) {
   return (
     <div className="facet-border rounded-sm bg-bg-card p-4">
-      <div className="mb-1 text-[10px] font-medium tracking-[0.15em] text-text-muted uppercase">
-        {label}
+      <div className="mb-1 flex items-center gap-1 text-[10px] font-medium tracking-[0.15em] text-text-muted uppercase">
+        <span>{label}</span>
+        {tip && <InfoTip text={tip} label={label} />}
       </div>
       <div
         className={`font-display text-xl font-bold tracking-wide ${
@@ -188,7 +263,14 @@ export default function PlayerStatsSection() {
             incapacitated
           </p>
         </div>
-        <div className="flex shrink-0 gap-1 rounded-sm bg-bg-tertiary p-1">
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="text-text-muted">
+            <InfoTip
+              label="Time window"
+              text="7D, 30D and 90D show totals for the last 7, 30 or 90 days. All shows your lifetime totals. The charts below always cover the last 90 days."
+            />
+          </span>
+          <div className="flex gap-1 rounded-sm bg-bg-tertiary p-1">
           {WINDOWS.map((w) => (
             <button
               key={w.key}
@@ -202,6 +284,7 @@ export default function PlayerStatsSection() {
               {w.label}
             </button>
           ))}
+          </div>
         </div>
       </div>
 
@@ -211,12 +294,37 @@ export default function PlayerStatsSection() {
           <div className="space-y-2">
             <GroupLabel>Combat</GroupLabel>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              <StatTile label="KDR" value={win.kdr.toFixed(2)} accent />
-              <StatTile label="Kills" value={fmtNum(win.kills)} />
-              <StatTile label="Deaths" value={fmtNum(win.deaths)} />
-              <StatTile label="Teamkills" value={fmtNum(win.teamkills)} />
-              <StatTile label="Revives" value={fmtNum(win.revivesGiven)} />
-              <StatTile label="Revived" value={fmtNum(win.revivesReceived)} />
+              <StatTile
+                label="KDR"
+                value={win.kdr.toFixed(2)}
+                accent
+                tip="Kills ÷ deaths. With no deaths yet, this just shows your kill count."
+              />
+              <StatTile
+                label="Kills"
+                value={fmtNum(win.kills)}
+                tip="Enemies you incapacitated (downed). The down counts even if they're revived afterwards. Teamkills don't count."
+              />
+              <StatTile
+                label="Deaths"
+                value={fmtNum(win.deaths)}
+                tip="Times you were incapacitated (downed), from any cause."
+              />
+              <StatTile
+                label="Teamkills"
+                value={fmtNum(win.teamkills)}
+                tip="Friendly players you downed by mistake."
+              />
+              <StatTile
+                label="Revives"
+                value={fmtNum(win.revivesGiven)}
+                tip="Teammates you revived — counted each time you picked up a downed ally."
+              />
+              <StatTile
+                label="Revived"
+                value={fmtNum(win.revivesReceived)}
+                tip="Times a teammate picked you up after you went down."
+              />
             </div>
           </div>
 
@@ -224,17 +332,39 @@ export default function PlayerStatsSection() {
           <div className="space-y-2">
             <GroupLabel>Activity</GroupLabel>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              <StatTile label="Playtime" value={fmtHours(win.playtimeHours)} accent />
-              <StatTile label="Sessions" value={fmtNum(win.sessions)} />
+              <StatTile
+                label="Playtime"
+                value={fmtHours(win.playtimeHours)}
+                accent
+                tip="Total time connected to our servers, added up across all your sessions."
+              />
+              <StatTile
+                label="Sessions"
+                value={fmtNum(win.sessions)}
+                tip="How many times you joined and left — one session per connect-to-disconnect."
+              />
               <StatTile
                 label="Avg Session"
                 value={win.avgSessionMinutes >= 60
                   ? `${(win.avgSessionMinutes / 60).toFixed(1)}h`
                   : `${win.avgSessionMinutes}m`}
+                tip="Your average session length (playtime ÷ sessions)."
               />
-              <StatTile label="Seed Days" value={fmtNum(win.seedDays)} />
-              <StatTile label="Seed Time" value={fmtHours(win.seedHours)} />
-              <StatTile label="Vehicles" value={fmtNum(win.vehiclesDestroyed)} />
+              <StatTile
+                label="Seed Days"
+                value={fmtNum(win.seedDays)}
+                tip="Distinct days you helped seed the server, counted once per day."
+              />
+              <StatTile
+                label="Seed Time"
+                value={fmtHours(win.seedHours)}
+                tip="Time you spent on the server while it was seeding (low population)."
+              />
+              <StatTile
+                label="Vehicles"
+                value={fmtNum(win.vehiclesDestroyed)}
+                tip="Enemy vehicles you destroyed. Friendly vehicles don't count."
+              />
             </div>
           </div>
 
@@ -242,10 +372,26 @@ export default function PlayerStatsSection() {
           <div className="space-y-2">
             <GroupLabel>Leadership &amp; Objectives</GroupLabel>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              <StatTile label="SL Time" value={fmtHours(win.slHours)} />
-              <StatTile label="Rounds as SL" value={fmtNum(win.slRounds)} />
-              <StatTile label="Squads Made" value={fmtNum(win.squadsCreated)} />
-              <StatTile label="FOB/HAB Hits" value={fmtNum(win.fobHabHits)} />
+              <StatTile
+                label="SL Time"
+                value={fmtHours(win.slHours)}
+                tip="Total time you spent leading a squad."
+              />
+              <StatTile
+                label="Rounds as SL"
+                value={fmtNum(win.slRounds)}
+                tip="Number of rounds in which you led a squad."
+              />
+              <StatTile
+                label="Squads Made"
+                value={fmtNum(win.squadsCreated)}
+                tip="Squads you created."
+              />
+              <StatTile
+                label="FOB/HAB Hits"
+                value={fmtNum(win.fobHabHits)}
+                tip="Damage you dealt to enemy FOBs and HABs (their spawn structures)."
+              />
             </div>
           </div>
 
@@ -326,8 +472,12 @@ export default function PlayerStatsSection() {
               <GroupLabel>Records (all-time)</GroupLabel>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="facet-border rounded-sm bg-bg-card p-4">
-                  <div className="mb-1 text-[10px] font-medium tracking-[0.15em] text-text-muted uppercase">
-                    Favorite Weapon
+                  <div className="mb-1 flex items-center gap-1 text-[10px] font-medium tracking-[0.15em] text-text-muted uppercase">
+                    <span>Favorite Weapon</span>
+                    <InfoTip
+                      label="Favorite Weapon"
+                      text="The weapon you've gotten the most kills with, all-time."
+                    />
                   </div>
                   {records.favoriteWeapon ? (
                     <>
@@ -343,8 +493,12 @@ export default function PlayerStatsSection() {
                   )}
                 </div>
                 <div className="facet-border rounded-sm bg-bg-card p-4">
-                  <div className="mb-1 text-[10px] font-medium tracking-[0.15em] text-text-muted uppercase">
-                    Most Played Map
+                  <div className="mb-1 flex items-center gap-1 text-[10px] font-medium tracking-[0.15em] text-text-muted uppercase">
+                    <span>Most Played Map</span>
+                    <InfoTip
+                      label="Most Played Map"
+                      text="The map you've played the most rounds on, all-time."
+                    />
                   </div>
                   {records.favoriteMap ? (
                     <>
@@ -360,8 +514,12 @@ export default function PlayerStatsSection() {
                   )}
                 </div>
                 <div className="facet-border rounded-sm bg-bg-card p-4">
-                  <div className="mb-1 text-[10px] font-medium tracking-[0.15em] text-text-muted uppercase">
-                    Best Round (kills)
+                  <div className="mb-1 flex items-center gap-1 text-[10px] font-medium tracking-[0.15em] text-text-muted uppercase">
+                    <span>Best Round (kills)</span>
+                    <InfoTip
+                      label="Best Round"
+                      text="Your highest kill count in a single round, all-time."
+                    />
                   </div>
                   {records.bestRound ? (
                     <>

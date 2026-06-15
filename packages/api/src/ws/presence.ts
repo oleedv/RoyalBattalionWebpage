@@ -8,6 +8,7 @@ function broadcastPresence() {
   const users = Array.from(presenceClients).map((ws) => ({
     userId: ws.data.userId,
     userName: ws.data.userName,
+    displayName: ws.data.displayName,
     avatarUrl: ws.data.avatarUrl,
     currentPage: ws.data.currentPage,
   }));

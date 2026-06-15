@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
   open: boolean;
@@ -19,12 +20,14 @@ export function Modal({ open, onClose, children, className }: ModalProps) {
     return () => document.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
-  if (!open) return null;
+  // Portal to <body> so the overlay escapes any ancestor stacking context
+  // (e.g. the transformed/fixed sidebar) and isn't trapped behind the page.
+  if (!open || typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <>
-      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="fixed inset-0 z-[60] bg-black/50" onClick={onClose} />
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onClose}>
         <div
           className={`w-full rounded-sm border border-border shadow-xl ${className || "max-w-lg bg-bg-card p-6"}`}
           onClick={(e) => e.stopPropagation()}
@@ -32,6 +35,7 @@ export function Modal({ open, onClose, children, className }: ModalProps) {
           {children}
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }

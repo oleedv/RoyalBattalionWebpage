@@ -367,7 +367,10 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
         <div className="border-t border-border px-4 py-3">
           <button
             type="button"
-            onClick={() => setPresenceOpen(true)}
+            onClick={() => {
+              setPresenceOpen(true);
+              setMobileOpen(false);
+            }}
             className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted transition-colors hover:text-accent"
           >
             Online ({onlineUsers.length})
@@ -386,7 +389,10 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           </button>
           <button
             type="button"
-            onClick={() => setPresenceOpen(true)}
+            onClick={() => {
+              setPresenceOpen(true);
+              setMobileOpen(false);
+            }}
             aria-label={`View ${onlineUsers.length} online ${onlineUsers.length === 1 ? "user" : "users"}`}
             className="flex items-center"
           >
@@ -427,67 +433,6 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
       )}
-
-      <Modal
-        open={presenceOpen}
-        onClose={() => setPresenceOpen(false)}
-        className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden bg-bg-card"
-      >
-        <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <h2 className="text-sm font-semibold tracking-wide text-text-primary">
-            Online ({onlineUsers.length})
-          </h2>
-          <button
-            type="button"
-            onClick={() => setPresenceOpen(false)}
-            aria-label="Close"
-            className="text-text-muted transition-colors hover:text-text-primary"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-4 w-4"
-              aria-hidden="true"
-            >
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="max-h-[60vh] divide-y divide-border/40 overflow-y-auto">
-          {onlineUsers.map((u) => (
-            <div key={u.userId} className="flex items-center gap-3 px-5 py-2.5">
-              <div className="relative shrink-0">
-                {u.avatarUrl ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={u.avatarUrl}
-                    alt={u.displayName || u.userName}
-                    className="h-8 w-8 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
-                    {(u.displayName || u.userName).charAt(0).toUpperCase()}
-                  </div>
-                )}
-                <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-green-500 ring-2 ring-bg-card" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-text-primary">
-                  {u.displayName || u.userName}
-                </div>
-                {u.displayName && (
-                  <div className="truncate text-xs text-text-muted">@{u.userName}</div>
-                )}
-              </div>
-              <div className="shrink-0 text-xs text-text-muted">{formatPageName(u.currentPage)}</div>
-            </div>
-          ))}
-        </div>
-      </Modal>
 
       <div className="border-t border-border px-4 py-4">
         <div className="truncate text-sm text-text-secondary">
@@ -579,6 +524,68 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           <div className="p-4 sm:p-6 md:p-8">{children}</div>
         </main>
       </div>
+
+      {/* Who's-online list — rendered once at the top level; Modal portals to <body> */}
+      <Modal
+        open={presenceOpen}
+        onClose={() => setPresenceOpen(false)}
+        className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden bg-bg-card"
+      >
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h2 className="text-sm font-semibold tracking-wide text-text-primary">
+            Online ({onlineUsers.length})
+          </h2>
+          <button
+            type="button"
+            onClick={() => setPresenceOpen(false)}
+            aria-label="Close"
+            className="text-text-muted transition-colors hover:text-text-primary"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="max-h-[60vh] divide-y divide-border/40 overflow-y-auto">
+          {onlineUsers.map((u) => (
+            <div key={u.userId} className="flex items-center gap-3 px-5 py-2.5">
+              <div className="relative shrink-0">
+                {u.avatarUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={u.avatarUrl}
+                    alt={u.displayName || u.userName}
+                    className="h-8 w-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
+                    {(u.displayName || u.userName).charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-green-500 ring-2 ring-bg-card" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-text-primary">
+                  {u.displayName || u.userName}
+                </div>
+                {u.displayName && (
+                  <div className="truncate text-xs text-text-muted">@{u.userName}</div>
+                )}
+              </div>
+              <div className="shrink-0 text-xs text-text-muted">{formatPageName(u.currentPage)}</div>
+            </div>
+          ))}
+        </div>
+      </Modal>
     </PermissionProvider>
   );
 }

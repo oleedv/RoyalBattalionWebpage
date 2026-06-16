@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { getDiscordBotOverview } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { DiscordBotOverview, SeedingSession, BotStatus } from "shared";
@@ -212,67 +213,34 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
         <h2 className="mb-3 text-xs font-semibold tracking-[0.15em] text-text-muted uppercase">
           Seeding
         </h2>
-
-        {data.seeding.config && (
-          <div className="mb-4 flex items-center gap-3">
-            <span className={`inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-medium ${
-              data.seeding.config.enabled
-                ? "border-success/30 bg-success/15 text-success"
-                : "border-text-muted/30 bg-text-muted/15 text-text-secondary"
-            }`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${data.seeding.config.enabled ? "bg-success" : "bg-text-muted"}`} />
-              {data.seeding.config.enabled ? "Enabled" : "Disabled"}
-            </span>
-            <span className="text-xs text-text-muted">
-              Seed threshold: {data.seeding.config.seedThreshold} players
-            </span>
-          </div>
-        )}
-
-        {data.seeding.activeSession ? (
-          <div className="facet-border mb-4 rounded-sm border-success/30 bg-success/5 p-4">
-            <div className="flex items-center gap-2">
+        <div className="facet-border flex items-center justify-between rounded-sm bg-bg-card p-4">
+          <div className="flex items-center gap-3">
+            {data.seeding.config && (
+              <>
+                <span className={`inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-medium ${
+                  data.seeding.config.enabled
+                    ? "border-success/30 bg-success/15 text-success"
+                    : "border-text-muted/30 bg-text-muted/15 text-text-secondary"
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${data.seeding.config.enabled ? "bg-success" : "bg-text-muted"}`} />
+                  {data.seeding.config.enabled ? "Enabled" : "Disabled"}
+                </span>
+                <span className="text-xs text-text-muted">
+                  Threshold: {data.seeding.config.seedThreshold} players
+                </span>
+              </>
+            )}
+            {data.seeding.activeSession && (
               <SessionBadge status="active" />
-              <span className="text-sm font-medium text-text-primary">Active Seeding Session</span>
-            </div>
-            <div className="mt-2 grid gap-2 text-xs text-text-secondary sm:grid-cols-3">
-              <div>Map: {data.seeding.activeSession.mapName || "Unknown"}</div>
-              <div>Layer: {data.seeding.activeSession.layerName || "Unknown"}</div>
-              <div>Peak: {data.seeding.activeSession.peakPlayers ?? "--"} players</div>
-            </div>
+            )}
           </div>
-        ) : (
-          <div className="facet-border mb-4 rounded-sm bg-bg-card p-4 text-sm text-text-muted">
-            No active seeding session
-          </div>
-        )}
-
-        {data.seeding.recentSessions.length > 0 && (
-          <div className="facet-border overflow-hidden rounded-sm bg-bg-card">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border/50">
-                  <th className="px-4 py-2 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Status</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Map</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Duration</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Peak</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Started</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.seeding.recentSessions.slice(0, 5).map((s) => (
-                  <tr key={s.id} className="border-b border-border/30 last:border-0">
-                    <td className="px-4 py-2"><SessionBadge status={s.status} /></td>
-                    <td className="px-4 py-2 text-text-primary">{s.mapName || "--"}</td>
-                    <td className="px-4 py-2 text-text-secondary">{s.durationMinutes != null ? `${s.durationMinutes}m` : "--"}</td>
-                    <td className="px-4 py-2 text-text-secondary">{s.peakPlayers ?? "--"}</td>
-                    <td className="px-4 py-2 text-text-muted">{new Date(s.startedAt).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+          <Link
+            href="/seeding"
+            className="text-xs font-medium text-accent transition-colors hover:text-accent/80"
+          >
+            Manage seeding &rarr;
+          </Link>
+        </div>
       </section>
     </div>
   );

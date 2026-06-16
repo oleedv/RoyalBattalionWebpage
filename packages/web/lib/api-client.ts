@@ -34,6 +34,8 @@ import type {
   SeedTrackerLeaderboardEntry,
   SeedTrackerPlayerDetail,
   SeedTrackerStats,
+  SquadServerOption,
+  SeedingLiveStatus,
 } from "shared";
 
 const BASE_URL =
@@ -728,6 +730,22 @@ export function sendSeedingRapport(
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ date }),
+  });
+}
+
+export function getSeedingServers(
+  token: string
+): Promise<ApiResponse<SquadServerOption[]>> {
+  return request<SquadServerOption[]>("/discord-bot/seeding/servers", {
+    headers: authHeaders(token),
+  });
+}
+
+export function getSeedingLiveStatus(
+  token: string
+): Promise<ApiResponse<SeedingLiveStatus>> {
+  return request<SeedingLiveStatus>("/discord-bot/seeding/live-status", {
+    headers: authHeaders(token),
   });
 }
 

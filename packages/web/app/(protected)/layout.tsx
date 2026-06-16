@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import type { Permission, UserWithRoles } from "shared";
 import { syncAuth, getWhitelistCandidates } from "@/lib/api-client";
 import { PermissionProvider } from "@/lib/permission-context";
+import { Modal } from "@/components/modal";
 
 interface NavItem {
   label: string;
@@ -103,7 +104,8 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const [retryCount, setRetryCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [candidateCount, setCandidateCount] = useState(0);
-  const [onlineUsers, setOnlineUsers] = useState<{ userId: string; userName: string; avatarUrl: string | null; currentPage: string }[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<{ userId: string; userName: string; displayName: string | null; avatarUrl: string | null; currentPage: string }[]>([]);
+  const [presenceOpen, setPresenceOpen] = useState(false);
   const presenceWsRef = useRef<WebSocket | null>(null);
   const apiTokenRef = useRef(apiToken);
   apiTokenRef.current = apiToken;
@@ -363,10 +365,37 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
 
       {onlineUsers.length > 0 && (
         <div className="border-t border-border px-4 py-3">
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+          <button
+            type="button"
+            onClick={() => {
+              setPresenceOpen(true);
+              setMobileOpen(false);
+            }}
+            className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted transition-colors hover:text-accent"
+          >
             Online ({onlineUsers.length})
-          </div>
-          <div className="flex items-center">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-3 w-3 opacity-70"
+              aria-hidden="true"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPresenceOpen(true);
+              setMobileOpen(false);
+            }}
+            aria-label={`View ${onlineUsers.length} online ${onlineUsers.length === 1 ? "user" : "users"}`}
+            className="flex items-center"
+          >
             {onlineUsers.slice(0, 15).map((u, i) => (
               <div
                 key={u.userId}
@@ -377,17 +406,18 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={u.avatarUrl}
-                    alt={u.userName}
+                    alt={u.displayName || u.userName}
                     className="h-6 w-6 rounded-full object-cover ring-2 ring-bg-secondary"
                   />
                 ) : (
                   <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/20 text-[10px] font-bold text-accent ring-2 ring-bg-secondary">
-                    {u.userName.charAt(0).toUpperCase()}
+                    {(u.displayName || u.userName).charAt(0).toUpperCase()}
                   </div>
                 )}
                 <span className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full bg-green-500 ring-1 ring-bg-secondary" />
                 <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded bg-bg-primary px-2 py-1 text-xs whitespace-nowrap opacity-0 shadow-lg ring-1 ring-border transition-opacity group-hover:opacity-100">
-                  <div className="font-medium text-text-primary">{u.userName}</div>
+                  <div className="font-medium text-text-primary">{u.displayName || u.userName}</div>
+                  {u.displayName && <div className="text-text-muted">@{u.userName}</div>}
                   <div className="text-text-muted">{formatPageName(u.currentPage)}</div>
                 </div>
               </div>
@@ -400,7 +430,7 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
                 +{onlineUsers.length - 15}
               </div>
             )}
-          </div>
+          </button>
         </div>
       )}
 
@@ -494,6 +524,68 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           <div className="p-4 sm:p-6 md:p-8">{children}</div>
         </main>
       </div>
+
+      {/* Who's-online list — rendered once at the top level; Modal portals to <body> */}
+      <Modal
+        open={presenceOpen}
+        onClose={() => setPresenceOpen(false)}
+        className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden bg-bg-card"
+      >
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h2 className="text-sm font-semibold tracking-wide text-text-primary">
+            Online ({onlineUsers.length})
+          </h2>
+          <button
+            type="button"
+            onClick={() => setPresenceOpen(false)}
+            aria-label="Close"
+            className="text-text-muted transition-colors hover:text-text-primary"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="max-h-[60vh] divide-y divide-border/40 overflow-y-auto">
+          {onlineUsers.map((u) => (
+            <div key={u.userId} className="flex items-center gap-3 px-5 py-2.5">
+              <div className="relative shrink-0">
+                {u.avatarUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={u.avatarUrl}
+                    alt={u.displayName || u.userName}
+                    className="h-8 w-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
+                    {(u.displayName || u.userName).charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-green-500 ring-2 ring-bg-card" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-text-primary">
+                  {u.displayName || u.userName}
+                </div>
+                {u.displayName && (
+                  <div className="truncate text-xs text-text-muted">@{u.userName}</div>
+                )}
+              </div>
+              <div className="shrink-0 text-xs text-text-muted">{formatPageName(u.currentPage)}</div>
+            </div>
+          ))}
+        </div>
+      </Modal>
     </PermissionProvider>
   );
 }

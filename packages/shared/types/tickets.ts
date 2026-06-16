@@ -57,6 +57,7 @@ export interface Prospect {
   events?: ProspectEvent[];
   messages?: ProspectMessage[];
   votes?: ProspectVote[];
+  forumMessages?: ProspectForumMessage[];
 }
 
 export interface ProspectEvent {
@@ -87,6 +88,33 @@ export interface ProspectVote {
   vote: "yes" | "no" | "unsure";
   reason: string | null;
   createdAt: string;
+}
+
+export interface ProspectForumMessage {
+  id: number;
+  prospectId: number;
+  messageId: string;
+  authorId: string;
+  authorTag: string;
+  authorAvatar: string | null;
+  isBot: boolean;
+  content: string | null;
+  attachments: string | null;
+  embeds: DiscordEmbed[] | null;
+  createdAt: string;
+}
+
+export interface DiscordEmbed {
+  title?: string;
+  description?: string;
+  url?: string;
+  color?: number;
+  timestamp?: string;
+  author?: { name: string; url?: string; icon_url?: string };
+  footer?: { text: string; icon_url?: string };
+  image?: { url: string };
+  thumbnail?: { url: string };
+  fields?: Array<{ name: string; value: string; inline?: boolean }>;
 }
 
 export interface TicketTimeout {

@@ -11,6 +11,7 @@ import { Sparkline } from "./components/sparkline";
 import { MapImg, getMapThumbnailUrls } from "./components/map-img";
 import { TeamColumn } from "./components/team-column";
 import { PlayerCard } from "./components/player-card";
+import { LiveServerTabs } from "./components/live-server-tabs";
 
 const WS_BASE =
   (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001").replace(
@@ -92,6 +93,9 @@ export default function LiveServerPage() {
   const [warnMsg, setWarnMsg] = useState("");
   const [kickTarget, setKickTarget] = useState<Player | null>(null);
   const [kickReason, setKickReason] = useState("");
+  const [banTarget, setBanTarget] = useState<Player | null>(null);
+  const [banLength, setBanLength] = useState("1d");
+  const [banReason, setBanReason] = useState("");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [switchSquadTarget, setSwitchSquadTarget] = useState<{ squadName: string; players: Player[] } | null>(null);
   const [consoleLog, setConsoleLog] = useState<ConsoleEntry[]>([]);
@@ -113,7 +117,9 @@ export default function LiveServerPage() {
 
   // Server management actions
   const [endMatchConfirm, setEndMatchConfirm] = useState(false);
+  const [restartConfirm, setRestartConfirm] = useState(false);
   const [nextLayerInput, setNextLayerInput] = useState("");
+  const [changeLayerInput, setChangeLayerInput] = useState("");
   const [onlineClans, setOnlineClans] = useState<OnlineClanData>({});
   const [clanMoveModalOpen, setClanMoveModalOpen] = useState(false);
   const [clanMoveTargetTeam, setClanMoveTargetTeam] = useState<"1" | "2">("1");
@@ -436,6 +442,21 @@ export default function LiveServerPage() {
     setKickReason("");
   }, [kickTarget, kickReason]);
 
+  const handleBan = useCallback(() => {
+    if (!banTarget) return;
+    sendAction({
+      action: "ban",
+      steamId: banTarget.steamID,
+      eosId: banTarget.eosID,
+      playerName: banTarget.name,
+      banLength,
+      reason: banReason.trim() || "Banned by admin",
+    });
+    setBanTarget(null);
+    setBanReason("");
+    setBanLength("1d");
+  }, [banTarget, banLength, banReason]);
+
   const handleSwitchTeam = useCallback((player: Player) => {
     sendAction({
       action: "switchteam",
@@ -467,10 +488,22 @@ export default function LiveServerPage() {
     setEndMatchConfirm(false);
   }
 
+  function handleRestartMatch() {
+    sendAction({ action: "restartmatch" });
+    setRestartConfirm(false);
+  }
+
   function handleSetNextLayer() {
     if (!nextLayerInput.trim()) return;
     sendAction({ action: "setnextlayer", message: nextLayerInput.trim() });
     setNextLayerInput("");
+  }
+
+  function handleChangeLayerNow() {
+    if (!changeLayerInput.trim()) return;
+    if (!window.confirm(`Change the CURRENT layer to "${changeLayerInput.trim()}" now? This restarts the round.`)) return;
+    sendAction({ action: "changelayer", message: changeLayerInput.trim() });
+    setChangeLayerInput("");
   }
 
   function handleDemoteCommander(player: Player) {
@@ -567,6 +600,7 @@ export default function LiveServerPage() {
 
   const onWarnPlayer = useCallback((p: Player) => { setWarnTarget(p); setWarnMsg(""); }, []);
   const onKickPlayer = useCallback((p: Player) => { setKickTarget(p); setKickReason(""); }, []);
+  const onBanPlayer = useCallback((p: Player) => { setBanTarget(p); setBanReason(""); setBanLength("1d"); }, []);
   const onSwitchSquadCallback = useCallback((name: string, squadPlayers: Player[]) => setSwitchSquadTarget({ squadName: name, players: squadPlayers }), []);
   const onSelectPlayer = useCallback((p: Player) => setSelectedPlayer(p), []);
 
@@ -825,6 +859,7 @@ export default function LiveServerPage() {
   return (
     <div className="flex flex-col lg:h-[calc(100vh-3rem)] lg:overflow-hidden">
       <div className="shrink-0">
+      <LiveServerTabs active="monitor" canConsole={hasPermission("manage:rcon-console")} />
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <div>
@@ -941,6 +976,14 @@ export default function LiveServerPage() {
             End Match
           </button>
 
+          {/* Restart Match */}
+          <button
+            onClick={() => setRestartConfirm(true)}
+            className="rounded-sm border border-danger/30 bg-danger/5 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/15"
+          >
+            Restart Match
+          </button>
+
           {/* Set Next Layer */}
           <div className="flex items-center gap-1.5">
             <input
@@ -957,6 +1000,25 @@ export default function LiveServerPage() {
               className="rounded-sm border border-accent/30 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/15 disabled:opacity-40"
             >
               Set Next Layer
+            </button>
+          </div>
+
+          {/* Change Layer Now */}
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              value={changeLayerInput}
+              onChange={(e) => setChangeLayerInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleChangeLayerNow(); }}
+              placeholder="Change layer NOW..."
+              className="w-48 rounded-sm border border-border/50 bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+            />
+            <button
+              onClick={handleChangeLayerNow}
+              disabled={!changeLayerInput.trim()}
+              className="rounded-sm border border-danger/30 bg-danger/5 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/15 disabled:opacity-40"
+            >
+              Change Now
             </button>
           </div>
 
@@ -1068,6 +1130,30 @@ export default function LiveServerPage() {
             className="rounded-sm bg-danger px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-danger/80 disabled:opacity-40"
           >
             End Match
+          </button>
+        </div>
+      </Modal>
+
+      {/* Restart Match confirmation */}
+      <Modal open={restartConfirm} onClose={() => setRestartConfirm(false)} className="max-w-md bg-bg-secondary p-6">
+        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
+          Restart Match
+        </h3>
+        <p className="text-sm text-text-secondary">
+          Are you sure you want to restart the current match? This will reload the current layer and restart the round for all players.
+        </p>
+        <div className="mt-4 flex justify-end gap-3">
+          <button
+            onClick={() => setRestartConfirm(false)}
+            className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleRestartMatch}
+            className="rounded-sm bg-danger px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-danger/80 disabled:opacity-40"
+          >
+            Restart Match
           </button>
         </div>
       </Modal>
@@ -1477,6 +1563,55 @@ export default function LiveServerPage() {
         </div>
       </Modal>
 
+      {/* Ban modal */}
+      <Modal open={!!banTarget} onClose={() => setBanTarget(null)} className="max-w-md bg-bg-secondary p-6">
+        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
+          Ban {banTarget?.name}
+        </h3>
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium tracking-wide text-text-muted uppercase">Duration</label>
+            <select
+              value={banLength}
+              onChange={(e) => setBanLength(e.target.value)}
+              className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+            >
+              <option value="0">Permanent</option>
+              <option value="1h">1 hour</option>
+              <option value="1d">1 day</option>
+              <option value="3d">3 days</option>
+              <option value="7d">7 days</option>
+              <option value="30d">30 days</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium tracking-wide text-text-muted uppercase">Reason</label>
+            <input
+              type="text"
+              value={banReason}
+              onChange={(e) => setBanReason(e.target.value)}
+              placeholder="Reason shown to player"
+              className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+              autoFocus
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end gap-3">
+          <button
+            onClick={() => setBanTarget(null)}
+            className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleBan}
+            className="rounded-sm bg-danger px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-danger/80 disabled:opacity-40"
+          >
+            Ban Player
+          </button>
+        </div>
+      </Modal>
+
       {/* Switch squad modal */}
       <Modal open={!!switchSquadTarget} onClose={() => setSwitchSquadTarget(null)} className="max-w-md bg-bg-secondary p-6">
         <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
@@ -1518,6 +1653,7 @@ export default function LiveServerPage() {
           onClose={() => setSelectedPlayer(null)}
           onWarn={onWarnPlayer}
           onKick={onKickPlayer}
+          onBan={onBanPlayer}
           onSwitchTeam={handleSwitchTeam}
           formatPlaytime={formatPlaytime}
         />

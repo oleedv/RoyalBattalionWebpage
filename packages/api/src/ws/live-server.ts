@@ -51,7 +51,7 @@ export function handleLiveServerOpen(ws: ServerWebSocket<WSData>) {
   );
 }
 
-export function handleLiveServerMessage(ws: ServerWebSocket<WSData>, message: string | Buffer) {
+export async function handleLiveServerMessage(ws: ServerWebSocket<WSData>, message: string | Buffer) {
   try {
     const text = typeof message === "string" ? message : message.toString();
     const msg = JSON.parse(text) as {
@@ -66,6 +66,8 @@ export function handleLiveServerMessage(ws: ServerWebSocket<WSData>, message: st
       players?: { steamId?: string; eosId?: string }[];
       clanTag?: string;
       targetTeam?: string;
+      command?: string;
+      banLength?: string;
     };
 
     // Handle keepalive ping (before auth checks so any connected client can ping)
@@ -84,6 +86,18 @@ export function handleLiveServerMessage(ws: ServerWebSocket<WSData>, message: st
         server: msg.server,
         configured: squadjsSocket.isConfigured(),
       }));
+      return;
+    }
+
+    // Console-tier actions: gated solely by manage:rcon-console (developer bypasses).
+    // Routed before the canManage gate so a standalone manage:rcon-console user can use them.
+    if (msg.action === "rcon_console" || msg.action === "listdisconnected") {
+      if (!hasPermission(ws, "manage:rcon-console")) {
+        ws.send(JSON.stringify({ type: "rcon_response", command: msg.command ?? msg.message ?? "", output: "", success: false, error: "manage:rcon-console permission required" }));
+        return;
+      }
+      if (msg.action === "rcon_console") await handleRconConsole(ws, msg);
+      else await handleListDisconnected(ws);
       return;
     }
 
@@ -122,7 +136,7 @@ function hasPermission(ws: ServerWebSocket<WSData>, perm: Permission): boolean {
 
 async function handleAdminAction(
   ws: ServerWebSocket<WSData>,
-  msg: { action: string; server?: string; steamId?: string; eosId?: string; playerName?: string; message?: string; reason?: string; teamID?: string; squadID?: string; players?: { steamId?: string; eosId?: string; name?: string }[]; clanTag?: string; clanId?: string; targetTeam?: string }
+  msg: { action: string; server?: string; steamId?: string; eosId?: string; playerName?: string; message?: string; reason?: string; teamID?: string; squadID?: string; players?: { steamId?: string; eosId?: string; name?: string }[]; clanTag?: string; clanId?: string; targetTeam?: string; banLength?: string; command?: string }
 ) {
   const serverKey = ws.data.serverKey;
   logger.info("live-server", `RCON ${msg.action} from user ${ws.data.userId} on ${serverKey}`);
@@ -476,11 +490,81 @@ async function handleAdminAction(
         break;
       }
 
+      case "ban": {
+        const playerId = msg.steamId || msg.eosId;
+        if (!playerId || !msg.banLength) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing player ID or ban length" }));
+          return;
+        }
+        const reason = msg.reason || "Banned by admin";
+        await squadjsSocket.executeRcon(serverKey, "ban", playerId, msg.banLength, reason);
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.ban", "LiveServer", serverKey, { playerId, playerName: msg.playerName, banLength: msg.banLength, reason });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "ban" }));
+        setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
+        break;
+      }
+
+      case "changelayer": {
+        if (!msg.message) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "Missing layer name" }));
+          return;
+        }
+        await squadjsSocket.executeRcon(serverKey, "execute", `AdminChangeLayer ${msg.message}`);
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.changelayer", "LiveServer", serverKey, { layer: msg.message });
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "changelayer" }));
+        break;
+      }
+
+      case "restartmatch": {
+        await squadjsSocket.executeRcon(serverKey, "execute", "AdminRestartMatch");
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.restartmatch", "LiveServer", serverKey, {});
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "restartmatch" }));
+        break;
+      }
+
       default:
         ws.send(JSON.stringify({ type: "action_result", success: false, error: `Unknown action: ${msg.action}` }));
     }
   } catch (err) {
     const error = err instanceof Error ? err.message : "Action failed";
     ws.send(JSON.stringify({ type: "action_result", success: false, error }));
+  }
+}
+
+async function handleListDisconnected(ws: ServerWebSocket<WSData>) {
+  const serverKey = ws.data.serverKey;
+  try {
+    const output = await squadjsSocket.executeRcon(serverKey, "execute", "AdminListDisconnectedPlayers", { dedupe: false });
+    auditDirect(ws.data.userId, ws.data.userName, "rcon.listdisconnected", "LiveServer", serverKey, {});
+    ws.send(JSON.stringify({ type: "rcon_response", command: "AdminListDisconnectedPlayers", output: typeof output === "string" ? output : JSON.stringify(output), success: true }));
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "Command failed";
+    ws.send(JSON.stringify({ type: "rcon_response", command: "AdminListDisconnectedPlayers", output: "", success: false, error }));
+  }
+}
+
+async function handleRconConsole(
+  ws: ServerWebSocket<WSData>,
+  msg: { action: string; command?: string; message?: string }
+) {
+  const serverKey = ws.data.serverKey;
+  const command = (msg.command ?? msg.message ?? "").trim();
+  if (!command) {
+    ws.send(JSON.stringify({ type: "rcon_response", command: "", output: "", success: false, error: "Empty command" }));
+    return;
+  }
+  logger.info("live-server", `RCON console from user ${ws.data.userId} on ${serverKey}: ${command}`);
+  try {
+    const output = await squadjsSocket.executeRcon(serverKey, "execute", command, { dedupe: false });
+    auditDirect(ws.data.userId, ws.data.userName, "rcon.console", "LiveServer", serverKey, { command });
+    ws.send(JSON.stringify({
+      type: "rcon_response",
+      command,
+      output: typeof output === "string" ? output : JSON.stringify(output),
+      success: true,
+    }));
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "Command failed";
+    ws.send(JSON.stringify({ type: "rcon_response", command, output: "", success: false, error }));
   }
 }

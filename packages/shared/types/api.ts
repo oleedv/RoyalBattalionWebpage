@@ -111,6 +111,53 @@ export interface PlaytimeStats {
   seed90: number;
 }
 
+// Personal Squad stats (dashboard) — sourced read-only from the SquadJS DB.
+// "Kills" = enemies incapacitated (matches the in-game scoreboard and the
+// server's Grafana convention, which counts combat on `wound` events).
+export type StatWindowKey = "d7" | "d30" | "d90" | "all";
+
+export interface PlayerStatsWindow {
+  kills: number;
+  deaths: number;
+  kdr: number;
+  teamkills: number;
+  revivesGiven: number;
+  revivesReceived: number;
+  playtimeHours: number;
+  seedHours: number;
+  sessions: number;
+  avgSessionMinutes: number;
+  slHours: number;
+  slRounds: number;
+  squadsCreated: number;
+  vehiclesDestroyed: number;
+  fobHabHits: number;
+  seedDays: number;
+}
+
+export interface PlayerStatsRecords {
+  favoriteWeapon: { name: string; kills: number } | null;
+  favoriteMap: { map: string; rounds: number } | null;
+  bestRound: { map: string | null; date: string; kills: number } | null;
+}
+
+export interface PlayerStatsDailyPoint {
+  date: string; // YYYY-MM-DD
+  kills: number;
+  deaths: number;
+  playtimeHours: number;
+}
+
+export interface PlayerStats {
+  linked: boolean; // user has a steamId linked
+  hasData: boolean; // a matching SquadJS player record with activity exists
+  steamId: string | null;
+  playerName: string | null; // most recent in-game name on our server
+  windows: Record<StatWindowKey, PlayerStatsWindow>;
+  records: PlayerStatsRecords;
+  daily: PlayerStatsDailyPoint[]; // last 90 days, ascending, gap-filled
+}
+
 // SquadJS plugin config
 export type SquadJSPluginOptionValue =
   | string

@@ -5,7 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { NavAuthButton } from "@/components/nav-auth-button";
 import { getProspectByUuid } from "@/lib/api-client";
-import type { Prospect } from "shared";
+import { ProspectForumEmbed } from "./ProspectForumEmbed";
+import type { Prospect, ProspectForumMessage } from "shared";
 
 function extractUrls(arr: unknown[]): string[] {
   return arr
@@ -268,6 +269,62 @@ export default function ProspectPage({ params }: { params: Promise<{ uuid: strin
                 </div>
               </div>
             )}
+
+            {/* Forum Discussion */}
+            <div className="facet-border mb-6 rounded-sm bg-bg-card p-5">
+              <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Forum Discussion</h2>
+              {prospect.forumMessages && prospect.forumMessages.length > 0 ? (
+                <div className="space-y-3">
+                  {prospect.forumMessages.map((msg: ProspectForumMessage) => (
+                    <div
+                      key={msg.id}
+                      className={`rounded-sm border p-4 ${
+                        msg.isBot
+                          ? "border-accent/20 bg-accent/5"
+                          : "border-border/50 bg-bg-tertiary/30"
+                      }`}
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        {msg.authorAvatar && (
+                          <img
+                            src={msg.authorAvatar}
+                            alt=""
+                            className="h-5 w-5 rounded-full"
+                            loading="lazy"
+                          />
+                        )}
+                        <span className="text-sm font-medium text-text-primary">
+                          {msg.authorTag}
+                        </span>
+                        {msg.isBot && (
+                          <span className="rounded-sm bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent uppercase">
+                            Bot
+                          </span>
+                        )}
+                        <span className="text-xs text-text-muted">
+                          {new Date(msg.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      {msg.content && (
+                        <p className="whitespace-pre-wrap text-sm text-text-secondary">
+                          <Linkify text={msg.content} />
+                        </p>
+                      )}
+                      <MessageAttachments attachments={msg.attachments} />
+                      {msg.embeds && msg.embeds.length > 0 && (
+                        <div className="mt-2">
+                          {msg.embeds.map((embed, i) => (
+                            <ProspectForumEmbed key={i} embed={embed} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-text-muted">No forum discussion recorded.</p>
+              )}
+            </div>
 
             {/* Events timeline */}
             {prospect.events && prospect.events.length > 0 && (

@@ -4,6 +4,7 @@ export interface WSData {
   wsType: "live-server" | "presence";
   userId: string;
   userName: string;
+  displayName: string | null;
   avatarUrl: string | null;
   permissions: Permission[];
   canManage: boolean;

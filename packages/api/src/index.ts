@@ -20,6 +20,7 @@ import discordBot from "./routes/discord-bot";
 import auditLogs from "./routes/audit-logs";
 import playtime from "./routes/playtime";
 import seedingTracker from "./routes/seeding-tracker";
+import playerStats from "./routes/player-stats";
 import lobby from "./routes/lobby";
 import { generateAdminsCfg } from "./lib/cfg-generator";
 import { squadjsSocket } from "./lib/squadjs-socket";
@@ -86,6 +87,7 @@ app.route("/discord-bot", discordBot);
 app.route("/audit-logs", auditLogs);
 app.route("/playtime", playtime);
 app.route("/seeding-tracker", seedingTracker);
+app.route("/player-stats", playerStats);
 app.route("/lobby", lobby);
 
 // Public cfg endpoint (IP-restricted) -- separate from /whitelist to avoid auth middleware
@@ -225,16 +227,23 @@ async function verifyToken(token: string): Promise<WSData | null> {
     const permissions = payload.permissions as Permission[];
     if (!userId || !permissions) return null;
     const isAdmin = permissions.includes("developer");
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { discordName: true, avatarUrl: true, disabled: true } });
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { discordName: true, displayName: true, avatarUrl: true, disabled: true } });
     if (!user || user.disabled) return null;
     return {
       wsType: "live-server" as const,
       userId,
       userName: user?.discordName ?? "Unknown",
+      displayName: user?.displayName ?? null,
       avatarUrl: user?.avatarUrl ?? null,
       permissions,
       canManage: isAdmin || permissions.includes("manage:live-server"),
-      canView: isAdmin || permissions.includes("view:live-server") || permissions.includes("manage:live-server"),
+      // manage:rcon-console is standalone-sufficient for the console, which uses this same
+      // WS transport — admit it at the upgrade (RCON access already implies seeing live data).
+      canView:
+        isAdmin ||
+        permissions.includes("view:live-server") ||
+        permissions.includes("manage:live-server") ||
+        permissions.includes("manage:rcon-console"),
       serverKey: "",
       currentPage: "",
     };

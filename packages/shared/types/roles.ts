@@ -23,6 +23,7 @@ export const PERMISSIONS = [
   "view:seeding-tracker",
   "manage:clan-move",
   "manage:randomize",
+  "manage:rcon-console",
   "developer",
 ] as const;
 

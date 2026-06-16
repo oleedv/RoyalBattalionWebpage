@@ -34,6 +34,7 @@ import type {
   SeedTrackerLeaderboardEntry,
   SeedTrackerPlayerDetail,
   SeedTrackerStats,
+  PlayerStats,
   SquadServerOption,
   SeedingLiveStatus,
 } from "shared";
@@ -1092,6 +1093,13 @@ export function getSeedTrackerStats(
   token: string
 ): Promise<ApiResponse<SeedTrackerStats>> {
   return request(`/seeding-tracker/stats`, {
+    headers: authHeaders(token),
+  });
+}
+
+// Personal Squad stats (own stats, requires linked steamId)
+export function getPlayerStats(token: string): Promise<ApiResponse<PlayerStats>> {
+  return request<PlayerStats>("/player-stats", {
     headers: authHeaders(token),
   });
 }

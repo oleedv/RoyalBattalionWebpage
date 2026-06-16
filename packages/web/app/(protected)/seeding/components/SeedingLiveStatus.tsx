@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getSeedingLiveStatus } from "@/lib/api-client";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { SeedingLiveStatus as LiveStatusData } from "shared";
 
 interface Props {
@@ -30,9 +31,9 @@ export function SeedingLiveStatus({ apiToken }: Props) {
 
   useEffect(() => {
     fetch();
-    const id = setInterval(fetch, 20_000);
-    return () => clearInterval(id);
   }, [fetch]);
+
+  useAutoRefresh(fetch, 20_000);
 
   if (error) {
     return (

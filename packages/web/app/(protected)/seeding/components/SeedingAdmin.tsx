@@ -612,7 +612,7 @@ export function SeedingAdmin({ apiToken }: Props) {
                     </thead>
                     <tbody>
                       {rapport.seeders.map((s, i) => (
-                        <tr key={i} className="border-b border-border/30 last:border-0">
+                        <tr key={`${s.playerName}-${s.joinTime ?? i}`} className="border-b border-border/30 last:border-0">
                           <td className="px-4 py-3 font-medium text-text-primary">{s.playerName}</td>
                           <td className="px-4 py-3 text-text-secondary">{formatMinutes(s.seedDurationMinutes)}</td>
                           <td className="px-4 py-3 text-text-secondary">{formatMinutes(s.sessionDurationMinutes)}</td>

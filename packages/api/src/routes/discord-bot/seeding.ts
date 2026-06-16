@@ -139,7 +139,7 @@ seeding.get(
 // GET /seeding/live-status — last-known live state written by the bot each tick
 seeding.get(
   "/seeding/live-status",
-  requirePermission("view:discord-bot", "manage:discord-bot"),
+  requirePermission("view:seeding-tracker", "view:discord-bot", "manage:discord-bot"),
   async (c) => {
     try {
       const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`

@@ -3,6 +3,8 @@ import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { getSquadJSPool } from "../lib/squadjs-db";
 import prisma from "../lib/db";
+import getSecretaryDb, { resetSecretaryDb } from "../lib/secretary-db";
+import { Prisma } from "../generated/prisma/client";
 import type {
   SeedTrackerLeaderboardEntry,
   SeedTrackerPlayerDetail,
@@ -12,6 +14,20 @@ import type {
 
 const seedingTracker = new Hono();
 
+// The seeding tracker only counts the configured server. Read it from seeding_config.
+async function getTrackerServerId(): Promise<number | null> {
+  try {
+    const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+      SELECT tracker_server_id FROM seeding_config WHERE id = 1`
+    );
+    const v = rows[0]?.tracker_server_id;
+    return v != null ? Number(v) : null;
+  } catch {
+    resetSecretaryDb();
+    return null;
+  }
+}
+
 seedingTracker.use("*", authMiddleware);
 seedingTracker.use("*", requirePermission("view:seeding-tracker"));
 
@@ -19,6 +35,9 @@ seedingTracker.use("*", requirePermission("view:seeding-tracker"));
 seedingTracker.get("/leaderboard", async (c) => {
   const days = Math.min(Math.max(parseInt(c.req.query("days") || "30", 10) || 30, 1), 365);
   const limit = Math.min(Math.max(parseInt(c.req.query("limit") || "50", 10) || 50, 1), 200);
+
+  const serverId = await getTrackerServerId();
+  if (serverId == null) return c.json({ success: true, data: [] satisfies SeedTrackerLeaderboardEntry[] });
 
   const pool = getSquadJSPool();
 
@@ -33,13 +52,14 @@ seedingTracker.get("/leaderboard", async (c) => {
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
     WHERE s.status IN ('completed', 'active')
+      AND s.server_id = ?
       AND s.seed_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
     GROUP BY s.player_id
     ORDER BY seedDays DESC, totalDuration DESC
     LIMIT ?
   `;
 
-  const [rows] = await pool.query(query, [days, limit]);
+  const [rows] = await pool.query(query, [serverId, days, limit]);
   const entries = (rows as Record<string, unknown>[]).map((row) => ({
     steamId: String(row.steamId),
     name: String(row.name),
@@ -58,6 +78,8 @@ seedingTracker.get("/leaderboard", async (c) => {
 seedingTracker.get("/player/:steamId", async (c) => {
   const steamId = c.req.param("steamId");
 
+  const serverId = await getTrackerServerId();
+
   const pool = getSquadJSPool();
 
   // 1. Stats for 30/90/all days
@@ -70,7 +92,7 @@ seedingTracker.get("/player/:steamId", async (c) => {
       AVG(CASE WHEN s.seed_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN s.quality_score END) AS avgQuality
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
-    WHERE p.steam_id = ? AND s.status IN ('completed', 'active')
+    WHERE p.steam_id = ? AND s.server_id = ? AND s.status IN ('completed', 'active')
   `;
 
   // 2. Time-of-day distribution
@@ -78,7 +100,7 @@ seedingTracker.get("/player/:steamId", async (c) => {
     SELECT HOUR(s.spawn_time) AS hour, COUNT(*) AS cnt
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
-    WHERE p.steam_id = ? AND s.status IN ('completed', 'active')
+    WHERE p.steam_id = ? AND s.server_id = ? AND s.status IN ('completed', 'active')
     GROUP BY hour
     ORDER BY hour
   `;
@@ -88,7 +110,7 @@ seedingTracker.get("/player/:steamId", async (c) => {
     SELECT WEEKDAY(s.seed_date) AS day, COUNT(DISTINCT s.seed_date) AS cnt
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
-    WHERE p.steam_id = ? AND s.status IN ('completed', 'active')
+    WHERE p.steam_id = ? AND s.server_id = ? AND s.status IN ('completed', 'active')
     GROUP BY day
     ORDER BY day
   `;
@@ -101,7 +123,7 @@ seedingTracker.get("/player/:steamId", async (c) => {
       s.duration_seconds AS durationSeconds, s.quality_score AS qualityScore, s.status
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
-    WHERE p.steam_id = ? AND s.status IN ('completed', 'active')
+    WHERE p.steam_id = ? AND s.server_id = ? AND s.status IN ('completed', 'active')
     ORDER BY s.seed_date DESC, s.spawn_time DESC
     LIMIT 20
   `;
@@ -111,7 +133,7 @@ seedingTracker.get("/player/:steamId", async (c) => {
     SELECT DISTINCT s.seed_date AS seedDate
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
-    WHERE p.steam_id = ? AND s.status IN ('completed', 'active')
+    WHERE p.steam_id = ? AND s.server_id = ? AND s.status IN ('completed', 'active')
     ORDER BY s.seed_date DESC
     LIMIT 100
   `;
@@ -128,11 +150,11 @@ seedingTracker.get("/player/:steamId", async (c) => {
     [streakRows],
     [nameRows],
   ] = await Promise.all([
-    pool.query(statsQuery, [steamId]),
-    pool.query(hourQuery, [steamId]),
-    pool.query(weekdayQuery, [steamId]),
-    pool.query(sessionsQuery, [steamId]),
-    pool.query(streakQuery, [steamId]),
+    pool.query(statsQuery, [steamId, serverId]),
+    pool.query(hourQuery, [steamId, serverId]),
+    pool.query(weekdayQuery, [steamId, serverId]),
+    pool.query(sessionsQuery, [steamId, serverId]),
+    pool.query(streakQuery, [steamId, serverId]),
     pool.query(nameQuery, [steamId]),
   ]);
 
@@ -238,6 +260,9 @@ seedingTracker.get("/search", async (c) => {
     return c.json({ success: false, error: "Search query must be at least 2 characters" }, 400);
   }
 
+  const serverId = await getTrackerServerId();
+  if (serverId == null) return c.json({ success: true, data: [] satisfies SeedTrackerLeaderboardEntry[] });
+
   const pool = getSquadJSPool();
 
   const query = `
@@ -250,13 +275,14 @@ seedingTracker.get("/search", async (c) => {
     FROM squadjs_seed_sessions s
     JOIN squadjs_players p ON p.id = s.player_id
     WHERE p.name LIKE ? AND s.status IN ('completed', 'active')
+      AND s.server_id = ?
       AND s.seed_date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
     GROUP BY s.player_id
     ORDER BY seedDays DESC
     LIMIT 25
   `;
 
-  const [rows] = await pool.query(query, [`%${q.trim()}%`]);
+  const [rows] = await pool.query(query, [`%${q.trim()}%`, serverId]);
   const entries = (rows as Record<string, unknown>[]).map((row) => ({
     steamId: String(row.steamId),
     name: String(row.name),
@@ -273,6 +299,11 @@ seedingTracker.get("/search", async (c) => {
 
 // GET /stats
 seedingTracker.get("/stats", async (c) => {
+  const serverId = await getTrackerServerId();
+  if (serverId == null) {
+    return c.json({ success: true, data: { totalSeeders: 0, totalSeedHours: 0, avgQuality: 0, activeSeeders7d: 0, currentlySeedingCount: 0 } satisfies SeedTrackerStats });
+  }
+
   const pool = getSquadJSPool();
 
   const query = `
@@ -284,10 +315,11 @@ seedingTracker.get("/stats", async (c) => {
       COUNT(DISTINCT CASE WHEN s.status = 'active' THEN s.player_id END) AS currentlySeedingCount
     FROM squadjs_seed_sessions s
     WHERE s.status IN ('completed', 'active')
+      AND s.server_id = ?
       AND s.seed_date >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
   `;
 
-  const [rows] = await pool.query(query);
+  const [rows] = await pool.query(query, [serverId]);
   const row = (rows as Record<string, unknown>[])[0] || {};
 
   const data: SeedTrackerStats = {

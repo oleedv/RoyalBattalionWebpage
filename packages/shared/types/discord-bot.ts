@@ -2,12 +2,34 @@ export interface SeedingConfig {
   id: number;
   enabled: boolean;
   channelId: string | null;
-  roleId: string | null;
+  roleIds: string[];
   seedThreshold: number;
   resetThreshold: number;
   dailyTime: string | null;
   timezone: string | null;
-  serverName: string | null;
+  announcerServerId: number | null;
+  trackerServerId: number | null;
+  trackerEnabled: boolean;
+  requiredSeedDays: number;
+  rollingWindowDays: number;
+  whitelistDurationDays: number;
+  maxExtensionDays: number;
+  progressionChannelId: string | null;
+  leaderboardChannelId: string | null;
+}
+
+export interface SeedingLiveStatus {
+  serverResolvedOk: boolean;
+  socketConnected: boolean;
+  currentPopulation: number | null;
+  currentLayer: string | null;
+  activeSessionId: number | null;
+  updatedAt: string | null;
+}
+
+export interface SquadServerOption {
+  id: number;
+  name: string;
 }
 
 export interface SeedingSession {

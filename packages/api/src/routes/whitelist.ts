@@ -161,7 +161,7 @@ whitelist.get("/", requirePermission("view:whitelist"), async (c) => {
   const server = c.req.query("server");
 
   const entries = await prisma.whitelistEntry.findMany({
-    where: server ? { server } : {},
+    where: { ...(server ? { server } : {}), deactivatedAt: null },
     include: { group: true, clanRef: true },
     orderBy: { createdAt: "desc" },
   });
@@ -182,6 +182,7 @@ whitelist.get("/candidates", requirePermission("manage:whitelist"), async (c) =>
 
   const candidates = await prisma.user.findMany({
     where: {
+      disabled: false,
       steamId: { not: null },
       roles: {
         some: {

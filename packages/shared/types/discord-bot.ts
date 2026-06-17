@@ -16,6 +16,7 @@ export interface SeedingConfig {
   maxExtensionDays: number;
   progressionChannelId: string | null;
   leaderboardChannelId: string | null;
+  appreciationChannelId: string | null;
 }
 
 export interface SeedingLiveStatus {

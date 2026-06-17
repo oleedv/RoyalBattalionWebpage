@@ -341,6 +341,18 @@ export function SeedingAdmin({ apiToken }: Props) {
                 />
               </div>
 
+              {/* Min Days for Progression Embed */}
+              <div>
+                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Min Days for Progression Embed</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={editConfig.minProgressionDays}
+                  onChange={(e) => setEditConfig({ ...editConfig, minProgressionDays: Number(e.target.value) })}
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+                />
+              </div>
+
               {/* Rolling Window Days */}
               <div>
                 <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Rolling Window (days)</label>

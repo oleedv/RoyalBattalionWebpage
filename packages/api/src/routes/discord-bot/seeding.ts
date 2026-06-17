@@ -37,7 +37,7 @@ seeding.get(
         SELECT id, enabled, channel_id, role_ids, seed_threshold, reset_threshold,
                daily_time, timezone, announcer_server_id, tracker_server_id, tracker_enabled,
                required_seed_days, rolling_window_days, whitelist_duration_days, max_extension_days,
-               progression_channel_id, leaderboard_channel_id, appreciation_channel_id
+               progression_channel_id, leaderboard_channel_id, appreciation_channel_id, min_progression_days
          FROM seeding_config WHERE id = 1`
       );
 
@@ -71,6 +71,7 @@ seeding.get(
         progressionChannelId: r.progression_channel_id,
         leaderboardChannelId: r.leaderboard_channel_id,
         appreciationChannelId: r.appreciation_channel_id,
+        minProgressionDays: Number(r.min_progression_days),
       };
 
       return success(c, config);
@@ -108,7 +109,8 @@ seeding.put(
           max_extension_days = ${body.maxExtensionDays ?? 60},
           progression_channel_id = ${body.progressionChannelId ?? null},
           leaderboard_channel_id = ${body.leaderboardChannelId ?? null},
-          appreciation_channel_id = ${body.appreciationChannelId ?? null}
+          appreciation_channel_id = ${body.appreciationChannelId ?? null},
+          min_progression_days = ${body.minProgressionDays ?? 2}
          WHERE id = 1`
       );
 

@@ -18,11 +18,18 @@ import { requirePermission } from "../middleware/permissions";
 import { syncAllUserRoles } from "../lib/role-sync";
 import { clearSyncCache } from "./auth";
 import { audit } from "../lib/audit";
+import { triggerSftpDeploy } from "../lib/sftp-deploy";
 import { rateLimit } from "../middleware/rate-limit";
 import { getSquadJSPool } from "../lib/squadjs-db";
 import { logger } from "../lib/logger";
 import { squadjsSocket, type SquadJSPlayer } from "../lib/squadjs-socket";
 import type { RowDataPacket } from "mysql2/promise";
+
+function deployInBackground(server?: string) {
+  triggerSftpDeploy(server).catch((err) =>
+    logger.error("sftp", "Deploy failed", err)
+  );
+}
 
 const users = new Hono();
 
@@ -429,14 +436,27 @@ users.post("/:id/disable", authMiddleware, requirePermission("developer"), zVali
     return fail(c, "Cannot disable a developer account", 400);
   }
 
-  await prisma.user.update({
-    where: { id },
-    data: { disabled: true, disabledAt: new Date(), disabledReason: reason },
-  });
+  const [, wl] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id },
+      data: { disabled: true, disabledAt: new Date(), disabledReason: reason },
+    }),
+    prisma.whitelistEntry.updateMany({
+      where: { userId: id, deactivatedAt: null },
+      data: { deactivatedAt: new Date() },
+    }),
+  ]);
 
   clearSyncCache(target.discordId);
+  if (wl.count > 0) deployInBackground();
 
   await audit(c, "member.disable", "user", id, { reason, targetName: target.discordName });
+  if (wl.count > 0) {
+    await audit(c, "whitelist.deactivate", "WhitelistEntry", id, {
+      count: wl.count,
+      triggeredBy: "member.disable",
+    });
+  }
   return success(c, { disabled: true as const });
 });
 
@@ -445,12 +465,26 @@ users.post("/:id/enable", authMiddleware, requirePermission("developer"), async 
 
   const target = await findOrThrow(prisma.user, { id }, "User");
 
-  await prisma.user.update({
-    where: { id },
-    data: { disabled: false, disabledAt: null, disabledReason: null },
-  });
+  const [, wl] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id },
+      data: { disabled: false, disabledAt: null, disabledReason: null },
+    }),
+    prisma.whitelistEntry.updateMany({
+      where: { userId: id, deactivatedAt: { not: null } },
+      data: { deactivatedAt: null },
+    }),
+  ]);
+
+  if (wl.count > 0) deployInBackground();
 
   await audit(c, "member.enable", "user", id, { targetName: target.discordName });
+  if (wl.count > 0) {
+    await audit(c, "whitelist.reactivate", "WhitelistEntry", id, {
+      count: wl.count,
+      triggeredBy: "member.enable",
+    });
+  }
   return success(c, { enabled: true as const });
 });
 
@@ -479,21 +513,34 @@ users.post("/bulk-disable", authMiddleware, requirePermission("developer"), rate
   }
 
   const safeIds = safeTargets.map((t) => t.id);
-  const result = await prisma.user.updateMany({
-    where: { id: { in: safeIds } },
-    data: { disabled: true, disabledAt: new Date(), disabledReason: reason },
-  });
+  const [userResult, wl] = await prisma.$transaction([
+    prisma.user.updateMany({
+      where: { id: { in: safeIds } },
+      data: { disabled: true, disabledAt: new Date(), disabledReason: reason },
+    }),
+    prisma.whitelistEntry.updateMany({
+      where: { userId: { in: safeIds }, deactivatedAt: null },
+      data: { deactivatedAt: new Date() },
+    }),
+  ]);
 
   for (const t of safeTargets) {
     clearSyncCache(t.discordId);
   }
+  if (wl.count > 0) deployInBackground();
 
   await audit(c, "member.bulk_disable", "user", null, {
-    count: result.count,
+    count: userResult.count,
     reason,
     names: safeTargets.map((t) => t.discordName),
   });
-  return success(c, { disabled: result.count });
+  if (wl.count > 0) {
+    await audit(c, "whitelist.deactivate", "WhitelistEntry", null, {
+      count: wl.count,
+      triggeredBy: "member.bulk_disable",
+    });
+  }
+  return success(c, { disabled: userResult.count });
 });
 
 const bulkEnableSchema = z.object({
@@ -508,16 +555,30 @@ users.post("/bulk-enable", authMiddleware, requirePermission("developer"), rateL
     select: { id: true, discordName: true },
   });
 
-  const result = await prisma.user.updateMany({
-    where: { id: { in: ids } },
-    data: { disabled: false, disabledAt: null, disabledReason: null },
-  });
+  const [userResult, wl] = await prisma.$transaction([
+    prisma.user.updateMany({
+      where: { id: { in: ids } },
+      data: { disabled: false, disabledAt: null, disabledReason: null },
+    }),
+    prisma.whitelistEntry.updateMany({
+      where: { userId: { in: ids }, deactivatedAt: { not: null } },
+      data: { deactivatedAt: null },
+    }),
+  ]);
+
+  if (wl.count > 0) deployInBackground();
 
   await audit(c, "member.bulk_enable", "user", null, {
-    count: result.count,
+    count: userResult.count,
     names: targets.map((t) => t.discordName),
   });
-  return success(c, { enabled: result.count });
+  if (wl.count > 0) {
+    await audit(c, "whitelist.reactivate", "WhitelistEntry", null, {
+      count: wl.count,
+      triggeredBy: "member.bulk_enable",
+    });
+  }
+  return success(c, { enabled: userResult.count });
 });
 
 // --- Reverse-lookup endpoints (for live-server / whitelist click-through) ---

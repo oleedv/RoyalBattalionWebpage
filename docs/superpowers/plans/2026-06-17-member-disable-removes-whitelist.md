@@ -13,7 +13,7 @@
 - **No automated test harness exists in this repo** (no test files, no test script). Established pattern is build/typecheck + manual verification. Each task's gate is `bunx tsc --noEmit` for the touched package(s) plus the manual check described; do not scaffold a test framework (YAGNI).
 - **Schema changes use `prisma db push`, not migration files** — there is no `prisma/migrations` directory. Run `bun run db:push` (which also regenerates the client).
 - Conventional Commits, one-line messages, no AI attribution / `Co-Authored-By`, no emojis (user global rules).
-- Bump the **root** `package.json` `version` before pushing (currently `1.3.0`); this is the webpage deploy version.
+- Bump the **root** `package.json` `version` before pushing (currently `1.11.0`); this is the webpage deploy version.
 - Follow existing code patterns: background deploy via a fire-and-forget helper that `.catch()`-logs (mirrors `deployInBackground` in `whitelist.ts`); audit every state change via `audit(c, action, resource, resourceId, detail)`.
 - `deactivatedAt` is set/cleared **only** by the member disable/enable flow. Nothing else may write it, so every deactivated row for a user is safe to restore on enable.
 
@@ -445,7 +445,7 @@ git commit -m "feat(members): warn that disabling removes in-game whitelist"
 
 - [ ] **Step 1: Bump the root version (minor — new feature)**
 
-In the root `package.json`, change `"version": "1.3.0"` to `"version": "1.4.0"`.
+In the root `package.json`, change `"version": "1.11.0"` to `"version": "1.12.0"`.
 
 - [ ] **Step 2: Build both packages**
 
@@ -456,7 +456,7 @@ Expected: both `web` and `api` build with no errors.
 
 ```bash
 git add package.json
-git commit -m "chore: bump version to 1.4.0"
+git commit -m "chore: bump version to 1.12.0"
 ```
 
 ---

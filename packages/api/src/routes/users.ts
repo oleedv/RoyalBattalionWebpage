@@ -13,6 +13,7 @@ import { validateCountry } from "shared";
 import prisma from "../lib/db";
 import { env } from "../lib/env";
 import { findOrThrow, success, fail } from "../lib/crud-helpers";
+import { parsePageParams, paginate } from "../lib/pagination";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { syncAllUserRoles } from "../lib/role-sync";
@@ -53,7 +54,7 @@ users.post("/link-steam", authMiddleware, rateLimit(10), zValidator("json", link
     return success(c, { steamId: user.steamId! });
   } catch (err) {
     logger.error("users", "Failed to link Steam ID", { userId, steamId, err });
-    return fail(c, "Failed to link Steam ID.");
+    return fail(c, "Failed to link Steam ID.", 500);
   }
 });
 
@@ -316,8 +317,8 @@ users.post("/sync-roles", authMiddleware, requirePermission("manage:members"), a
     await audit(c, "member.sync_roles", "user", null, result);
     return success(c, result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Sync failed";
-    return fail(c, message, 500);
+    logger.error("users", "Failed to sync roles", err);
+    return fail(c, "Failed to sync roles.", 500);
   }
 });
 
@@ -407,43 +408,44 @@ users.post("/bulk-comment", authMiddleware, requirePermission("manage:members"),
   return success(c, { commented: ids.length });
 });
 
-// --- Disable / Enable (developer only) ---
+// --- Account status toggle (developer only) ---
 
-const disableSchema = z.object({
-  reason: z.string().min(1).max(500),
+const statusSchema = z.object({
+  disabled: z.boolean(),
+  reason: z.string().min(1).max(500).optional(),
 });
 
-users.post("/:id/disable", authMiddleware, requirePermission("developer"), zValidator("json", disableSchema), async (c) => {
+users.patch("/:id/status", authMiddleware, requirePermission("developer"), zValidator("json", statusSchema), async (c) => {
   const id = c.req.param("id");
   const actorId = c.get("userId") as string;
-  const { reason } = c.req.valid("json");
+  const { disabled, reason } = c.req.valid("json");
 
   const target = await findOrThrow(prisma.user, { id }, "User");
 
-  if (target.id === actorId) {
-    return fail(c, "You cannot disable your own account", 400);
+  if (disabled) {
+    if (target.id === actorId) {
+      return fail(c, "You cannot disable your own account", 400);
+    }
+
+    const adminIds = env.ADMIN_DISCORD_IDS.split(",").map((s) => s.trim()).filter(Boolean);
+    if (adminIds.includes(target.discordId)) {
+      return fail(c, "Cannot disable a developer account", 400);
+    }
+
+    if (!reason) {
+      return fail(c, "A reason is required when disabling an account", 400);
+    }
+
+    await prisma.user.update({
+      where: { id },
+      data: { disabled: true, disabledAt: new Date(), disabledReason: reason },
+    });
+
+    clearSyncCache(target.discordId);
+
+    await audit(c, "member.disable", "user", id, { reason, targetName: target.discordName });
+    return success(c, { disabled: true as const });
   }
-
-  const adminIds = env.ADMIN_DISCORD_IDS.split(",").map((s) => s.trim()).filter(Boolean);
-  if (adminIds.includes(target.discordId)) {
-    return fail(c, "Cannot disable a developer account", 400);
-  }
-
-  await prisma.user.update({
-    where: { id },
-    data: { disabled: true, disabledAt: new Date(), disabledReason: reason },
-  });
-
-  clearSyncCache(target.discordId);
-
-  await audit(c, "member.disable", "user", id, { reason, targetName: target.discordName });
-  return success(c, { disabled: true as const });
-});
-
-users.post("/:id/enable", authMiddleware, requirePermission("developer"), async (c) => {
-  const id = c.req.param("id");
-
-  const target = await findOrThrow(prisma.user, { id }, "User");
 
   await prisma.user.update({
     where: { id },
@@ -451,7 +453,7 @@ users.post("/:id/enable", authMiddleware, requirePermission("developer"), async 
   });
 
   await audit(c, "member.enable", "user", id, { targetName: target.discordName });
-  return success(c, { enabled: true as const });
+  return success(c, { disabled: false as const });
 });
 
 // --- Bulk Disable / Enable (developer only) ---
@@ -520,39 +522,35 @@ users.post("/bulk-enable", authMiddleware, requirePermission("developer"), rateL
   return success(c, { enabled: result.count });
 });
 
-// --- Reverse-lookup endpoints (for live-server / whitelist click-through) ---
-
-users.get("/by-steamid/:steamId", authMiddleware, requirePermission("view:members", "manage:members"), async (c) => {
-  const steamId = c.req.param("steamId");
-  const user = await prisma.user.findUnique({ where: { steamId }, select: { id: true } });
-  if (!user) return fail(c, "Not found", 404);
-  return success(c, { id: user.id });
-});
-
-users.get("/by-eosid/:eosId", authMiddleware, requirePermission("view:members", "manage:members"), async (c) => {
-  const eosId = c.req.param("eosId");
-  const user = await prisma.user.findUnique({ where: { eosId }, select: { id: true } });
-  if (!user) return fail(c, "Not found", 404);
-  return success(c, { id: user.id });
-});
-
 // --- Standard CRUD ---
 
 users.get("/", authMiddleware, requirePermission("view:members", "manage:members"), async (c) => {
-  const [dbUsers, activityMap] = await Promise.all([
+  const { page, limit, skip } = parsePageParams(c);
+  const steamId = c.req.query("steamId");
+  const eosId = c.req.query("eosId");
+
+  const where: { steamId?: string; eosId?: string } = {};
+  if (steamId) where.steamId = steamId;
+  if (eosId) where.eosId = eosId;
+
+  const [dbUsers, total, activityMap] = await Promise.all([
     prisma.user.findMany({
+      where,
       include: {
         roles: { include: { role: true } },
         comments: { orderBy: { createdAt: "desc" } },
       },
       orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
     }),
+    prisma.user.count({ where }),
     fetchActivityMap(),
   ]);
 
-  const result: UserWithRolesAndComments[] = dbUsers.map((u) => mapUserWithComments(u, activityMap));
+  const items: UserWithRolesAndComments[] = dbUsers.map((u) => mapUserWithComments(u, activityMap));
 
-  return success(c, result);
+  return success(c, paginate(items, total, page, limit));
 });
 
 const updateUserSchema = z.object({
@@ -563,7 +561,7 @@ const updateUserSchema = z.object({
   dateOfBirth: z.string().nullable().optional(),
 });
 
-users.put("/:id", authMiddleware, requirePermission("manage:members"), zValidator("json", updateUserSchema), async (c) => {
+users.patch("/:id", authMiddleware, requirePermission("manage:members"), zValidator("json", updateUserSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
@@ -627,7 +625,7 @@ users.put("/:id", authMiddleware, requirePermission("manage:members"), zValidato
     return success(c, mapUserWithComments(updated, activityMap));
   } catch (err) {
     logger.error("users", "Failed to update user", { id, err });
-    return fail(c, "Failed to update user.");
+    return fail(c, "Failed to update user.", 500);
   }
 });
 
@@ -659,7 +657,7 @@ users.delete("/:id", authMiddleware, requirePermission("manage:members"), async 
   await prisma.user.delete({ where: { id } });
   await audit(c, "member.delete", "user", id, { discordName: existing.discordName });
 
-  return success(c, { deleted: true as const });
+  return c.body(null, 204);
 });
 
 // --- Unified profile endpoints ---
@@ -697,8 +695,9 @@ users.get("/:id/profile", authMiddleware, requirePermission("view:members", "man
   return success(c, result);
 });
 
-users.get("/profile/by-steamid/:steamId", authMiddleware, requirePermission("view:members", "manage:members"), async (c) => {
-  const steamId = c.req.param("steamId");
+users.get("/profile", authMiddleware, requirePermission("view:members", "manage:members"), async (c) => {
+  const steamId = c.req.query("steamId");
+  if (!steamId) return fail(c, "steamId query parameter is required", 400);
 
   // If a User exists with this steamId, redirect-by-data: return same shape but with full user.
   const dbUser = await prisma.user.findUnique({
@@ -777,16 +776,19 @@ users.post("/:id/comments", authMiddleware, requirePermission("manage:members"),
   return success(c, mapComment(comment), 201);
 });
 
-users.delete("/:userId/comments/:commentId", authMiddleware, requirePermission("manage:members"), async (c) => {
-  const userId = c.req.param("userId");
+users.delete("/:id/comments/:commentId", authMiddleware, requirePermission("manage:members"), async (c) => {
+  const userId = c.req.param("id");
   const commentId = c.req.param("commentId");
 
-  await findOrThrow(prisma.memberComment, { id: commentId }, "Comment");
+  const comment = await prisma.memberComment.findUnique({ where: { id: commentId } });
+  if (!comment || comment.userId !== userId) {
+    return fail(c, "Comment not found", 404);
+  }
 
   await prisma.memberComment.delete({ where: { id: commentId } });
   await audit(c, "member.comment.delete", "user", userId, { commentId });
 
-  return success(c, { deleted: true as const });
+  return c.body(null, 204);
 });
 
 export default users;

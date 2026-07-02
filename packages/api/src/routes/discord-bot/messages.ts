@@ -1,12 +1,38 @@
 import { Hono } from "hono";
 import { Prisma } from "../../generated/prisma/client";
-import type { BotMessage, BotLog, Paginated } from "shared";
+import type { BotMessage, BotLog } from "shared";
 import getSecretaryDb, { resetSecretaryDb } from "../../lib/secretary-db";
 import { requirePermission } from "../../middleware/permissions";
 import { success, fail } from "../../lib/crud-helpers";
+import { parsePageParams, paginate } from "../../lib/pagination";
 import { logger } from "../../lib/logger";
 
 const messages = new Hono();
+
+/**
+ * Distinguish a genuinely-unavailable Secretary DB connection (→ 503) from any
+ * other failure (→ 500). Only connection/initialization-level errors count as
+ * "unavailable"; everything else is a real server error.
+ */
+function isDbUnavailable(err: unknown): boolean {
+  if (err instanceof Prisma.PrismaClientInitializationError) return true;
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    // P1000 auth, P1001 can't reach, P1002 timed out reaching, P1008 op timeout, P1017 server closed
+    return ["P1000", "P1001", "P1002", "P1008", "P1017"].includes(err.code);
+  }
+  const code = (err as { code?: unknown })?.code;
+  if (typeof code === "string") {
+    return [
+      "ECONNREFUSED",
+      "ETIMEDOUT",
+      "ENOTFOUND",
+      "EHOSTUNREACH",
+      "ECONNRESET",
+      "EPIPE",
+    ].includes(code);
+  }
+  return false;
+}
 
 function mapBotMessage(r: any): BotMessage {
   let attachments: unknown[] | null = null;
@@ -55,8 +81,7 @@ messages.get(
   requirePermission("view:discord-bot", "manage:discord-bot"),
   async (c) => {
     try {
-      const limit = Math.min(Number(c.req.query("limit") || "50"), 200);
-      const offset = Math.max(Number(c.req.query("offset") || "0"), 0);
+      const { page, limit, skip } = parsePageParams(c, 50, 200);
       const author = c.req.query("author");
       const channel = c.req.query("channel");
       const dm = c.req.query("dm");
@@ -83,17 +108,18 @@ messages.get(
         db.$queryRaw<any[]>(Prisma.sql`
           SELECT id, message_id, channel_id, channel_name, guild_id, author_id, author_tag,
                   content, attachments, is_dm, direction, created_at
-           FROM bot_messages ${where} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`),
+           FROM bot_messages ${where} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${skip}`),
       ]);
 
       const total = Number(countRows[0]?.total || 0);
       const items: BotMessage[] = rows.map(mapBotMessage);
 
-      return success(c, { items, total } as Paginated<BotMessage>);
-    } catch (err: any) {
+      return success(c, paginate(items, total, page, limit));
+    } catch (err: unknown) {
       resetSecretaryDb();
       logger.error("discord-bot", "Messages endpoint error", err);
-      return fail(c, "Secretary database unavailable", 503);
+      if (isDbUnavailable(err)) return fail(c, "Secretary database unavailable", 503);
+      return fail(c, "Failed to fetch messages", 500);
     }
   }
 );
@@ -104,8 +130,7 @@ messages.get(
   requirePermission("view:discord-bot", "manage:discord-bot"),
   async (c) => {
     try {
-      const limit = Math.min(Number(c.req.query("limit") || "100"), 500);
-      const offset = Math.max(Number(c.req.query("offset") || "0"), 0);
+      const { page, limit, skip } = parsePageParams(c, 50, 200);
       const level = c.req.query("level");
       const module = c.req.query("module");
       const search = c.req.query("search");
@@ -129,17 +154,18 @@ messages.get(
         db.$queryRaw<any[]>(Prisma.sql`SELECT COUNT(*) as total FROM bot_logs ${where}`),
         db.$queryRaw<any[]>(Prisma.sql`
           SELECT id, level, level_label, module, message, data, created_at
-           FROM bot_logs ${where} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`),
+           FROM bot_logs ${where} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${skip}`),
       ]);
 
       const total = Number(countRows[0]?.total || 0);
       const items: BotLog[] = rows.map(mapBotLog);
 
-      return success(c, { items, total } as Paginated<BotLog>);
-    } catch (err: any) {
+      return success(c, paginate(items, total, page, limit));
+    } catch (err: unknown) {
       resetSecretaryDb();
       logger.error("discord-bot", "Logs endpoint error", err);
-      return fail(c, "Secretary database unavailable", 503);
+      if (isDbUnavailable(err)) return fail(c, "Secretary database unavailable", 503);
+      return fail(c, "Failed to fetch logs", 500);
     }
   }
 );

@@ -9,6 +9,8 @@ import users from "./routes/users";
 import roles from "./routes/roles";
 import whitelist from "./routes/whitelist";
 import tickets from "./routes/tickets";
+import prospects from "./routes/prospects";
+import legacyTickets from "./routes/legacy-tickets";
 import matches from "./routes/matches";
 import servers from "./routes/servers";
 import stats from "./routes/stats";
@@ -70,23 +72,28 @@ app.use(
 
 // --- Route mounting ---
 
-app.route("/auth", auth);
-app.route("/users", users);
-app.route("/roles", roles);
-app.route("/whitelist", whitelist);
-app.route("/admin-groups", adminGroups);
-app.route("/clans", clans);
-app.route("/tickets", tickets);
-app.route("/matches", matches);
-app.route("/servers", servers);
-app.route("/stats", stats);
-app.route("/squadjs-config", squadjsConfig);
-app.route("/server-config", serverConfig);
-app.route("/discord-bot", discordBot);
-app.route("/audit-logs", auditLogs);
-app.route("/playtime", playtime);
-app.route("/seeding-tracker", seedingTracker);
-app.route("/lobby", lobby);
+// All REST routers are versioned under /v1. Root-level exceptions below
+// (/admins.cfg, /health, /live-server/health, WS upgrades) are external/infra
+// contracts and intentionally stay unversioned.
+app.route("/v1/auth", auth);
+app.route("/v1/users", users);
+app.route("/v1/roles", roles);
+app.route("/v1/whitelist", whitelist);
+app.route("/v1/admin-groups", adminGroups);
+app.route("/v1/clans", clans);
+app.route("/v1/tickets", tickets);
+app.route("/v1/prospects", prospects);
+app.route("/v1/legacy-tickets", legacyTickets);
+app.route("/v1/matches", matches);
+app.route("/v1/servers", servers);
+app.route("/v1/stats", stats);
+app.route("/v1/squadjs-config", squadjsConfig);
+app.route("/v1/server-config", serverConfig);
+app.route("/v1/discord-bot", discordBot);
+app.route("/v1/audit-logs", auditLogs);
+app.route("/v1/playtime", playtime);
+app.route("/v1/seeding-tracker", seedingTracker);
+app.route("/v1/lobby", lobby);
 
 // Public cfg endpoint (IP-restricted) -- separate from /whitelist to avoid auth middleware
 app.get("/admins.cfg", async (c) => {
@@ -107,7 +114,7 @@ app.get("/admins.cfg", async (c) => {
 // Public count of staff-tier whitelist entries (admin / superadmin / founder / owner).
 // Filters at the DB level (only staff-tier rows fetched), dedupes by steamId, and
 // rate-limited per IP on top of the global limiter to prevent abuse of the public route.
-app.get("/admins/team-count", rateLimit(30), async (c) => {
+app.get("/v1/admins/team-count", rateLimit(30), async (c) => {
   const tierMatch = ["admin", "owner", "founder"].flatMap((kw) => [
     { role: { contains: kw } },
     { group: { is: { name: { contains: kw } } } },

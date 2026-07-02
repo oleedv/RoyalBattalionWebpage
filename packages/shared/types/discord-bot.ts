@@ -46,6 +46,9 @@ export interface SeedingRapport {
 export interface Paginated<T> {
   items: T[];
   total: number;
+  page: number;
+  limit: number;
+  hasNext: boolean;
 }
 
 export interface BotMessage {
@@ -83,7 +86,7 @@ export interface BotStatus {
   squadjsConnected: boolean;
   seedingSchedulerActive: boolean;
   prospectSchedulerActive: boolean;
-  lastHeartbeat: string;
+  lastHeartbeat: string | null;
   startedAt: string | null;
 }
 
@@ -110,7 +113,7 @@ export interface MentorGroup {
 export interface DiscordBotOverview {
   tickets: {
     openByTier: { normal: number; community_officer: number; admin_officer: number };
-    recentlyClosed: { id: number; uuid: string; tier: string; closedAt: string; firstMessage: string | null }[];
+    recentlyClosed: { id: number; uuid: string; tier: string; closedAt: string | null; firstMessage: string | null }[];
   };
   prospects: {
     open: number;

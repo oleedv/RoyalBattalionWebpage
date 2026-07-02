@@ -44,6 +44,7 @@ function toAdminGroup(g: {
 adminGroups.get("/", async (c) => {
   const groups = await prisma.adminGroup.findMany({
     orderBy: { sortOrder: "asc" },
+    take: 500,
   });
 
   return success(c, groups.map(toAdminGroup));
@@ -65,11 +66,11 @@ adminGroups.post("/", zValidator("json", createGroupSchema), async (c) => {
     return success(c, toAdminGroup(group), 201);
   } catch (err) {
     logger.error("admin-groups", "Failed to create admin group", { name, err });
-    return fail(c, "Failed to create group.");
+    return fail(c, "Failed to create group.", 500);
   }
 });
 
-adminGroups.put("/:id", zValidator("json", updateGroupSchema), async (c) => {
+adminGroups.patch("/:id", zValidator("json", updateGroupSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
@@ -90,7 +91,7 @@ adminGroups.put("/:id", zValidator("json", updateGroupSchema), async (c) => {
     return success(c, toAdminGroup(group));
   } catch (err) {
     logger.error("admin-groups", "Failed to update admin group", { id, err });
-    return fail(c, "Failed to update group");
+    return fail(c, "Failed to update group", 500);
   }
 });
 
@@ -102,7 +103,7 @@ adminGroups.delete("/:id", async (c) => {
   await prisma.adminGroup.delete({ where: { id } });
   await audit(c, "admin_group.delete", "admin_group", id, { name: existing.name });
 
-  return success(c, { deleted: true as const });
+  return c.body(null, 204);
 });
 
 export default adminGroups;

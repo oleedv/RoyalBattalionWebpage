@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { getSquadJSPool } from "../lib/squadjs-db";
+import { success, fail } from "../lib/crud-helpers";
 
 const playtime = new Hono();
 
@@ -12,7 +13,7 @@ playtime.use("*", requirePermission("view:whitelist", "view:members", "view:live
 playtime.get("/", async (c) => {
   const steamId = c.req.query("steamId");
   if (!steamId) {
-    return c.json({ success: false, error: "steamId is required" }, 400);
+    return fail(c, "steamId query parameter is required", 400);
   }
 
   const pool = getSquadJSPool();
@@ -31,15 +32,12 @@ playtime.get("/", async (c) => {
   const [rows] = await pool.query(query, [steamId]);
   const row = (rows as Record<string, unknown>[])[0] || { session30: 0, session90: 0, seed30: 0, seed90: 0 };
 
-  return c.json({
-    success: true,
-    data: {
-      steamId,
-      playtime30: Math.round((Number(row.session30) / 3600) * 10) / 10,
-      playtime90: Math.round((Number(row.session90) / 3600) * 10) / 10,
-      seed30: Math.round((Number(row.seed30) / 3600) * 10) / 10,
-      seed90: Math.round((Number(row.seed90) / 3600) * 10) / 10,
-    },
+  return success(c, {
+    steamId,
+    playtime30: Math.round((Number(row.session30) / 3600) * 10) / 10,
+    playtime90: Math.round((Number(row.session90) / 3600) * 10) / 10,
+    seed30: Math.round((Number(row.seed30) / 3600) * 10) / 10,
+    seed90: Math.round((Number(row.seed90) / 3600) * 10) / 10,
   });
 });
 

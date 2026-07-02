@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  getUsers,
+  getAllUsers,
   getRoles,
   addMemberComment,
   deleteMemberComment,
@@ -82,7 +82,7 @@ export default function DiscordUsersPage() {
       if (!apiToken) return;
       try {
         const [usersRes, rolesRes] = await Promise.all([
-          getUsers(apiToken),
+          getAllUsers(apiToken),
           getRoles(apiToken).catch(() => null),
         ]);
         if (usersRes.success && usersRes.data) {
@@ -105,7 +105,7 @@ export default function DiscordUsersPage() {
   const refreshUsers = useCallback(async () => {
     if (!apiToken) return;
     try {
-      const res = await getUsers(apiToken);
+      const res = await getAllUsers(apiToken);
       if (res.success && res.data) {
         setUsers(res.data);
         if (selectedUser) {

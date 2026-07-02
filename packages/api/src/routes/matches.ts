@@ -4,6 +4,7 @@ import { zValidator } from "@hono/zod-validator";
 import type { Match } from "shared";
 import prisma from "../lib/db";
 import { findOrThrow, success, fail } from "../lib/crud-helpers";
+import { parsePageParams, paginate } from "../lib/pagination";
 import { resyncAllMatches } from "../lib/match-sync";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
@@ -14,9 +15,7 @@ const matches = new Hono();
 
 // Public route (no auth) - must be registered before the wildcard auth middleware
 matches.get("/public", async (c) => {
-  const page = Math.max(1, Number(c.req.query("page") || "1"));
-  const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") || "20")));
-  const skip = (page - 1) * limit;
+  const { page, limit, skip } = parsePageParams(c);
 
   const [entries, total] = await Promise.all([
     prisma.match.findMany({
@@ -28,7 +27,7 @@ matches.get("/public", async (c) => {
     prisma.match.count({ where: { hidden: false } }),
   ]);
 
-  return success(c, { items: entries.map(toMatch), total });
+  return success(c, paginate(entries.map(toMatch), total, page, limit));
 });
 
 // All remaining routes require user auth
@@ -75,9 +74,7 @@ function toMatch(e: {
 }
 
 matches.get("/", requirePermission("manage:matches"), async (c) => {
-  const page = Math.max(1, Number(c.req.query("page") || "1"));
-  const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") || "20")));
-  const skip = (page - 1) * limit;
+  const { page, limit, skip } = parsePageParams(c);
 
   const [entries, total] = await Promise.all([
     prisma.match.findMany({
@@ -88,10 +85,10 @@ matches.get("/", requirePermission("manage:matches"), async (c) => {
     prisma.match.count(),
   ]);
 
-  return success(c, { items: entries.map(toMatch), total });
+  return success(c, paginate(entries.map(toMatch), total, page, limit));
 });
 
-matches.put("/:id", requirePermission("manage:matches"), zValidator("json", updateMatchSchema), async (c) => {
+matches.patch("/:id", requirePermission("manage:matches"), zValidator("json", updateMatchSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
@@ -115,7 +112,7 @@ matches.put("/:id", requirePermission("manage:matches"), zValidator("json", upda
     return success(c, toMatch(entry));
   } catch (err) {
     logger.error("matches", "Failed to update match", { id, err });
-    return fail(c, "Failed to update match");
+    return fail(c, "Failed to update match", 500);
   }
 });
 
@@ -125,7 +122,8 @@ matches.post("/resync", requirePermission("manage:matches"), async (c) => {
     await audit(c, "match.resync", "match");
     return success(c, result);
   } catch (err) {
-    return fail(c, err instanceof Error ? err.message : "Resync failed", 500);
+    logger.error("matches", "Failed to resync matches", { err });
+    return fail(c, "Failed to resync matches", 500);
   }
 });
 
@@ -137,7 +135,7 @@ matches.delete("/:id", requirePermission("manage:matches"), async (c) => {
   await prisma.match.delete({ where: { id } });
   await audit(c, "match.delete", "match", id, { map: existing.map, layer: existing.layer });
 
-  return success(c, { deleted: true as const });
+  return c.body(null, 204);
 });
 
 export default matches;

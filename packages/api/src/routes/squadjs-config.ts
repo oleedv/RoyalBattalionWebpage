@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import type { ApiResponse, SquadJSPlugin } from "shared";
+import type { SquadJSPlugin } from "shared";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import prisma from "../lib/db";
 import { audit } from "../lib/audit";
+import { success, fail } from "../lib/crud-helpers";
+import { logger } from "../lib/logger";
 import {
   readSquadJSConfig,
   writeSquadJSConfig,
@@ -20,19 +22,20 @@ const squadjsConfig = new Hono();
 
 squadjsConfig.use("*", authMiddleware);
 
+// Validate an :env path param against the known Environment set.
+function parseEnv(value: string): Environment | null {
+  return (getAvailableEnvironments() as string[]).includes(value)
+    ? (value as Environment)
+    : null;
+}
+
 // GET / -- list available environments
 squadjsConfig.get("/", requirePermission("view:squadjs", "manage:squadjs"), async (c) => {
   if (!isConfigured()) {
-    return c.json<ApiResponse<never>>(
-      { success: false, error: "GITHUB_CONFIG_TOKEN is not configured" },
-      503
-    );
+    return fail(c, "GITHUB_CONFIG_TOKEN is not configured", 503);
   }
 
-  return c.json<ApiResponse<{ environments: string[] }>>({
-    success: true,
-    data: { environments: getAvailableEnvironments() },
-  });
+  return success(c, { environments: getAvailableEnvironments() });
 });
 
 // GET /descriptions -- fetch plugin + field descriptions from source code (must be before /:env)
@@ -42,43 +45,31 @@ squadjsConfig.get("/descriptions", requirePermission("view:squadjs", "manage:squ
       fetchPluginDescriptions(),
       fetchPluginFieldDescriptions(),
     ]);
-    return c.json<ApiResponse<{ descriptions: Record<string, string>; fieldDescriptions: Record<string, Record<string, string>> }>>({
-      success: true,
-      data: { descriptions, fieldDescriptions },
-    });
+    return success(c, { descriptions, fieldDescriptions });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to fetch descriptions";
-    return c.json<ApiResponse<never>>(
-      { success: false, error: message },
-      500
-    );
+    logger.error("squadjs-config", "Failed to fetch descriptions", { err });
+    return fail(c, "Failed to fetch descriptions", 500);
   }
 });
 
 // GET /:env -- read plugins for a specific environment
 squadjsConfig.get("/:env", requirePermission("view:squadjs", "manage:squadjs"), async (c) => {
-  const env = c.req.param("env") as Environment;
+  const env = parseEnv(c.req.param("env"));
+  if (!env) {
+    return fail(c, "Unknown environment", 404);
+  }
 
   try {
     const result = await readSquadJSConfig(env);
 
     if (result === null) {
-      return c.json<ApiResponse<never>>(
-        { success: false, error: "GITHUB_CONFIG_TOKEN is not configured" },
-        503
-      );
+      return fail(c, "GITHUB_CONFIG_TOKEN is not configured", 503);
     }
 
-    return c.json<ApiResponse<{ plugins: SquadJSPlugin[]; environment: string }>>({
-      success: true,
-      data: { plugins: result.plugins, environment: env },
-    });
+    return success(c, { plugins: result.plugins, environment: env });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to read config";
-    return c.json<ApiResponse<never>>(
-      { success: false, error: message },
-      500
-    );
+    logger.error("squadjs-config", "Failed to read config", { env, err });
+    return fail(c, "Failed to read config", 500);
   }
 });
 
@@ -93,23 +84,23 @@ const updateSchema = z.object({
   ),
 });
 
-// PUT /:env -- write plugins for a specific environment
-squadjsConfig.put(
+// PATCH /:env -- merge plugins for a specific environment
+squadjsConfig.patch(
   "/:env",
   requirePermission("manage:squadjs"),
   zValidator("json", updateSchema),
   async (c) => {
-    const env = c.req.param("env") as Environment;
+    const env = parseEnv(c.req.param("env"));
+    if (!env) {
+      return fail(c, "Unknown environment", 404);
+    }
     const { plugins } = c.req.valid("json");
 
     try {
       // Read current config to get the full raw object
       const result = await readSquadJSConfig(env);
       if (result === null) {
-        return c.json<ApiResponse<never>>(
-          { success: false, error: "GITHUB_CONFIG_TOKEN is not configured" },
-          503
-        );
+        return fail(c, "GITHUB_CONFIG_TOKEN is not configured", 503);
       }
 
       // Look up who's making the change
@@ -123,16 +114,10 @@ squadjsConfig.put(
       const pluginNames = (plugins as SquadJSPlugin[]).map((p) => p.plugin);
       audit(c, "squadjs.update_config", "SquadJSConfig", env, { environment: env, plugins: pluginNames });
 
-      return c.json<ApiResponse<{ saved: true }>>({
-        success: true,
-        data: { saved: true },
-      });
+      return success(c, { saved: true });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Write failed";
-      return c.json<ApiResponse<never>>(
-        { success: false, error: message },
-        500
-      );
+      logger.error("squadjs-config", "Failed to write config", { env, err });
+      return fail(c, "Failed to write config", 500);
     }
   }
 );

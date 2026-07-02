@@ -29,6 +29,7 @@ roles.get("/", async (c) => {
   const dbRoles = await prisma.discordRole.findMany({
     include: { permissions: true },
     orderBy: { name: "asc" },
+    take: 500,
   });
 
   const result: DiscordRole[] = dbRoles.map((r) => ({
@@ -80,7 +81,7 @@ roles.post("/", zValidator("json", createRoleSchema), async (c) => {
     return success(c, result, 201);
   } catch (err) {
     logger.error("roles", "Failed to create role", { name, discordRoleId, err });
-    return fail(c, "Failed to create role.");
+    return fail(c, "Failed to create role.", 500);
   }
 });
 
@@ -107,6 +108,7 @@ roles.put("/:id/permissions", zValidator("json", updatePermissionsSchema), async
     name: updated!.name,
     permissions: updated!.permissions.map((p) => p.permission as Permission),
     grantsWhitelist: updated!.grantsWhitelist,
+    isMemberRole: updated!.isMemberRole,
   };
 
   audit(c, "role.update_permissions", "DiscordRole", id, { name: existing.name, permissions });
@@ -114,44 +116,46 @@ roles.put("/:id/permissions", zValidator("json", updatePermissionsSchema), async
   return success(c, result);
 });
 
-const whitelistGrantSchema = z.object({
-  grantsWhitelist: z.boolean(),
+const updateRoleSchema = z.object({
+  isMemberRole: z.boolean().optional(),
+  grantsWhitelist: z.boolean().optional(),
 });
 
-roles.put("/:id/whitelist-grant", zValidator("json", whitelistGrantSchema), async (c) => {
+// Partial update of role flags (merges the former member-role + whitelist-grant toggles).
+roles.patch("/:id", zValidator("json", updateRoleSchema), async (c) => {
   const id = c.req.param("id");
-  const { grantsWhitelist } = c.req.valid("json");
+  const { isMemberRole, grantsWhitelist } = c.req.valid("json");
 
   const existing = await findOrThrow(prisma.discordRole, { id }, "Role");
 
-  await prisma.discordRole.update({
+  const data: { isMemberRole?: boolean; grantsWhitelist?: boolean } = {};
+  if (isMemberRole !== undefined) data.isMemberRole = isMemberRole;
+  if (grantsWhitelist !== undefined) data.grantsWhitelist = grantsWhitelist;
+
+  await prisma.discordRole.update({ where: { id }, data });
+
+  const updated = await prisma.discordRole.findUnique({
     where: { id },
-    data: { grantsWhitelist },
+    include: { permissions: true },
   });
 
-  audit(c, "role.update_whitelist_grant", "DiscordRole", id, { name: existing.name, grantsWhitelist });
+  const result: DiscordRole = {
+    id: updated!.id,
+    discordRoleId: updated!.discordRoleId,
+    name: updated!.name,
+    permissions: updated!.permissions.map((p) => p.permission as Permission),
+    grantsWhitelist: updated!.grantsWhitelist,
+    isMemberRole: updated!.isMemberRole,
+  };
 
-  return success(c, { updated: true as const });
-});
+  if (isMemberRole !== undefined) {
+    audit(c, "role.update_member_role", "DiscordRole", id, { name: existing.name, isMemberRole });
+  }
+  if (grantsWhitelist !== undefined) {
+    audit(c, "role.update_whitelist_grant", "DiscordRole", id, { name: existing.name, grantsWhitelist });
+  }
 
-const memberRoleSchema = z.object({
-  isMemberRole: z.boolean(),
-});
-
-roles.put("/:id/member-role", zValidator("json", memberRoleSchema), async (c) => {
-  const id = c.req.param("id");
-  const { isMemberRole } = c.req.valid("json");
-
-  const existing = await findOrThrow(prisma.discordRole, { id }, "Role");
-
-  await prisma.discordRole.update({
-    where: { id },
-    data: { isMemberRole },
-  });
-
-  audit(c, "role.update_member_role", "DiscordRole", id, { name: existing.name, isMemberRole });
-
-  return success(c, { updated: true as const });
+  return success(c, result);
 });
 
 roles.delete("/:id", async (c) => {
@@ -163,7 +167,7 @@ roles.delete("/:id", async (c) => {
 
   audit(c, "role.delete", "DiscordRole", id, { name: existing.name, discordRoleId: existing.discordRoleId });
 
-  return success(c, { deleted: true as const });
+  return c.body(null, 204);
 });
 
 export default roles;

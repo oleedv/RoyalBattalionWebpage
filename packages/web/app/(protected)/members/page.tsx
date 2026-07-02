@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
-  getUsers,
+  getAllUsers,
   updateUser,
   deleteUser,
   syncUserRoles,
@@ -185,7 +185,7 @@ export default function MembersPage() {
       if (!apiToken) return;
       try {
         const [usersRes, rolesRes] = await Promise.all([
-          getUsers(apiToken),
+          getAllUsers(apiToken),
           getRoles(apiToken).catch(() => null),
         ]);
         if (usersRes.success && usersRes.data) {
@@ -208,7 +208,7 @@ export default function MembersPage() {
   const refreshUsers = useCallback(async () => {
     if (!apiToken) return;
     try {
-      const res = await getUsers(apiToken);
+      const res = await getAllUsers(apiToken);
       if (res.success && res.data) {
         setUsers(res.data);
         if (selectedUser) {
@@ -428,7 +428,7 @@ export default function MembersPage() {
     try {
       const syncRes = await syncUserRoles(apiToken);
       if (syncRes.success) {
-        const res = await getUsers(apiToken);
+        const res = await getAllUsers(apiToken);
         if (res.success && res.data) {
           setUsers(res.data);
         }

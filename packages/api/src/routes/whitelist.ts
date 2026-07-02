@@ -146,6 +146,7 @@ whitelist.get("/", requirePermission("view:whitelist"), async (c) => {
     where: server ? { server } : {},
     include: { group: true, clanRef: true },
     orderBy: { createdAt: "desc" },
+    take: 1000,
   });
 
   return success(c, entries.map(toEntry));
@@ -174,6 +175,7 @@ whitelist.get("/candidates", requirePermission("manage:whitelist"), async (c) =>
     include: {
       roles: { include: { role: true } },
     },
+    take: 1000,
   });
 
   const result: WhitelistCandidate[] = candidates
@@ -251,7 +253,7 @@ whitelist.post("/", requirePermission("manage:whitelist"), rateLimit(30), zValid
     return success(c, { ...result, warnings }, 201);
   } catch (err) {
     logger.error("whitelist", "Failed to add whitelist entry", { steamId, server, err });
-    return fail(c, "Failed to add whitelist entry.");
+    return fail(c, "Failed to add whitelist entry.", 500);
   }
 });
 
@@ -274,6 +276,7 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), zVa
   const userId = c.get("userId");
   const { server, entries } = c.req.valid("json");
 
+  try {
   const submittedSteamIds = entries.map((e) => e.steamId);
   const existingRows = await prisma.whitelistEntry.findMany({
     where: { server, steamId: { in: submittedSteamIds } },
@@ -338,6 +341,10 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), zVa
   audit(c, "whitelist.bulk_add", "WhitelistEntry", null, { server, created: result.created, skipped: result.skipped.length, total: entries.length });
 
   return success(c, { created: result.created, skipped: result.skipped }, 201);
+  } catch (err) {
+    logger.error("whitelist", "Failed to bulk add whitelist entries", { server, err });
+    return fail(c, "Failed to bulk add whitelist entries.", 500);
+  }
 });
 
 // ── Bulk update ──────────────────────────────────────────────
@@ -345,30 +352,35 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), zVa
 whitelist.post("/bulk-update", requirePermission("manage:whitelist"), rateLimit(10), zValidator("json", bulkUpdateSchema), async (c) => {
   const { ids, data } = c.req.valid("json");
 
-  const updateData: Record<string, unknown> = {};
-  if (data.clanId !== undefined) {
-    updateData.clanId = data.clanId;
-    if (data.clanId) {
-      const clan = await prisma.clan.findUnique({ where: { id: data.clanId }, select: { tag: true } });
-      updateData.clan = clan?.tag ?? null;
-    } else {
-      updateData.clan = null;
+  try {
+    const updateData: Record<string, unknown> = {};
+    if (data.clanId !== undefined) {
+      updateData.clanId = data.clanId;
+      if (data.clanId) {
+        const clan = await prisma.clan.findUnique({ where: { id: data.clanId }, select: { tag: true } });
+        updateData.clan = clan?.tag ?? null;
+      } else {
+        updateData.clan = null;
+      }
     }
+    if (data.groupId !== undefined) updateData.groupId = data.groupId;
+    if (data.expiresAt !== undefined) updateData.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
+
+    const result = await prisma.whitelistEntry.updateMany({
+      where: { id: { in: ids } },
+      data: updateData,
+    });
+
+    const sampleEntry = await prisma.whitelistEntry.findFirst({ where: { id: { in: ids } }, select: { server: true } });
+    if (sampleEntry) deployInBackground(sampleEntry.server);
+
+    audit(c, "whitelist.bulk_update", "WhitelistEntry", null, { count: result.count, changes: data });
+
+    return success(c, { updated: result.count });
+  } catch (err) {
+    logger.error("whitelist", "Failed to bulk update whitelist entries", { err });
+    return fail(c, "Failed to bulk update whitelist entries.", 500);
   }
-  if (data.groupId !== undefined) updateData.groupId = data.groupId;
-  if (data.expiresAt !== undefined) updateData.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
-
-  const result = await prisma.whitelistEntry.updateMany({
-    where: { id: { in: ids } },
-    data: updateData,
-  });
-
-  const sampleEntry = await prisma.whitelistEntry.findFirst({ where: { id: { in: ids } }, select: { server: true } });
-  if (sampleEntry) deployInBackground(sampleEntry.server);
-
-  audit(c, "whitelist.bulk_update", "WhitelistEntry", null, { count: result.count, changes: data });
-
-  return success(c, { updated: result.count });
 });
 
 // ── Bulk delete ──────────────────────────────────────────────
@@ -376,24 +388,29 @@ whitelist.post("/bulk-update", requirePermission("manage:whitelist"), rateLimit(
 whitelist.post("/bulk-delete", requirePermission("manage:whitelist"), rateLimit(10), zValidator("json", bulkDeleteSchema), async (c) => {
   const { ids } = c.req.valid("json");
 
-  const entries = await prisma.whitelistEntry.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, steamId: true, name: true, server: true },
-  });
+  try {
+    const entries = await prisma.whitelistEntry.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, steamId: true, name: true, server: true },
+    });
 
-  const result = await prisma.whitelistEntry.deleteMany({
-    where: { id: { in: ids } },
-  });
+    const result = await prisma.whitelistEntry.deleteMany({
+      where: { id: { in: ids } },
+    });
 
-  const servers = [...new Set(entries.map((e) => e.server))];
-  for (const server of servers) deployInBackground(server);
+    const servers = [...new Set(entries.map((e) => e.server))];
+    for (const server of servers) deployInBackground(server);
 
-  audit(c, "whitelist.bulk_delete", "WhitelistEntry", null, {
-    count: result.count,
-    steamIds: entries.map((e) => e.steamId),
-  });
+    audit(c, "whitelist.bulk_delete", "WhitelistEntry", null, {
+      count: result.count,
+      steamIds: entries.map((e) => e.steamId),
+    });
 
-  return success(c, { deleted: result.count });
+    return success(c, { deleted: result.count });
+  } catch (err) {
+    logger.error("whitelist", "Failed to bulk delete whitelist entries", { err });
+    return fail(c, "Failed to bulk delete whitelist entries.", 500);
+  }
 });
 
 // ── Get single entry with comments ──────────────────────────
@@ -428,7 +445,7 @@ whitelist.get("/:id", requirePermission("view:whitelist"), async (c) => {
 
 // ── Update entry ─────────────────────────────────────────────
 
-whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", updateEntrySchema), async (c) => {
+whitelist.patch("/:id", requirePermission("manage:whitelist"), zValidator("json", updateEntrySchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
@@ -491,7 +508,7 @@ whitelist.put("/:id", requirePermission("manage:whitelist"), zValidator("json", 
     return success(c, toEntry(entry));
   } catch (err) {
     logger.error("whitelist", "Failed to update whitelist entry", { id, err });
-    return fail(c, "Failed to update whitelist entry.");
+    return fail(c, "Failed to update whitelist entry.", 500);
   }
 });
 
@@ -507,7 +524,7 @@ whitelist.delete("/:id", requirePermission("manage:whitelist"), async (c) => {
   deployInBackground(existing.server);
   audit(c, "whitelist.delete", "WhitelistEntry", id, { steamId: existing.steamId, name: existing.name, server: existing.server });
 
-  return success(c, { deleted: true as const });
+  return c.body(null, 204);
 });
 
 // ── Add comment ──────────────────────────────────────────────
@@ -547,12 +564,20 @@ whitelist.delete("/:id/comments/:commentId", requirePermission("manage:whitelist
   const entryId = c.req.param("id");
   const commentId = c.req.param("commentId");
 
-  await findOrThrow(prisma.whitelistComment, { id: commentId }, "Comment");
+  // Scope the lookup to BOTH the entry and the comment so a comment can only be
+  // deleted via its owning entry's path (404 on any mismatch).
+  const comment = await prisma.whitelistComment.findUnique({
+    where: { id: commentId },
+    select: { id: true, whitelistEntryId: true },
+  });
+  if (!comment || comment.whitelistEntryId !== entryId) {
+    return fail(c, "Comment not found", 404);
+  }
 
   await prisma.whitelistComment.delete({ where: { id: commentId } });
   audit(c, "whitelist.comment.delete", "WhitelistEntry", entryId, { commentId });
 
-  return success(c, { deleted: true as const });
+  return c.body(null, 204);
 });
 
 export default whitelist;

@@ -34,7 +34,7 @@ function toClan(c: { id: string; name: string; tag: string; createdAt: Date }): 
 }
 
 clans.get("/", async (c) => {
-  const rows = await prisma.clan.findMany({ orderBy: { name: "asc" } });
+  const rows = await prisma.clan.findMany({ orderBy: { name: "asc" }, take: 500 });
   return success(c, rows.map(toClan));
 });
 
@@ -54,11 +54,11 @@ clans.post("/", zValidator("json", createClanSchema), async (c) => {
     return success(c, toClan(clan), 201);
   } catch (err) {
     logger.error("clans", "Failed to create clan", { name, tag, err });
-    return fail(c, "Failed to create clan.");
+    return fail(c, "Failed to create clan.", 500);
   }
 });
 
-clans.put("/:id", zValidator("json", updateClanSchema), async (c) => {
+clans.patch("/:id", zValidator("json", updateClanSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
@@ -88,7 +88,7 @@ clans.put("/:id", zValidator("json", updateClanSchema), async (c) => {
     return success(c, toClan(clan));
   } catch (err) {
     logger.error("clans", "Failed to update clan", { id, err });
-    return fail(c, "Failed to update clan");
+    return fail(c, "Failed to update clan", 500);
   }
 });
 
@@ -99,7 +99,7 @@ clans.delete("/:id", async (c) => {
 
   await prisma.clan.delete({ where: { id } });
   await audit(c, "clan.delete", "clan", id, { name: existing.name, tag: existing.tag });
-  return success(c, { deleted: true as const });
+  return c.body(null, 204);
 });
 
 export default clans;

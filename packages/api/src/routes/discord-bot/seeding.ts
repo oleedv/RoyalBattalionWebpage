@@ -60,28 +60,33 @@ seeding.get(
     } catch (err) {
       resetSecretaryDb();
       logger.error("discord-bot", "Seeding config endpoint error", err);
-      return fail(c, "Secretary database unavailable", 503);
+      return fail(c, "Failed to load seeding config", 500);
     }
   }
 );
 
-// PUT /seeding/config
-seeding.put(
+// PATCH /seeding/config - partial update (omitted fields are left untouched)
+seeding.patch(
   "/seeding/config",
   requirePermission("manage:discord-bot"),
   async (c) => {
     try {
       const body = await c.req.json<Partial<SeedingConfig>>();
 
-      await getSecretaryDb().$queryRaw(Prisma.sql`
-        UPDATE seeding_config SET
-          enabled = ${body.enabled ? 1 : 0},
-          seed_threshold = ${body.seedThreshold ?? 40},
-          reset_threshold = ${body.resetThreshold ?? 20},
-          daily_time = ${body.dailyTime ?? null},
-          timezone = ${body.timezone ?? null},
-          server_name = ${body.serverName ?? null}
-         WHERE id = 1`
+      const sets: Prisma.Sql[] = [];
+      if (body.enabled !== undefined) sets.push(Prisma.sql`enabled = ${body.enabled ? 1 : 0}`);
+      if (body.seedThreshold !== undefined) sets.push(Prisma.sql`seed_threshold = ${body.seedThreshold}`);
+      if (body.resetThreshold !== undefined) sets.push(Prisma.sql`reset_threshold = ${body.resetThreshold}`);
+      if (body.dailyTime !== undefined) sets.push(Prisma.sql`daily_time = ${body.dailyTime}`);
+      if (body.timezone !== undefined) sets.push(Prisma.sql`timezone = ${body.timezone}`);
+      if (body.serverName !== undefined) sets.push(Prisma.sql`server_name = ${body.serverName}`);
+
+      if (sets.length === 0) {
+        return fail(c, "No updatable fields provided");
+      }
+
+      await getSecretaryDb().$executeRaw(Prisma.sql`
+        UPDATE seeding_config SET ${Prisma.join(sets)} WHERE id = 1`
       );
 
       await audit(c, "discord_bot.update_seeding_config", "discord_bot");
@@ -89,7 +94,7 @@ seeding.put(
     } catch (err) {
       resetSecretaryDb();
       logger.error("discord-bot", "Seeding config update error", err);
-      return fail(c, "Secretary database unavailable", 503);
+      return fail(c, "Failed to update seeding config", 500);
     }
   }
 );
@@ -114,28 +119,7 @@ seeding.get(
     } catch (err) {
       resetSecretaryDb();
       logger.error("discord-bot", "Seeding sessions endpoint error", err);
-      return fail(c, "Secretary database unavailable", 503);
-    }
-  }
-);
-
-// POST /seeding/send-now
-seeding.post(
-  "/seeding/send-now",
-  requirePermission("manage:discord-bot"),
-  async (c) => {
-    try {
-      const userId = c.get("userId") as string;
-      const db = getSecretaryDb();
-      await db.$executeRaw(Prisma.sql`
-        INSERT INTO pending_actions (action_type, target_type, target_id, payload, actor_id)
-        VALUES ('send_seeding_call', 'seeding', 0, '{}', ${userId})`
-      );
-      await audit(c, "discord_bot.send_seeding_call", "seeding");
-      return success(c, { queued: true as const });
-    } catch (err) {
-      resetSecretaryDb();
-      return fail(c, `Failed to queue seeding call: ${err instanceof Error ? err.message : String(err)}`, 503);
+      return fail(c, "Failed to load seeding sessions", 500);
     }
   }
 );
@@ -198,12 +182,35 @@ seeding.get(
 
       return success(c, rapport);
     } catch (err) {
-      return fail(c, `Failed to load rapport: ${err instanceof Error ? err.message : String(err)}`, 500);
+      logger.error("discord-bot", "Seeding rapport endpoint error", err);
+      return fail(c, "Failed to load seeding rapport", 500);
     }
   }
 );
 
-// POST /seeding/rapport/send
+// POST /seeding/send-now - enqueue a seeding call (async -> 202)
+seeding.post(
+  "/seeding/send-now",
+  requirePermission("manage:discord-bot"),
+  async (c) => {
+    try {
+      const userId = c.get("userId") as string;
+      const db = getSecretaryDb();
+      await db.$executeRaw(Prisma.sql`
+        INSERT INTO pending_actions (action_type, target_type, target_id, payload, actor_id)
+        VALUES ('send_seeding_call', 'seeding', 0, '{}', ${userId})`
+      );
+      await audit(c, "discord_bot.send_seeding_call", "seeding");
+      return success(c, { queued: true as const }, 202);
+    } catch (err) {
+      resetSecretaryDb();
+      logger.error("discord-bot", "Seeding send-now error", err);
+      return fail(c, "Failed to queue seeding call", 500);
+    }
+  }
+);
+
+// POST /seeding/rapport/send - enqueue a seeding rapport (async -> 202)
 seeding.post(
   "/seeding/rapport/send",
   requirePermission("manage:discord-bot"),
@@ -222,96 +229,11 @@ seeding.post(
         VALUES ('send_seeding_rapport', 'seeding', 0, ${JSON.stringify({ date })}, ${userId})`
       );
       await audit(c, "discord_bot.send_seeding_rapport", "seeding", undefined, { date });
-      return success(c, { queued: true as const });
+      return success(c, { queued: true as const }, 202);
     } catch (err) {
       resetSecretaryDb();
-      return fail(c, `Failed to queue rapport send: ${err instanceof Error ? err.message : String(err)}`, 503);
-    }
-  }
-);
-
-// POST /prospects/:id/pause
-seeding.post(
-  "/prospects/:id/pause",
-  requirePermission("manage:discord-bot"),
-  async (c) => {
-    try {
-      const id = Number(c.req.param("id"));
-      const userId = c.get("userId") as string;
-      const db = getSecretaryDb();
-
-      await db.$queryRaw(Prisma.sql`UPDATE prospects SET paused_at = NOW() WHERE id = ${id}`);
-      await db.$queryRaw(Prisma.sql`
-        INSERT INTO prospect_events (prospect_id, event_type, actor_id, detail, created_at)
-         VALUES (${id}, 'paused', ${userId}, 'Period paused via dashboard', NOW())`
-      );
-
-      await audit(c, "discord_bot.pause_prospect", "prospect", String(id));
-      return success(c, { updated: true as const });
-    } catch (err) {
-      resetSecretaryDb();
-      logger.error("discord-bot", "Pause prospect error", err);
-      return fail(c, "Secretary database unavailable", 503);
-    }
-  }
-);
-
-// POST /prospects/:id/unpause
-seeding.post(
-  "/prospects/:id/unpause",
-  requirePermission("manage:discord-bot"),
-  async (c) => {
-    try {
-      const id = Number(c.req.param("id"));
-      const userId = c.get("userId") as string;
-      const db = getSecretaryDb();
-
-      await db.$queryRaw(Prisma.sql`UPDATE prospects SET paused_at = NULL WHERE id = ${id}`);
-      await db.$queryRaw(Prisma.sql`
-        INSERT INTO prospect_events (prospect_id, event_type, actor_id, detail, created_at)
-         VALUES (${id}, 'unpaused', ${userId}, 'Period unpaused via dashboard', NOW())`
-      );
-
-      await audit(c, "discord_bot.unpause_prospect", "prospect", String(id));
-      return success(c, { updated: true as const });
-    } catch (err) {
-      resetSecretaryDb();
-      logger.error("discord-bot", "Unpause prospect error", err);
-      return fail(c, "Secretary database unavailable", 503);
-    }
-  }
-);
-
-// POST /prospects/:id/extend
-seeding.post(
-  "/prospects/:id/extend",
-  requirePermission("manage:discord-bot"),
-  async (c) => {
-    try {
-      const id = Number(c.req.param("id"));
-      const userId = c.get("userId") as string;
-      const { days } = await c.req.json<{ days: number }>();
-
-      if (!days || days < 1 || days > 30) {
-        return fail(c, "days must be between 1 and 30");
-      }
-
-      const db = getSecretaryDb();
-
-      await db.$queryRaw(Prisma.sql`
-        UPDATE prospects SET extra_days = COALESCE(extra_days, 0) + ${days} WHERE id = ${id}`
-      );
-      await db.$queryRaw(Prisma.sql`
-        INSERT INTO prospect_events (prospect_id, event_type, actor_id, detail, created_at)
-         VALUES (${id}, 'extended', ${userId}, ${`Period extended by ${days} day(s) via dashboard`}, NOW())`
-      );
-
-      await audit(c, "discord_bot.extend_prospect", "prospect", String(id), { days });
-      return success(c, { updated: true as const });
-    } catch (err) {
-      resetSecretaryDb();
-      logger.error("discord-bot", "Extend prospect error", err);
-      return fail(c, "Secretary database unavailable", 503);
+      logger.error("discord-bot", "Seeding rapport send error", err);
+      return fail(c, "Failed to queue seeding rapport", 500);
     }
   }
 );

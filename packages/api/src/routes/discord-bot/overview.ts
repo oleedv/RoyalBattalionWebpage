@@ -85,7 +85,7 @@ function mapBotStatus(r: BotStatusRow): BotStatus {
     squadjsConnected: Boolean(r.squadjs_connected),
     seedingSchedulerActive: Boolean(r.seeding_scheduler_active),
     prospectSchedulerActive: Boolean(r.prospect_scheduler_active),
-    lastHeartbeat: r.last_heartbeat ? new Date(r.last_heartbeat).toISOString() : new Date().toISOString(),
+    lastHeartbeat: r.last_heartbeat ? new Date(r.last_heartbeat).toISOString() : null,
     startedAt: r.started_at ? new Date(r.started_at).toISOString() : null,
   };
 }
@@ -154,7 +154,7 @@ overview.get(
           id: r.id,
           uuid: r.uuid,
           tier: r.tier,
-          closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : "",
+          closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
           firstMessage: r.first_message || null,
         }));
 
@@ -193,7 +193,7 @@ overview.get(
     } catch (err: unknown) {
       resetSecretaryDb();
       logger.error("discord-bot", "Overview endpoint error", err);
-      return fail(c, "Secretary database unavailable", 503);
+      return fail(c, "Failed to load discord-bot overview", 500);
     }
   }
 );
@@ -204,10 +204,13 @@ overview.get(
   requirePermission("view:discord-bot", "manage:discord-bot"),
   async (c) => {
     try {
+      // No per-query .catch here: a genuine DB error must surface as 500, not be
+      // masked as the documented "no bot_status row" soft-miss (data: null).
       const rows: BotStatusRow[] = await getSecretaryDb().$queryRaw<BotStatusRow[]>(
         Prisma.sql`SELECT * FROM bot_status WHERE id = 1`
-      ).catch((): BotStatusRow[] => []);
+      );
 
+      // Documented soft-miss: absent row → data: null (client expects BotStatus | null).
       if (rows.length === 0) {
         return success(c, null);
       }
@@ -216,7 +219,7 @@ overview.get(
     } catch (err: unknown) {
       resetSecretaryDb();
       logger.error("discord-bot", "Status endpoint error", err);
-      return fail(c, "Secretary database unavailable", 503);
+      return fail(c, "Failed to fetch bot status", 500);
     }
   }
 );

@@ -36,8 +36,11 @@ import type {
   SeedTrackerStats,
 } from "shared";
 
-const BASE_URL =
+const API_ORIGIN =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+// All REST endpoints are versioned under /v1. (WebSocket, /health and /admins.cfg
+// are unversioned but are not reached through this client.)
+const BASE_URL = `${API_ORIGIN}/v1`;
 
 async function request<T>(
   path: string,
@@ -54,6 +57,10 @@ async function request<T>(
       },
     });
 
+    // 204 No Content (e.g. a successful DELETE) carries no body to parse.
+    if (res.status === 204) {
+      return { success: true };
+    }
     const data: ApiResponse<T> = await res.json();
     return data;
   } catch (error) {
@@ -102,13 +109,14 @@ function createCrudClient<T>(basePath: string) {
     },
     update(token: string, id: string, data: Record<string, unknown>) {
       return request<T>(`${basePath}/${id}`, {
-        method: "PUT",
+        method: "PATCH",
         headers: authHeaders(token),
         body: JSON.stringify(data),
       });
     },
     remove(token: string, id: string) {
-      return request<{ deleted: true }>(`${basePath}/${id}`, {
+      // Returns 204 No Content; request() maps that to { success: true }.
+      return request<null>(`${basePath}/${id}`, {
         method: "DELETE",
         headers: authHeaders(token),
       });
@@ -251,13 +259,14 @@ export const createClan = (token: string, data: { name: string; tag: string }) =
 export const updateClan = (token: string, id: string, data: { name?: string; tag?: string }) => clansClient.update(token, id, data);
 export const deleteClan = clansClient.remove;
 
+// Both role flags are now set via a single PATCH /roles/:id (merged endpoint).
 export function updateRoleWhitelistGrant(
   token: string,
   id: string,
   grantsWhitelist: boolean
-): Promise<ApiResponse<{ updated: true }>> {
-  return request<{ updated: true }>(`/roles/${id}/whitelist-grant`, {
-    method: "PUT",
+): Promise<ApiResponse<DiscordRole>> {
+  return request<DiscordRole>(`/roles/${id}`, {
+    method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify({ grantsWhitelist }),
   });
@@ -267,9 +276,9 @@ export function updateRoleMemberRole(
   token: string,
   id: string,
   isMemberRole: boolean,
-): Promise<ApiResponse<{ updated: true }>> {
-  return request<{ updated: true }>(`/roles/${id}/member-role`, {
-    method: "PUT",
+): Promise<ApiResponse<DiscordRole>> {
+  return request<DiscordRole>(`/roles/${id}`, {
+    method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify({ isMemberRole }),
   });
@@ -277,7 +286,40 @@ export function updateRoleMemberRole(
 
 // Users
 const usersClient = createCrudClient<UserWithRolesAndComments>("/users");
-export const getUsers = usersClient.getAll;
+export function getUsers(
+  token: string,
+  params: { page?: number; limit?: number; steamId?: string; eosId?: string } = {}
+): Promise<ApiResponse<Paginated<UserWithRolesAndComments>>> {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.steamId) qs.set("steamId", params.steamId);
+  if (params.eosId) qs.set("eosId", params.eosId);
+  const q = qs.toString();
+  return request<Paginated<UserWithRolesAndComments>>(`/users${q ? `?${q}` : ""}`, {
+    headers: authHeaders(token),
+  });
+}
+
+/** Page through the (now paginated) users collection and return the full list. */
+export async function getAllUsers(
+  token: string
+): Promise<ApiResponse<UserWithRolesAndComments[]>> {
+  const all: UserWithRolesAndComments[] = [];
+  let page = 1;
+  for (;;) {
+    const res = await getUsers(token, { page, limit: 100 });
+    if (!res.success || !res.data) {
+      return page === 1
+        ? { success: false, error: res.error ?? "Failed to load users" }
+        : { success: true, data: all };
+    }
+    all.push(...res.data.items);
+    if (!res.data.hasNext) break;
+    page++;
+  }
+  return { success: true, data: all };
+}
 export const updateUser = (
   token: string,
   id: string,
@@ -296,10 +338,10 @@ export function disableUser(
   id: string,
   reason: string,
 ): Promise<ApiResponse<{ disabled: true }>> {
-  return request<{ disabled: true }>(`/users/${id}/disable`, {
-    method: "POST",
+  return request<{ disabled: true }>(`/users/${id}/status`, {
+    method: "PATCH",
     headers: authHeaders(token),
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify({ disabled: true, reason }),
   });
 }
 
@@ -307,9 +349,10 @@ export function enableUser(
   token: string,
   id: string,
 ): Promise<ApiResponse<{ enabled: true }>> {
-  return request<{ enabled: true }>(`/users/${id}/enable`, {
-    method: "POST",
+  return request<{ enabled: true }>(`/users/${id}/status`, {
+    method: "PATCH",
     headers: authHeaders(token),
+    body: JSON.stringify({ disabled: false }),
   });
 }
 
@@ -471,14 +514,14 @@ export function getTicketByUuid(
 export function getProspectByUuid(
   uuid: string
 ): Promise<ApiResponse<Prospect>> {
-  return request<Prospect>(`/tickets/by-uuid/prospect/${uuid}`);
+  return request<Prospect>(`/prospects/by-uuid/${uuid}`);
 }
 
 // Legacy Tickets
 export function getLegacyTickets(
   token: string
 ): Promise<ApiResponse<LegacyTicket[]>> {
-  return request<LegacyTicket[]>("/tickets/legacy", {
+  return request<LegacyTicket[]>("/legacy-tickets", {
     headers: authHeaders(token),
   });
 }
@@ -487,7 +530,7 @@ export function getLegacyTicket(
   token: string,
   id: number
 ): Promise<ApiResponse<LegacyTicket>> {
-  return request<LegacyTicket>(`/tickets/legacy/${id}`, {
+  return request<LegacyTicket>(`/legacy-tickets/${id}`, {
     headers: authHeaders(token),
   });
 }
@@ -495,13 +538,13 @@ export function getLegacyTicket(
 export function getLegacyTicketByUuid(
   uuid: string
 ): Promise<ApiResponse<LegacyTicket>> {
-  return request<LegacyTicket>(`/tickets/by-uuid/legacy/${uuid}`);
+  return request<LegacyTicket>(`/legacy-tickets/by-uuid/${uuid}`);
 }
 
 export function getProspects(
   token: string
 ): Promise<ApiResponse<Prospect[]>> {
-  return request<Prospect[]>("/tickets/prospects/list", {
+  return request<Prospect[]>("/prospects", {
     headers: authHeaders(token),
   });
 }
@@ -510,7 +553,7 @@ export function getProspect(
   token: string,
   id: number
 ): Promise<ApiResponse<Prospect>> {
-  return request<Prospect>(`/tickets/prospects/${id}`, {
+  return request<Prospect>(`/prospects/${id}`, {
     headers: authHeaders(token),
   });
 }
@@ -615,11 +658,13 @@ export function getServerConfigs(
 
 export function toggleServerSync(
   token: string,
-  server: string
+  server: string,
+  syncEnabled: boolean
 ): Promise<ApiResponse<ServerConfig>> {
-  return request<ServerConfig>(`/server-config/${encodeURIComponent(server)}/sync`, {
-    method: "PUT",
+  return request<ServerConfig>(`/server-config/${encodeURIComponent(server)}`, {
+    method: "PATCH",
     headers: authHeaders(token),
+    body: JSON.stringify({ syncEnabled }),
   });
 }
 
@@ -648,7 +693,7 @@ export function updateSquadJSPlugins(
   plugins: SquadJSPlugin[]
 ): Promise<ApiResponse<{ saved: true }>> {
   return request<{ saved: true }>(`/squadjs-config/${env}`, {
-    method: "PUT",
+    method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify({ plugins }),
   });
@@ -685,7 +730,7 @@ export function updateSeedingConfig(
   data: Partial<SeedingConfig>
 ): Promise<ApiResponse<{ updated: true }>> {
   return request<{ updated: true }>("/discord-bot/seeding/config", {
-    method: "PUT",
+    method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify(data),
   });
@@ -731,13 +776,15 @@ export function sendSeedingRapport(
   });
 }
 
+// Prospect state changes are now one merged PATCH /prospects/:id.
 export function pauseProspect(
   token: string,
   id: number
 ): Promise<ApiResponse<{ updated: true }>> {
-  return request<{ updated: true }>(`/discord-bot/prospects/${id}/pause`, {
-    method: "POST",
+  return request<{ updated: true }>(`/prospects/${id}`, {
+    method: "PATCH",
     headers: authHeaders(token),
+    body: JSON.stringify({ paused: true }),
   });
 }
 
@@ -745,9 +792,10 @@ export function unpauseProspect(
   token: string,
   id: number
 ): Promise<ApiResponse<{ updated: true }>> {
-  return request<{ updated: true }>(`/discord-bot/prospects/${id}/unpause`, {
-    method: "POST",
+  return request<{ updated: true }>(`/prospects/${id}`, {
+    method: "PATCH",
     headers: authHeaders(token),
+    body: JSON.stringify({ paused: false }),
   });
 }
 
@@ -756,10 +804,10 @@ export function extendProspect(
   id: number,
   days: number
 ): Promise<ApiResponse<{ updated: true }>> {
-  return request<{ updated: true }>(`/discord-bot/prospects/${id}/extend`, {
-    method: "POST",
+  return request<{ updated: true }>(`/prospects/${id}`, {
+    method: "PATCH",
     headers: authHeaders(token),
-    body: JSON.stringify({ days }),
+    body: JSON.stringify({ extendDays: days }),
   });
 }
 
@@ -820,8 +868,8 @@ export function getTicketTimeouts(
 export function createTicketTimeout(
   token: string,
   data: { userId: string; hours: number }
-): Promise<ApiResponse<{ created: true }>> {
-  return request<{ created: true }>("/discord-bot/timeouts", {
+): Promise<ApiResponse<TicketTimeout | null>> {
+  return request<TicketTimeout | null>("/discord-bot/timeouts", {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(data),
@@ -831,52 +879,9 @@ export function createTicketTimeout(
 export function expireTicketTimeout(
   token: string,
   id: number
-): Promise<ApiResponse<{ updated: true }>> {
-  return request<{ updated: true }>(`/discord-bot/timeouts/${id}/expire`, {
-    method: "POST",
-    headers: authHeaders(token),
-  });
-}
-
-// Ticket Actions (queued for bot)
-export function closeTicket(
-  token: string,
-  id: number
-): Promise<ApiResponse<{ queued: true }>> {
-  return request<{ queued: true }>(`/discord-bot/ticket-actions/${id}/close`, {
-    method: "POST",
-    headers: authHeaders(token),
-  });
-}
-
-export function escalateTicket(
-  token: string,
-  id: number,
-  tier: string
-): Promise<ApiResponse<{ queued: true }>> {
-  return request<{ queued: true }>(`/discord-bot/ticket-actions/${id}/escalate`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify({ tier }),
-  });
-}
-
-export function reopenTicket(
-  token: string,
-  id: number
-): Promise<ApiResponse<{ queued: true }>> {
-  return request<{ queued: true }>(`/discord-bot/ticket-actions/${id}/reopen`, {
-    method: "POST",
-    headers: authHeaders(token),
-  });
-}
-
-export function forceCloseTicket(
-  token: string,
-  id: number
-): Promise<ApiResponse<{ queued: true }>> {
-  return request<{ queued: true }>(`/discord-bot/ticket-actions/${id}/force-close`, {
-    method: "POST",
+): Promise<ApiResponse<null>> {
+  return request<null>(`/discord-bot/timeouts/${id}`, {
+    method: "DELETE",
     headers: authHeaders(token),
   });
 }
@@ -887,7 +892,7 @@ export function reassignMentor(
   prospectId: number,
   mentorId: string
 ): Promise<ApiResponse<{ queued: true }>> {
-  return request<{ queued: true }>(`/discord-bot/prospects/${prospectId}/reassign-mentor`, {
+  return request<{ queued: true }>(`/prospects/${prospectId}/mentor-reassignment`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ mentorId }),
@@ -897,7 +902,7 @@ export function reassignMentor(
 export function getMentorGroups(
   token: string
 ): Promise<ApiResponse<import("shared").MentorGroup[]>> {
-  return request<import("shared").MentorGroup[]>("/discord-bot/prospects/mentors", {
+  return request<import("shared").MentorGroup[]>("/prospects/mentors", {
     headers: authHeaders(token),
   });
 }
@@ -910,21 +915,26 @@ export function getUserProfile(token: string, id: string): Promise<ApiResponse<U
 }
 
 export function getUserProfileBySteamId(token: string, steamId: string): Promise<ApiResponse<UserProfile>> {
-  return request<UserProfile>(`/users/profile/by-steamid/${steamId}`, {
+  return request<UserProfile>(`/users/profile?steamId=${encodeURIComponent(steamId)}`, {
     headers: authHeaders(token),
   });
 }
 
-export function getUserIdBySteamId(token: string, steamId: string): Promise<ApiResponse<{ id: string }>> {
-  return request<{ id: string }>(`/users/by-steamid/${steamId}`, {
-    headers: authHeaders(token),
-  });
+// Reverse lookups now filter the users collection (?steamId= / ?eosId=) and take the first hit.
+export async function getUserIdBySteamId(token: string, steamId: string): Promise<ApiResponse<{ id: string }>> {
+  const res = await getUsers(token, { steamId, limit: 1 });
+  if (!res.success || !res.data) return { success: false, error: res.error ?? "Lookup failed" };
+  const user = res.data.items[0];
+  if (!user) return { success: false, error: "User not found" };
+  return { success: true, data: { id: user.id } };
 }
 
-export function getUserIdByEosId(token: string, eosId: string): Promise<ApiResponse<{ id: string }>> {
-  return request<{ id: string }>(`/users/by-eosid/${eosId}`, {
-    headers: authHeaders(token),
-  });
+export async function getUserIdByEosId(token: string, eosId: string): Promise<ApiResponse<{ id: string }>> {
+  const res = await getUsers(token, { eosId, limit: 1 });
+  if (!res.success || !res.data) return { success: false, error: res.error ?? "Lookup failed" };
+  const user = res.data.items[0];
+  if (!user) return { success: false, error: "User not found" };
+  return { success: true, data: { id: user.id } };
 }
 
 export function deleteAuditLog(token: string, id: string): Promise<ApiResponse<{ deleted: true }>> {
@@ -968,8 +978,8 @@ export function createLobby(
   serverName: string
 ): Promise<ApiResponse<{ url: string; serverId: string; serverName: string }>> {
   return request<{ url: string; serverId: string; serverName: string }>(
-    `/lobby/create/${encodeURIComponent(serverName)}`,
-    { method: "POST" }
+    `/lobby`,
+    { method: "POST", body: JSON.stringify({ serverName }) }
   );
 }
 
@@ -1047,7 +1057,7 @@ export function getSeedTrackerLeaderboard(
   days = 30,
   limit = 50
 ): Promise<ApiResponse<SeedTrackerLeaderboardEntry[]>> {
-  return request(`/seeding-tracker/leaderboard?days=${days}&limit=${limit}`, {
+  return request(`/seeding-tracker/players?days=${days}&limit=${limit}`, {
     headers: authHeaders(token),
   });
 }
@@ -1056,7 +1066,7 @@ export function getSeedTrackerPlayer(
   token: string,
   steamId: string
 ): Promise<ApiResponse<SeedTrackerPlayerDetail>> {
-  return request(`/seeding-tracker/player/${steamId}`, {
+  return request(`/seeding-tracker/players/${steamId}`, {
     headers: authHeaders(token),
   });
 }
@@ -1065,7 +1075,7 @@ export function searchSeedTracker(
   token: string,
   query: string
 ): Promise<ApiResponse<SeedTrackerLeaderboardEntry[]>> {
-  return request(`/seeding-tracker/search?q=${encodeURIComponent(query)}`, {
+  return request(`/seeding-tracker/players?q=${encodeURIComponent(query)}`, {
     headers: authHeaders(token),
   });
 }

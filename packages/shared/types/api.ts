@@ -134,7 +134,7 @@ export interface SeedTrackerLeaderboardEntry {
   totalDuration: number;
   avgQuality: number;
   streak: number;
-  lastSeedDate: string;
+  lastSeedDate: string | null;
   isActive?: boolean;
 }
 
@@ -161,7 +161,7 @@ export interface SeedTrackerSession {
   id: number;
   seedDate: string;
   joinTime: string;
-  spawnTime: string;
+  spawnTime: string | null;
   leaveTime: string | null;
   joinPopulation: number;
   peakPopulation: number;

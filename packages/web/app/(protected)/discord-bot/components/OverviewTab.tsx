@@ -39,7 +39,7 @@ function ConnectionDot({ connected, label }: { connected: boolean; label: string
 }
 
 function BotStatusBanner({ status }: { status: BotStatus }) {
-  const heartbeatAge = Date.now() - new Date(status.lastHeartbeat).getTime();
+  const heartbeatAge = status.lastHeartbeat ? Date.now() - new Date(status.lastHeartbeat).getTime() : Infinity;
   const isStale = heartbeatAge > 3 * 60 * 1000;
   const effectiveStatus = isStale ? "offline" : status.status;
 
@@ -150,7 +150,7 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
                       <td className="px-4 py-2 text-text-primary">#{t.id}</td>
                       <td className="px-4 py-2 capitalize text-text-secondary">{t.tier.replace(/_/g, " ")}</td>
                       <td className="max-w-xs truncate px-4 py-2 text-text-secondary">{t.firstMessage || "-"}</td>
-                      <td className="px-4 py-2 text-text-muted">{new Date(t.closedAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-2 text-text-muted">{t.closedAt ? new Date(t.closedAt).toLocaleDateString() : "-"}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -2,12 +2,13 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { SignJWT } from "jose";
-import type { Permission, ApiResponse, AuthSyncResponse, AuthMeResponse } from "shared";
+import type { Permission, AuthSyncResponse } from "shared";
 import prisma from "../lib/db";
 import { env } from "../lib/env";
 import { fetchDiscordUser, fetchGuildRoles } from "../lib/discord";
 import { authMiddleware } from "../middleware/auth";
 import { rateLimit } from "../middleware/rate-limit";
+import { success, fail } from "../lib/crud-helpers";
 import { logger } from "../lib/logger";
 
 const auth = new Hono();
@@ -19,7 +20,7 @@ const syncSchema = z.object({
 const getSecret = () => new TextEncoder().encode(env.JWT_SECRET);
 
 const SYNC_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
-const syncCache = new Map<string, { data: ApiResponse<AuthSyncResponse>; expiry: number }>();
+const syncCache = new Map<string, { data: AuthSyncResponse; expiry: number }>();
 
 export function clearSyncCache(discordId: string) {
   syncCache.delete(`discord:${discordId}`);
@@ -30,7 +31,7 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
   const guildId = env.DISCORD_GUILD_ID;
 
   if (!guildId) {
-    return c.json<ApiResponse<never>>({ success: false, error: "DISCORD_GUILD_ID is not configured" }, 500);
+    return fail(c, "DISCORD_GUILD_ID is not configured", 500);
   }
 
   // Prune expired entries
@@ -47,7 +48,7 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
     const cacheKey = `discord:${discordUser.id}`;
     const cached = syncCache.get(cacheKey);
     if (cached && cached.expiry > now) {
-      return c.json(cached.data);
+      return success(c, cached.data);
     }
 
     const guildRoles = await fetchGuildRoles(accessToken, guildId);
@@ -78,10 +79,7 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
 
     // Block disabled users
     if (user.disabled) {
-      return c.json<ApiResponse<never>>({
-        success: false,
-        error: "ACCOUNT_DISABLED",
-      }, 403);
+      return fail(c, "ACCOUNT_DISABLED", 403);
     }
 
     // Find matching Discord roles in our database
@@ -140,24 +138,18 @@ auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
       })),
     };
 
-    const response: ApiResponse<AuthSyncResponse> = {
-      success: true,
-      data: { token, user: userWithRoles, permissions },
-    };
+    const payload: AuthSyncResponse = { token, user: userWithRoles, permissions };
 
-    syncCache.set(cacheKey, { data: response, expiry: Date.now() + SYNC_CACHE_TTL_MS });
+    syncCache.set(cacheKey, { data: payload, expiry: Date.now() + SYNC_CACHE_TTL_MS });
 
-    return c.json(response);
+    return success(c, payload);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Auth sync failed";
     logger.error("auth", "Auth sync error", err);
     if (message.includes("guild member fetch failed: 404")) {
-      return c.json<ApiResponse<never>>({
-        success: false,
-        error: "NOT_IN_GUILD",
-      }, 403);
+      return fail(c, "NOT_IN_GUILD", 403);
     }
-    return c.json<ApiResponse<never>>({ success: false, error: "Auth sync failed" }, 500);
+    return fail(c, "Auth sync failed", 500);
   }
 });
 
@@ -175,7 +167,7 @@ auth.get("/me", authMiddleware, async (c) => {
   });
 
   if (!user) {
-    return c.json<ApiResponse<never>>({ success: false, error: "User not found" }, 404);
+    return fail(c, "User not found", 404);
   }
 
   const userWithRoles = {
@@ -202,10 +194,7 @@ auth.get("/me", authMiddleware, async (c) => {
     })),
   };
 
-  return c.json<ApiResponse<AuthMeResponse>>({
-    success: true,
-    data: { user: userWithRoles, permissions },
-  });
+  return success(c, { user: userWithRoles, permissions });
 });
 
 export default auth;

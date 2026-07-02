@@ -1,12 +1,13 @@
 import { Hono } from "hono";
 import { Prisma } from "../generated/prisma/client";
-import type { ApiResponse, Permission, Match } from "shared";
+import type { Permission, Match } from "shared";
 import prisma from "../lib/db";
 import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
 import { fetchAllServers, type ServerStatus } from "./servers";
 import { squadjsSocket } from "../lib/squadjs-socket";
 import { logger } from "../lib/logger";
+import { success } from "../lib/crud-helpers";
 
 const stats = new Hono();
 
@@ -186,7 +187,7 @@ stats.get("/summary", async (c) => {
     }
   }
 
-  return c.json<ApiResponse<typeof result>>({ success: true, data: result });
+  return success(c, result);
 });
 
 export default stats;

@@ -221,7 +221,8 @@ export default function WhitelistPage() {
   async function handleToggleSync() {
     if (!apiToken || !activeServer) return;
     setTogglingSync(true);
-    const res = await toggleServerSync(apiToken, activeServer);
+    const current = serverConfigs.find((c) => c.server === activeServer);
+    const res = await toggleServerSync(apiToken, activeServer, !current?.syncEnabled);
     if (res.success && res.data) {
       setServerConfigs((prev) =>
         prev.map((c) => (c.server === activeServer ? res.data! : c))

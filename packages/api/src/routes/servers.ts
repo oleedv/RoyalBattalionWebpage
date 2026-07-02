@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import type { ApiResponse } from "shared";
 import { env } from "../lib/env";
 import { logger } from "../lib/logger";
+import { success } from "../lib/crud-helpers";
 
 const servers = new Hono();
 
@@ -93,7 +93,7 @@ export async function fetchAllServers(): Promise<ServerStatus[]> {
 
 servers.get("/status", async (c) => {
   const data = await fetchAllServers();
-  return c.json<ApiResponse<ServerStatus[]>>({ success: true, data });
+  return success(c, data);
 });
 
 export default servers;

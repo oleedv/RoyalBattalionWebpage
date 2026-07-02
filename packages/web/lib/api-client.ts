@@ -65,6 +65,20 @@ async function request<T>(
       return { success: true };
     }
     const data: ApiResponse<T> = await res.json();
+
+    // The API envelope is supposed to carry `error` as a string, but some middleware
+    // (notably zod validation) can return a structured error object. Coerce any
+    // non-string error into a displayable message so the UI never tries to render an
+    // object (which throws in React and trips the error boundary).
+    const rawErr: unknown = (data as { error?: unknown }).error;
+    if (data && data.success === false && typeof rawErr !== "string") {
+      const obj = rawErr as { issues?: Array<{ message?: string }>; message?: string } | null;
+      const msg =
+        obj?.issues?.map((i) => i?.message).filter(Boolean).join("; ") ||
+        obj?.message ||
+        "Request failed";
+      return { success: false, error: msg };
+    }
     return data;
   } catch (error) {
     if (typeof window === "undefined") {

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
+import { validate } from "../lib/validate";
 import type { WhitelistEntry, WhitelistEntryWithComments, WhitelistComment, WhitelistCandidate } from "shared";
 import prisma from "../lib/db";
 import { findOrThrow, success, fail } from "../lib/crud-helpers";
@@ -211,7 +211,7 @@ whitelist.get("/candidates", requirePermission("manage:whitelist"), async (c) =>
 
 // ── Add entry (with duplicate warning) ───────────────────────
 
-whitelist.post("/", requirePermission("manage:whitelist"), rateLimit(30), zValidator("json", addEntrySchema), async (c) => {
+whitelist.post("/", requirePermission("manage:whitelist"), rateLimit(30), validate("json", addEntrySchema), async (c) => {
   const userId = c.get("userId");
   const { steamId, server, name, clan, clanId, role, groupId, reason, expiresAt } = c.req.valid("json");
 
@@ -291,7 +291,7 @@ const bulkAddSchema = z.object({
   })).min(1).max(200),
 });
 
-whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), zValidator("json", bulkAddSchema), async (c) => {
+whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), validate("json", bulkAddSchema), async (c) => {
   const userId = c.get("userId");
   const { server, entries } = c.req.valid("json");
 
@@ -368,7 +368,7 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), zVa
 
 // ── Bulk update ──────────────────────────────────────────────
 
-whitelist.post("/bulk-update", requirePermission("manage:whitelist"), rateLimit(10), zValidator("json", bulkUpdateSchema), async (c) => {
+whitelist.post("/bulk-update", requirePermission("manage:whitelist"), rateLimit(10), validate("json", bulkUpdateSchema), async (c) => {
   const { ids, data } = c.req.valid("json");
 
   try {
@@ -404,7 +404,7 @@ whitelist.post("/bulk-update", requirePermission("manage:whitelist"), rateLimit(
 
 // ── Bulk delete ──────────────────────────────────────────────
 
-whitelist.post("/bulk-delete", requirePermission("manage:whitelist"), rateLimit(10), zValidator("json", bulkDeleteSchema), async (c) => {
+whitelist.post("/bulk-delete", requirePermission("manage:whitelist"), rateLimit(10), validate("json", bulkDeleteSchema), async (c) => {
   const { ids } = c.req.valid("json");
 
   try {
@@ -461,7 +461,7 @@ whitelist.get("/:id", requirePermission("view:whitelist"), async (c) => {
 
 // ── Update entry ─────────────────────────────────────────────
 
-whitelist.patch("/:id", requirePermission("manage:whitelist"), zValidator("json", updateEntrySchema), async (c) => {
+whitelist.patch("/:id", requirePermission("manage:whitelist"), validate("json", updateEntrySchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
@@ -545,7 +545,7 @@ whitelist.delete("/:id", requirePermission("manage:whitelist"), async (c) => {
 
 // ── Add comment ──────────────────────────────────────────────
 
-whitelist.post("/:id/comments", requirePermission("manage:whitelist"), zValidator("json", addCommentSchema), async (c) => {
+whitelist.post("/:id/comments", requirePermission("manage:whitelist"), validate("json", addCommentSchema), async (c) => {
   const entryId = c.req.param("id");
   const authorId = c.get("userId") as string;
   const { text } = c.req.valid("json");

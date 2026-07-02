@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
+import { validate } from "../lib/validate";
 import type { AdminGroup } from "shared";
 import prisma from "../lib/db";
 import { findOrThrow, success, fail } from "../lib/crud-helpers";
@@ -50,7 +50,7 @@ adminGroups.get("/", async (c) => {
   return success(c, groups.map(toAdminGroup));
 });
 
-adminGroups.post("/", zValidator("json", createGroupSchema), async (c) => {
+adminGroups.post("/", validate("json", createGroupSchema), async (c) => {
   const { name, permissions, sortOrder } = c.req.valid("json");
 
   const collision = await prisma.adminGroup.findUnique({ where: { name }, select: { id: true } });
@@ -70,7 +70,7 @@ adminGroups.post("/", zValidator("json", createGroupSchema), async (c) => {
   }
 });
 
-adminGroups.patch("/:id", zValidator("json", updateGroupSchema), async (c) => {
+adminGroups.patch("/:id", validate("json", updateGroupSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 

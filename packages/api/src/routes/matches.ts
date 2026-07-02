@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
+import { validate } from "../lib/validate";
 import type { Match } from "shared";
 import prisma from "../lib/db";
 import { findOrThrow, success, fail } from "../lib/crud-helpers";
@@ -88,7 +88,7 @@ matches.get("/", requirePermission("manage:matches"), async (c) => {
   return success(c, paginate(entries.map(toMatch), total, page, limit));
 });
 
-matches.patch("/:id", requirePermission("manage:matches"), zValidator("json", updateMatchSchema), async (c) => {
+matches.patch("/:id", requirePermission("manage:matches"), validate("json", updateMatchSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 

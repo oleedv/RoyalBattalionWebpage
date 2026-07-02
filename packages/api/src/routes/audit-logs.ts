@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
+import { validate } from "../lib/validate";
 import type { AuditLogEntry } from "shared";
 import prisma from "../lib/db";
 import { success, fail } from "../lib/crud-helpers";
@@ -73,7 +73,7 @@ const bulkDeleteSchema = z.object({
   ids: z.array(z.string()).min(1).max(500),
 });
 
-auditLogs.post("/bulk-delete", requirePermission("developer"), zValidator("json", bulkDeleteSchema), async (c) => {
+auditLogs.post("/bulk-delete", requirePermission("developer"), validate("json", bulkDeleteSchema), async (c) => {
   const { ids } = c.req.valid("json");
   const result = await prisma.auditLog.deleteMany({ where: { id: { in: ids } } });
   await audit(c, "audit-log.bulk-delete", "audit_log", null, { ids, count: result.count });

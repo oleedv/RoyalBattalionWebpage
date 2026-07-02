@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
+import { validate } from "../lib/validate";
 import type { ServerConfig } from "shared";
 import prisma from "../lib/db";
 import { authMiddleware } from "../middleware/auth";
@@ -55,7 +55,7 @@ const upsertSchema = z.object({
   syncEnabled: z.boolean().optional(),
 });
 
-serverConfig.post("/", requirePermission("developer"), zValidator("json", upsertSchema), async (c) => {
+serverConfig.post("/", requirePermission("developer"), validate("json", upsertSchema), async (c) => {
   const body = c.req.valid("json");
 
   // Encrypt SFTP password if encryption is available and a password is provided
@@ -102,7 +102,7 @@ const syncSchema = z.object({ syncEnabled: z.boolean() });
 serverConfig.patch(
   "/:server",
   requirePermission("manage:whitelist-sync"),
-  zValidator("json", syncSchema),
+  validate("json", syncSchema),
   async (c) => {
     const server = c.req.param("server");
     const { syncEnabled } = c.req.valid("json");

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
+import { validate } from "../lib/validate";
 import type { SquadJSPlugin } from "shared";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
@@ -88,7 +88,7 @@ const updateSchema = z.object({
 squadjsConfig.patch(
   "/:env",
   requirePermission("manage:squadjs"),
-  zValidator("json", updateSchema),
+  validate("json", updateSchema),
   async (c) => {
     const env = parseEnv(c.req.param("env"));
     if (!env) {

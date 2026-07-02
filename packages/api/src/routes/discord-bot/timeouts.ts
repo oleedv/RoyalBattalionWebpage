@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
+import { validate } from "../../lib/validate";
 import { Prisma } from "../../generated/prisma/client";
 import type { TicketTimeout } from "shared";
 import getSecretaryDb, { resetSecretaryDb } from "../../lib/secretary-db";
@@ -57,7 +57,7 @@ timeouts.get(
 timeouts.post(
   "/timeouts",
   requirePermission("manage:discord-bot"),
-  zValidator("json", timeoutSchema),
+  validate("json", timeoutSchema),
   async (c) => {
     try {
       const { userId, hours } = c.req.valid("json");

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
+import { validate } from "../lib/validate";
 import type { Clan } from "shared";
 import prisma from "../lib/db";
 import { findOrThrow, success, fail } from "../lib/crud-helpers";
@@ -38,7 +38,7 @@ clans.get("/", async (c) => {
   return success(c, rows.map(toClan));
 });
 
-clans.post("/", zValidator("json", createClanSchema), async (c) => {
+clans.post("/", validate("json", createClanSchema), async (c) => {
   const { name, tag } = c.req.valid("json");
 
   const [byName, byTag] = await Promise.all([
@@ -58,7 +58,7 @@ clans.post("/", zValidator("json", createClanSchema), async (c) => {
   }
 });
 
-clans.patch("/:id", zValidator("json", updateClanSchema), async (c) => {
+clans.patch("/:id", validate("json", updateClanSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 

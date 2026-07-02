@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
+import { validate } from "../lib/validate";
 import { SignJWT } from "jose";
 import type { Permission, AuthSyncResponse } from "shared";
 import prisma from "../lib/db";
@@ -26,7 +26,7 @@ export function clearSyncCache(discordId: string) {
   syncCache.delete(`discord:${discordId}`);
 }
 
-auth.post("/sync", rateLimit(10), zValidator("json", syncSchema), async (c) => {
+auth.post("/sync", rateLimit(10), validate("json", syncSchema), async (c) => {
   const { accessToken } = c.req.valid("json");
   const guildId = env.DISCORD_GUILD_ID;
 

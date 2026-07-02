@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
+import { validate } from "../lib/validate";
 import { PERMISSIONS } from "shared";
 import type { DiscordRole, Permission } from "shared";
 import prisma from "../lib/db";
@@ -44,7 +44,7 @@ roles.get("/", async (c) => {
   return success(c, result);
 });
 
-roles.post("/", zValidator("json", createRoleSchema), async (c) => {
+roles.post("/", validate("json", createRoleSchema), async (c) => {
   const { discordRoleId, name, permissions } = c.req.valid("json");
 
   const collision = await prisma.discordRole.findUnique({
@@ -85,7 +85,7 @@ roles.post("/", zValidator("json", createRoleSchema), async (c) => {
   }
 });
 
-roles.put("/:id/permissions", zValidator("json", updatePermissionsSchema), async (c) => {
+roles.put("/:id/permissions", validate("json", updatePermissionsSchema), async (c) => {
   const id = c.req.param("id");
   const { permissions } = c.req.valid("json");
 
@@ -122,7 +122,7 @@ const updateRoleSchema = z.object({
 });
 
 // Partial update of role flags (merges the former member-role + whitelist-grant toggles).
-roles.patch("/:id", zValidator("json", updateRoleSchema), async (c) => {
+roles.patch("/:id", validate("json", updateRoleSchema), async (c) => {
   const id = c.req.param("id");
   const { isMemberRole, grantsWhitelist } = c.req.valid("json");
 

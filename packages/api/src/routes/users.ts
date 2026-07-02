@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { zValidator } from "@hono/zod-validator";
+import { validate } from "../lib/validate";
 import type {
   UserWithRoles,
   UserWithRolesAndComments,
@@ -38,7 +38,7 @@ const linkSteamSchema = z.object({
   steamId: z.string().regex(/^\d{17}$/, "Steam ID must be a 17-digit number"),
 });
 
-users.post("/link-steam", authMiddleware, rateLimit(10), zValidator("json", linkSteamSchema), async (c) => {
+users.post("/link-steam", authMiddleware, rateLimit(10), validate("json", linkSteamSchema), async (c) => {
   const userId = c.get("userId");
   const { steamId } = c.req.valid("json");
 
@@ -339,7 +339,7 @@ const bulkUpdateSchema = z.object({
   }),
 });
 
-users.post("/bulk-update", authMiddleware, requirePermission("manage:members"), rateLimit(10), zValidator("json", bulkUpdateSchema), async (c) => {
+users.post("/bulk-update", authMiddleware, requirePermission("manage:members"), rateLimit(10), validate("json", bulkUpdateSchema), async (c) => {
   const { ids, data } = c.req.valid("json");
 
   const updateData: Record<string, unknown> = {};
@@ -369,7 +369,7 @@ const bulkDeleteSchema = z.object({
   ids: z.array(z.string()).min(1).max(500),
 });
 
-users.post("/bulk-delete", authMiddleware, requirePermission("manage:members"), rateLimit(10), zValidator("json", bulkDeleteSchema), async (c) => {
+users.post("/bulk-delete", authMiddleware, requirePermission("manage:members"), rateLimit(10), validate("json", bulkDeleteSchema), async (c) => {
   const { ids } = c.req.valid("json");
 
   const toDelete = await prisma.user.findMany({
@@ -393,7 +393,7 @@ const bulkCommentSchema = z.object({
   text: z.string().min(1).max(2000),
 });
 
-users.post("/bulk-comment", authMiddleware, requirePermission("manage:members"), rateLimit(10), zValidator("json", bulkCommentSchema), async (c) => {
+users.post("/bulk-comment", authMiddleware, requirePermission("manage:members"), rateLimit(10), validate("json", bulkCommentSchema), async (c) => {
   const { ids, text } = c.req.valid("json");
   const authorId = c.get("userId") as string;
 
@@ -422,7 +422,7 @@ const statusSchema = z.object({
   reason: z.string().min(1).max(500).optional(),
 });
 
-users.patch("/:id/status", authMiddleware, requirePermission("developer"), zValidator("json", statusSchema), async (c) => {
+users.patch("/:id/status", authMiddleware, requirePermission("developer"), validate("json", statusSchema), async (c) => {
   const id = c.req.param("id");
   const actorId = c.get("userId") as string;
   const { disabled, reason } = c.req.valid("json");
@@ -497,7 +497,7 @@ const bulkDisableSchema = z.object({
   reason: z.string().min(1).max(500),
 });
 
-users.post("/bulk-disable", authMiddleware, requirePermission("developer"), rateLimit(10), zValidator("json", bulkDisableSchema), async (c) => {
+users.post("/bulk-disable", authMiddleware, requirePermission("developer"), rateLimit(10), validate("json", bulkDisableSchema), async (c) => {
   const actorId = c.get("userId") as string;
   const { ids, reason } = c.req.valid("json");
 
@@ -549,7 +549,7 @@ const bulkEnableSchema = z.object({
   ids: z.array(z.string()).min(1).max(500),
 });
 
-users.post("/bulk-enable", authMiddleware, requirePermission("developer"), rateLimit(10), zValidator("json", bulkEnableSchema), async (c) => {
+users.post("/bulk-enable", authMiddleware, requirePermission("developer"), rateLimit(10), validate("json", bulkEnableSchema), async (c) => {
   const { ids } = c.req.valid("json");
 
   const targets = await prisma.user.findMany({
@@ -622,7 +622,7 @@ const updateUserSchema = z.object({
   dateOfBirth: z.string().nullable().optional(),
 });
 
-users.patch("/:id", authMiddleware, requirePermission("manage:members"), zValidator("json", updateUserSchema), async (c) => {
+users.patch("/:id", authMiddleware, requirePermission("manage:members"), validate("json", updateUserSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
@@ -694,7 +694,7 @@ const resolveIdsSchema = z.object({
   discordIds: z.array(z.string()).min(1).max(200),
 });
 
-users.post("/resolve-ids", authMiddleware, zValidator("json", resolveIdsSchema), async (c) => {
+users.post("/resolve-ids", authMiddleware, validate("json", resolveIdsSchema), async (c) => {
   const { discordIds } = c.req.valid("json");
 
   const found = await prisma.user.findMany({
@@ -811,7 +811,7 @@ const addCommentSchema = z.object({
   text: z.string().min(1).max(2000),
 });
 
-users.post("/:id/comments", authMiddleware, requirePermission("manage:members"), zValidator("json", addCommentSchema), async (c) => {
+users.post("/:id/comments", authMiddleware, requirePermission("manage:members"), validate("json", addCommentSchema), async (c) => {
   const userId = c.req.param("id");
   const authorId = c.get("userId") as string;
   const { text } = c.req.valid("json");

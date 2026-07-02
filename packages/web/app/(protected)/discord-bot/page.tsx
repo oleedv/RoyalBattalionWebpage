@@ -5,18 +5,16 @@ import { usePermissions } from "@/lib/permission-context";
 import OverviewTab from "./components/OverviewTab";
 import TicketsTab from "./components/TicketsTab";
 import ProspectsTab from "./components/ProspectsTab";
-import SeedingTab from "./components/SeedingTab";
 import MessagesTab from "./components/MessagesTab";
 import LogsTab from "./components/LogsTab";
 import TimeoutsTab from "./components/TimeoutsTab";
 
-type Tab = "overview" | "tickets" | "prospects" | "seeding" | "messages" | "logs" | "timeouts";
+type Tab = "overview" | "tickets" | "prospects" | "messages" | "logs" | "timeouts";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "tickets", label: "Tickets" },
   { key: "prospects", label: "Prospects" },
-  { key: "seeding", label: "Seeding" },
   { key: "messages", label: "Messages" },
   { key: "logs", label: "Logs" },
   { key: "timeouts", label: "Timeouts" },
@@ -62,7 +60,6 @@ export default function DiscordBotPage() {
       {tab === "overview" && <OverviewTab apiToken={apiToken} />}
       {tab === "tickets" && <TicketsTab apiToken={apiToken} />}
       {tab === "prospects" && <ProspectsTab apiToken={apiToken} canManage={canManage} />}
-      {tab === "seeding" && <SeedingTab apiToken={apiToken} canManage={canManage} />}
       {tab === "messages" && <MessagesTab apiToken={apiToken} />}
       {tab === "logs" && <LogsTab apiToken={apiToken} />}
       {tab === "timeouts" && <TimeoutsTab apiToken={apiToken} canManage={canManage} />}

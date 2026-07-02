@@ -81,6 +81,24 @@ async function findUserIdForSteam(steamId: string): Promise<string | null> {
   return user?.id ?? null;
 }
 
+// Bot-created entries store a non-User `addedBy` (the bot's Discord client id, or a system
+// tag) that the plain User.id lookup can't resolve, so the panel showed a raw id. Map those
+// to friendly names, and fall back to a discordId lookup so a staff Discord id resolves too.
+const SYSTEM_ACTOR_NAMES: Record<string, string> = {
+  "1137723361779261542": "Royal Secretary Bot", // bot Discord client id (prospect grants)
+  SeedTracker: "Seed Tracker", // seed-tracker reward grants
+  "sl-reward-system": "SL Reward", // squad-leader reward grants
+};
+
+async function resolveAddedByName(addedBy: string): Promise<string | null> {
+  const systemName = SYSTEM_ACTOR_NAMES[addedBy];
+  if (systemName) return systemName;
+  const byId = await prisma.user.findUnique({ where: { id: addedBy }, select: { discordName: true } });
+  if (byId) return byId.discordName;
+  const byDiscord = await prisma.user.findUnique({ where: { discordId: addedBy }, select: { discordName: true } });
+  return byDiscord?.discordName ?? null;
+}
+
 function formatDuplicateError(
   steamId: string,
   server: string,
@@ -143,7 +161,7 @@ whitelist.get("/", requirePermission("view:whitelist"), async (c) => {
   const server = c.req.query("server");
 
   const entries = await prisma.whitelistEntry.findMany({
-    where: server ? { server } : {},
+    where: { ...(server ? { server } : {}), deactivatedAt: null },
     include: { group: true, clanRef: true },
     orderBy: { createdAt: "desc" },
     take: 1000,
@@ -165,6 +183,7 @@ whitelist.get("/candidates", requirePermission("manage:whitelist"), async (c) =>
 
   const candidates = await prisma.user.findMany({
     where: {
+      disabled: false,
       steamId: { not: null },
       roles: {
         some: {
@@ -429,15 +448,12 @@ whitelist.get("/:id", requirePermission("view:whitelist"), async (c) => {
 
   if (!entry) return fail(c, "Whitelist entry not found", 404);
 
-  const addedByUser = await prisma.user.findUnique({
-    where: { id: entry.addedBy },
-    select: { discordName: true },
-  });
+  const addedByName = await resolveAddedByName(entry.addedBy);
 
   const result: WhitelistEntryWithComments = {
     ...toEntry(entry),
     comments: entry.comments.map(mapComment),
-    addedByName: addedByUser?.discordName ?? null,
+    addedByName,
   };
 
   return success(c, result);

@@ -5,8 +5,10 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { linkSteam, getDashboardStats } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
+import { formatDate } from "@/lib/format";
 import type { UserWithRoles } from "shared";
 import type { DashboardStats, ServerStatus } from "@/lib/api-client";
+import PlayerStatsSection from "./player-stats-section";
 
 const CONNECT_URLS: Record<string, string> = {
   "37.153.157.204:27050": "steam://connect/37.153.157.204:27050",
@@ -212,6 +214,23 @@ function resultBadgeBg(result: string): string {
   }
 }
 
+/* ── Read-only field tooltip ────────────────────────────────────────── */
+
+/**
+ * Wraps an immutable profile field. On hover it surfaces a hint that the value
+ * can't be self-edited and a ticket is the way to correct it.
+ */
+function FieldTip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="group relative inline-flex cursor-help items-center">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-bg-primary px-2 py-1 text-[10px] text-text-secondary opacity-0 shadow-lg ring-1 ring-border transition-opacity group-hover:opacity-100">
+        If this is incorrect, create a community ticket.
+      </span>
+    </span>
+  );
+}
+
 /* ── Dashboard Page ─────────────────────────────────────────────────── */
 
 export default function DashboardPage() {
@@ -364,25 +383,37 @@ export default function DashboardPage() {
           {/* IDs */}
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs sm:ml-auto">
             {displayUser?.discordId && (
-              <div>
+              <FieldTip>
                 <span className="text-text-muted">Discord </span>
                 <code className="text-accent">{displayUser.discordId}</code>
-              </div>
+              </FieldTip>
             )}
             {displayUser?.steamId ? (
-              <div>
+              <FieldTip>
                 <span className="text-text-muted">Steam </span>
                 <code className="text-accent">{displayUser.steamId}</code>
-              </div>
+              </FieldTip>
             ) : (
               <div className="text-text-muted">Steam: not linked</div>
             )}
             {displayUser?.eosId && (
-              <div>
+              <FieldTip>
                 <span className="text-text-muted">EOS </span>
                 <code className="text-accent">{displayUser.eosId}</code>
-              </div>
+              </FieldTip>
             )}
+            <FieldTip>
+              <span className="text-text-muted">Country </span>
+              <span className={displayUser?.country ? "text-text-secondary" : "text-text-muted"}>
+                {displayUser?.country || "--"}
+              </span>
+            </FieldTip>
+            <FieldTip>
+              <span className="text-text-muted">DOB </span>
+              <span className={displayUser?.dateOfBirth ? "text-text-secondary" : "text-text-muted"}>
+                {displayUser?.dateOfBirth ? formatDate(displayUser.dateOfBirth) : "--"}
+              </span>
+            </FieldTip>
           </div>
         </div>
 
@@ -390,12 +421,11 @@ export default function DashboardPage() {
         {displayUser?.roles && displayUser.roles.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5 border-t border-border/30 pt-3">
             {displayUser.roles.map((role) => (
-              <span
-                key={role.id}
-                className="rounded-sm border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs text-accent"
-              >
-                {role.name}
-              </span>
+              <FieldTip key={role.id}>
+                <span className="rounded-sm border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs text-accent">
+                  {role.name}
+                </span>
+              </FieldTip>
             ))}
           </div>
         )}
@@ -423,6 +453,9 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* ── My Squad Stats ─────────────────────────────────────────── */}
+      <PlayerStatsSection />
 
       {/* ── Server Status ──────────────────────────────────────────── */}
       {statsLoading ? (

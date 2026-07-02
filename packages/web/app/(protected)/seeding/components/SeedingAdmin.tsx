@@ -2,11 +2,21 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  getSeedingConfig, updateSeedingConfig, getSeedingSessions,
-  sendSeedingNow, getSeedingRapport, sendSeedingRapport,
+  getSeedingConfig,
+  updateSeedingConfig,
+  getSeedingSessions,
+  sendSeedingNow,
+  getSeedingRapport,
+  sendSeedingRapport,
+  getSeedingServers,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import type { SeedingConfig, SeedingSession, SeedingRapport as SeedingRapportType } from "shared";
+import type {
+  SeedingConfig,
+  SeedingSession,
+  SeedingRapport as SeedingRapportType,
+  SquadServerOption,
+} from "shared";
 
 function SessionBadge({ status }: { status: SeedingSession["status"] }) {
   const colors: Record<string, string> = {
@@ -35,14 +45,22 @@ function todayDateString(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export default function SeedingTab({ apiToken, canManage }: { apiToken: string; canManage: boolean }) {
+interface Props {
+  apiToken: string;
+}
+
+export function SeedingAdmin({ apiToken }: Props) {
   const [config, setConfig] = useState<SeedingConfig | null>(null);
   const [editConfig, setEditConfig] = useState<SeedingConfig | null>(null);
+  const [servers, setServers] = useState<SquadServerOption[]>([]);
   const [sessions, setSessions] = useState<SeedingSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+
+  // roleIds editor state
+  const [roleIdInput, setRoleIdInput] = useState("");
 
   // Send Now state
   const [sendingNow, setSendingNow] = useState(false);
@@ -68,6 +86,9 @@ export default function SeedingTab({ apiToken, canManage }: { apiToken: string; 
       }),
       getSeedingSessions(apiToken, 50).then((res) => {
         if (res.success && res.data) setSessions(res.data);
+      }),
+      getSeedingServers(apiToken).then((res) => {
+        if (res.success && res.data) setServers(res.data);
       }),
     ]).finally(() => setLoading(false));
   }, [apiToken]);
@@ -152,7 +173,20 @@ export default function SeedingTab({ apiToken, canManage }: { apiToken: string; 
     setSendingRapport(false);
   }
 
-  if (loading) return <div className="text-text-muted">Loading seeding data...</div>;
+  function addRoleId() {
+    if (!editConfig) return;
+    const trimmed = roleIdInput.trim();
+    if (!trimmed || editConfig.roleIds.includes(trimmed)) return;
+    setEditConfig({ ...editConfig, roleIds: [...editConfig.roleIds, trimmed] });
+    setRoleIdInput("");
+  }
+
+  function removeRoleId(id: string) {
+    if (!editConfig) return;
+    setEditConfig({ ...editConfig, roleIds: editConfig.roleIds.filter((r) => r !== id) });
+  }
+
+  if (loading) return <div className="text-text-muted">Loading seeding admin data...</div>;
 
   return (
     <div className="space-y-8">
@@ -170,127 +204,295 @@ export default function SeedingTab({ apiToken, canManage }: { apiToken: string; 
               {/* Enabled */}
               <div className="flex items-center gap-3">
                 <label className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Enabled</label>
-                {canManage ? (
-                  <button
-                    onClick={() => setEditConfig({ ...editConfig, enabled: !editConfig.enabled })}
-                    className={`relative h-6 w-11 rounded-full transition-colors ${editConfig.enabled ? "bg-success" : "bg-bg-tertiary border border-border"}`}
-                  >
-                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${editConfig.enabled ? "left-[22px]" : "left-0.5"}`} />
-                  </button>
-                ) : (
-                  <span className={`text-sm font-medium ${editConfig.enabled ? "text-success" : "text-text-muted"}`}>
-                    {editConfig.enabled ? "Yes" : "No"}
-                  </span>
-                )}
+                <button
+                  onClick={() => setEditConfig({ ...editConfig, enabled: !editConfig.enabled })}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${editConfig.enabled ? "bg-success" : "bg-bg-tertiary border border-border"}`}
+                >
+                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${editConfig.enabled ? "left-[22px]" : "left-0.5"}`} />
+                </button>
+              </div>
+
+              {/* Tracker Enabled */}
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Tracker Enabled</label>
+                <button
+                  onClick={() => setEditConfig({ ...editConfig, trackerEnabled: !editConfig.trackerEnabled })}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${editConfig.trackerEnabled ? "bg-success" : "bg-bg-tertiary border border-border"}`}
+                >
+                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${editConfig.trackerEnabled ? "left-[22px]" : "left-0.5"}`} />
+                </button>
               </div>
 
               {/* Seed Threshold */}
               <div>
                 <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Seed Threshold</label>
-                {canManage ? (
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={editConfig.seedThreshold}
-                    onChange={(e) => setEditConfig({ ...editConfig, seedThreshold: Number(e.target.value) })}
-                    className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
-                  />
-                ) : (
-                  <div className="text-sm text-text-primary">{editConfig.seedThreshold}</div>
-                )}
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={editConfig.seedThreshold}
+                  onChange={(e) => setEditConfig({ ...editConfig, seedThreshold: Number(e.target.value) })}
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+                />
               </div>
 
               {/* Reset Threshold */}
               <div>
                 <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Reset Threshold</label>
-                {canManage ? (
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={editConfig.resetThreshold}
-                    onChange={(e) => setEditConfig({ ...editConfig, resetThreshold: Number(e.target.value) })}
-                    className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
-                  />
-                ) : (
-                  <div className="text-sm text-text-primary">{editConfig.resetThreshold}</div>
-                )}
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={editConfig.resetThreshold}
+                  onChange={(e) => setEditConfig({ ...editConfig, resetThreshold: Number(e.target.value) })}
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+                />
               </div>
 
               {/* Daily Time */}
               <div>
                 <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Daily Time</label>
-                {canManage ? (
-                  <input
-                    type="text"
-                    value={editConfig.dailyTime || ""}
-                    onChange={(e) => setEditConfig({ ...editConfig, dailyTime: e.target.value || null })}
-                    placeholder="e.g. 14:00"
-                    className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
-                  />
-                ) : (
-                  <div className="text-sm text-text-primary">{editConfig.dailyTime || "--"}</div>
-                )}
+                <input
+                  type="text"
+                  value={editConfig.dailyTime || ""}
+                  onChange={(e) => setEditConfig({ ...editConfig, dailyTime: e.target.value || null })}
+                  placeholder="e.g. 14:00"
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
+                />
               </div>
 
               {/* Timezone */}
               <div>
                 <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Timezone</label>
-                {canManage ? (
-                  <input
-                    type="text"
-                    value={editConfig.timezone || ""}
-                    onChange={(e) => setEditConfig({ ...editConfig, timezone: e.target.value || null })}
-                    placeholder="e.g. Europe/London"
-                    className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
-                  />
-                ) : (
-                  <div className="text-sm text-text-primary">{editConfig.timezone || "--"}</div>
-                )}
+                <input
+                  type="text"
+                  value={editConfig.timezone || ""}
+                  onChange={(e) => setEditConfig({ ...editConfig, timezone: e.target.value || null })}
+                  placeholder="e.g. Europe/London"
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
+                />
               </div>
 
-              {/* Server Name */}
+              {/* Channel ID */}
               <div>
-                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Server Name</label>
-                {canManage ? (
-                  <input
-                    type="text"
-                    value={editConfig.serverName || ""}
-                    onChange={(e) => setEditConfig({ ...editConfig, serverName: e.target.value || null })}
-                    placeholder="Server to monitor"
-                    className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
-                  />
-                ) : (
-                  <div className="text-sm text-text-primary">{editConfig.serverName || "--"}</div>
-                )}
+                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Channel ID</label>
+                <input
+                  type="text"
+                  value={editConfig.channelId || ""}
+                  onChange={(e) => setEditConfig({ ...editConfig, channelId: e.target.value || null })}
+                  placeholder="Discord channel ID"
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
+                />
+              </div>
+
+              {/* Announcer Server */}
+              <div>
+                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Announcer Server</label>
+                <select
+                  value={editConfig.announcerServerId ?? ""}
+                  onChange={(e) =>
+                    setEditConfig({
+                      ...editConfig,
+                      announcerServerId: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+                >
+                  <option value="">— none —</option>
+                  {servers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tracker Server */}
+              <div>
+                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Tracker Server</label>
+                <select
+                  value={editConfig.trackerServerId ?? ""}
+                  onChange={(e) =>
+                    setEditConfig({
+                      ...editConfig,
+                      trackerServerId: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+                >
+                  <option value="">— none —</option>
+                  {servers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Required Seed Days */}
+              <div>
+                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Required Seed Days</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={editConfig.requiredSeedDays}
+                  onChange={(e) => setEditConfig({ ...editConfig, requiredSeedDays: Number(e.target.value) })}
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+                />
+              </div>
+
+              {/* Min Days for Progression Embed */}
+              <div>
+                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Min Days for Progression Embed</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={editConfig.minProgressionDays}
+                  onChange={(e) => setEditConfig({ ...editConfig, minProgressionDays: Number(e.target.value) })}
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+                />
+              </div>
+
+              {/* Rolling Window Days */}
+              <div>
+                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Rolling Window (days)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={editConfig.rollingWindowDays}
+                  onChange={(e) => setEditConfig({ ...editConfig, rollingWindowDays: Number(e.target.value) })}
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+                />
+              </div>
+
+              {/* Whitelist Duration Days */}
+              <div>
+                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Whitelist Duration (days)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={editConfig.whitelistDurationDays}
+                  onChange={(e) => setEditConfig({ ...editConfig, whitelistDurationDays: Number(e.target.value) })}
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+                />
+              </div>
+
+              {/* Max Extension Days */}
+              <div>
+                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Max Extension (days)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={editConfig.maxExtensionDays}
+                  onChange={(e) => setEditConfig({ ...editConfig, maxExtensionDays: Number(e.target.value) })}
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+                />
+              </div>
+
+              {/* Progression Channel ID */}
+              <div>
+                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Progression Channel ID</label>
+                <input
+                  type="text"
+                  value={editConfig.progressionChannelId || ""}
+                  onChange={(e) => setEditConfig({ ...editConfig, progressionChannelId: e.target.value || null })}
+                  placeholder="Discord channel ID"
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
+                />
+              </div>
+
+              {/* Leaderboard Channel ID */}
+              <div>
+                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Leaderboard Channel ID</label>
+                <input
+                  type="text"
+                  value={editConfig.leaderboardChannelId || ""}
+                  onChange={(e) => setEditConfig({ ...editConfig, leaderboardChannelId: e.target.value || null })}
+                  placeholder="Discord channel ID"
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
+                />
+              </div>
+
+              {/* Appreciation Channel ID */}
+              <div>
+                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Seeder Appreciation Channel ID</label>
+                <input
+                  type="text"
+                  value={editConfig.appreciationChannelId || ""}
+                  onChange={(e) => setEditConfig({ ...editConfig, appreciationChannelId: e.target.value || null })}
+                  placeholder="Discord channel ID"
+                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
+                />
               </div>
             </div>
 
-            {canManage && (
-              <div className="mt-5 flex items-center gap-3 border-t border-border/50 pt-4">
+            {/* Role IDs editor */}
+            <div className="mt-4">
+              <label className="mb-2 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">
+                Seeder Role IDs
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={roleIdInput}
+                  onChange={(e) => setRoleIdInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addRoleId()}
+                  placeholder="Discord role ID"
+                  className="flex-1 rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
+                />
                 <button
-                  onClick={handleSave}
-                  disabled={saving || !isDirty}
-                  className="rounded-sm bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+                  type="button"
+                  onClick={addRoleId}
+                  disabled={!roleIdInput.trim()}
+                  className="rounded-sm bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
                 >
-                  {saving ? "Saving..." : "Save Changes"}
+                  Add
                 </button>
-                {isDirty && (
-                  <button
-                    onClick={() => setEditConfig(config)}
-                    className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary"
-                  >
-                    Reset
-                  </button>
-                )}
-                {saveMsg && (
-                  <span className={`text-xs font-medium ${saveMsg === "Saved" ? "text-success" : "text-danger"}`}>
-                    {saveMsg}
-                  </span>
-                )}
               </div>
-            )}
+              {editConfig.roleIds.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {editConfig.roleIds.map((id) => (
+                    <span
+                      key={id}
+                      className="flex items-center gap-1.5 rounded-sm border border-border bg-bg-tertiary px-2 py-0.5 text-xs text-text-secondary"
+                    >
+                      {id}
+                      <button
+                        type="button"
+                        onClick={() => removeRoleId(id)}
+                        className="text-text-muted transition-colors hover:text-danger"
+                        aria-label={`Remove role ${id}`}
+                      >
+                        x
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex items-center gap-3 border-t border-border/50 pt-4">
+              <button
+                onClick={handleSave}
+                disabled={saving || !isDirty}
+                className="rounded-sm bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Save Changes"}
+              </button>
+              {isDirty && (
+                <button
+                  onClick={() => setEditConfig(config)}
+                  className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary"
+                >
+                  Reset
+                </button>
+              )}
+              {saveMsg && (
+                <span className={`text-xs font-medium ${saveMsg === "Saved" ? "text-success" : "text-danger"}`}>
+                  {saveMsg}
+                </span>
+              )}
+            </div>
           </div>
         ) : null}
       </section>
@@ -328,24 +530,22 @@ export default function SeedingTab({ apiToken, canManage }: { apiToken: string; 
             </div>
 
             {/* Send Now */}
-            {canManage && (
-              <div className="flex items-end">
-                <div>
-                  <button
-                    onClick={handleSendNow}
-                    disabled={sendingNow}
-                    className="rounded-sm bg-success px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-success/90 disabled:opacity-50"
-                  >
-                    {sendingNow ? "Sending..." : "Send Seeding Call Now"}
-                  </button>
-                  {sendNowMsg && (
-                    <span className={`ml-2 text-xs font-medium ${sendNowMsg === "Queued" ? "text-success" : "text-danger"}`}>
-                      {sendNowMsg}
-                    </span>
-                  )}
-                </div>
+            <div className="flex items-end">
+              <div>
+                <button
+                  onClick={handleSendNow}
+                  disabled={sendingNow}
+                  className="rounded-sm bg-success px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-success/90 disabled:opacity-50"
+                >
+                  {sendingNow ? "Sending..." : "Send Seeding Call Now"}
+                </button>
+                {sendNowMsg && (
+                  <span className={`ml-2 text-xs font-medium ${sendNowMsg === "Queued" ? "text-success" : "text-danger"}`}>
+                    {sendNowMsg}
+                  </span>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
       </section>
@@ -375,7 +575,7 @@ export default function SeedingTab({ apiToken, canManage }: { apiToken: string; 
             >
               {rapportLoading ? "Loading..." : "Load Rapport"}
             </button>
-            {canManage && rapport && (
+            {rapport && (
               <>
                 <button
                   onClick={handleSendRapport}
@@ -436,7 +636,7 @@ export default function SeedingTab({ apiToken, canManage }: { apiToken: string; 
                     </thead>
                     <tbody>
                       {rapport.seeders.map((s, i) => (
-                        <tr key={i} className="border-b border-border/30 last:border-0">
+                        <tr key={`${s.playerName}-${s.joinTime ?? i}`} className="border-b border-border/30 last:border-0">
                           <td className="px-4 py-3 font-medium text-text-primary">{s.playerName}</td>
                           <td className="px-4 py-3 text-text-secondary">{formatMinutes(s.seedDurationMinutes)}</td>
                           <td className="px-4 py-3 text-text-secondary">{formatMinutes(s.sessionDurationMinutes)}</td>

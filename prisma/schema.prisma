@@ -102,13 +102,15 @@ model WhitelistEntry {
   user      User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   addedBy   String
   reason    String?
-  expiresAt DateTime?
+  expiresAt     DateTime?
+  deactivatedAt DateTime?           // set only by member-disable; null = active
   createdAt DateTime            @default(now())
   comments  WhitelistComment[]
 
   @@unique([steamId, server])
   @@index([server])
   @@index([expiresAt])
+  @@index([deactivatedAt])
   @@index([clanId])
   @@index([groupId])
   @@index([userId])

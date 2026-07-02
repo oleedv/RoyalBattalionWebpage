@@ -1043,7 +1043,7 @@ export default function MembersPage() {
               className="mb-4 w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-danger focus:outline-none"
             />
             <p className="mb-4 text-sm text-danger">
-              This will disable {selectedIds.size} {selectedIds.size === 1 ? "account" : "accounts"}. Disabled users cannot access the website.
+              This will disable {selectedIds.size} {selectedIds.size === 1 ? "account" : "accounts"}. Disabled users cannot access the website. This also removes their in-game whitelist (restored if re-enabled).
             </p>
           </>
         )}
@@ -1363,6 +1363,7 @@ export default function MembersPage() {
                 ) : confirmingDisable ? (
                   <div className="flex flex-col gap-2">
                     <span className="text-xs text-danger">Disable this account?</span>
+                    <span className="text-[11px] text-text-muted">This also removes their in-game whitelist (restored if re-enabled).</span>
                     <input
                       type="text"
                       value={disableReason}

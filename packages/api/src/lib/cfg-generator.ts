@@ -8,6 +8,7 @@ export async function generateAdminsCfg(server?: string): Promise<string> {
   const entries = await prisma.whitelistEntry.findMany({
     where: {
       ...(server ? { server } : {}),
+      deactivatedAt: null,
       OR: [
         { expiresAt: null },
         { expiresAt: { gt: new Date() } },

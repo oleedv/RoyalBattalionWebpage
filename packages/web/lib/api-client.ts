@@ -34,6 +34,9 @@ import type {
   SeedTrackerLeaderboardEntry,
   SeedTrackerPlayerDetail,
   SeedTrackerStats,
+  PlayerStats,
+  SquadServerOption,
+  SeedingLiveStatus,
 } from "shared";
 
 const API_ORIGIN =
@@ -777,6 +780,22 @@ export function sendSeedingRapport(
 }
 
 // Prospect state changes are now one merged PATCH /prospects/:id.
+
+export function getSeedingServers(
+  token: string
+): Promise<ApiResponse<SquadServerOption[]>> {
+  return request<SquadServerOption[]>("/discord-bot/seeding/servers", {
+    headers: authHeaders(token),
+  });
+}
+
+export function getSeedingLiveStatus(
+  token: string
+): Promise<ApiResponse<SeedingLiveStatus>> {
+  return request<SeedingLiveStatus>("/discord-bot/seeding/live-status", {
+    headers: authHeaders(token),
+  });
+}
 export function pauseProspect(
   token: string,
   id: number
@@ -1084,6 +1103,13 @@ export function getSeedTrackerStats(
   token: string
 ): Promise<ApiResponse<SeedTrackerStats>> {
   return request(`/seeding-tracker/stats`, {
+    headers: authHeaders(token),
+  });
+}
+
+// Personal Squad stats (own stats, requires linked steamId)
+export function getPlayerStats(token: string): Promise<ApiResponse<PlayerStats>> {
+  return request<PlayerStats>("/player-stats", {
     headers: authHeaders(token),
   });
 }

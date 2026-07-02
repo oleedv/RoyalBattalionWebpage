@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { Prisma } from "../../generated/prisma/client";
-import type { SeedingConfig, SeedingSession, SeedingRapport, SeedingRapportSeeder } from "shared";
+import type { SeedingConfig, SeedingSession, SeedingRapport, SeedingRapportSeeder, SeedingLiveStatus, SquadServerOption } from "shared";
 import getSecretaryDb, { resetSecretaryDb } from "../../lib/secretary-db";
 import { getSquadJSPool } from "../../lib/squadjs-db";
 import { requirePermission } from "../../middleware/permissions";
@@ -34,8 +34,10 @@ seeding.get(
   async (c) => {
     try {
       const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
-        SELECT id, enabled, channel_id, role_id, seed_threshold, reset_threshold,
-                daily_time, timezone, server_name
+        SELECT id, enabled, channel_id, role_ids, seed_threshold, reset_threshold,
+               daily_time, timezone, announcer_server_id, tracker_server_id, tracker_enabled,
+               required_seed_days, rolling_window_days, whitelist_duration_days, max_extension_days,
+               progression_channel_id, leaderboard_channel_id, appreciation_channel_id, min_progression_days
          FROM seeding_config WHERE id = 1`
       );
 
@@ -44,16 +46,32 @@ seeding.get(
       }
 
       const r = rows[0];
+      let roleIds: string[] = [];
+      if (Array.isArray(r.role_ids)) roleIds = r.role_ids.map((x: unknown) => String(x));
+      else if (typeof r.role_ids === "string" && r.role_ids.trim()) {
+        try { const p = JSON.parse(r.role_ids); if (Array.isArray(p)) roleIds = p.map((x) => String(x)); } catch { /* ignore */ }
+      }
+
       const config: SeedingConfig = {
         id: r.id,
         enabled: Boolean(r.enabled),
         channelId: r.channel_id,
-        roleId: r.role_id,
+        roleIds,
         seedThreshold: Number(r.seed_threshold),
         resetThreshold: Number(r.reset_threshold),
         dailyTime: r.daily_time,
         timezone: r.timezone,
-        serverName: r.server_name,
+        announcerServerId: r.announcer_server_id != null ? Number(r.announcer_server_id) : null,
+        trackerServerId: r.tracker_server_id != null ? Number(r.tracker_server_id) : null,
+        trackerEnabled: Boolean(r.tracker_enabled),
+        requiredSeedDays: Number(r.required_seed_days),
+        rollingWindowDays: Number(r.rolling_window_days),
+        whitelistDurationDays: Number(r.whitelist_duration_days),
+        maxExtensionDays: Number(r.max_extension_days),
+        progressionChannelId: r.progression_channel_id,
+        leaderboardChannelId: r.leaderboard_channel_id,
+        appreciationChannelId: r.appreciation_channel_id,
+        minProgressionDays: Number(r.min_progression_days),
       };
 
       return success(c, config);
@@ -72,14 +90,26 @@ seeding.patch(
   async (c) => {
     try {
       const body = await c.req.json<Partial<SeedingConfig>>();
+      const roleIdsJson = JSON.stringify(Array.isArray(body.roleIds) ? body.roleIds.map((x) => String(x)) : []);
 
       const sets: Prisma.Sql[] = [];
       if (body.enabled !== undefined) sets.push(Prisma.sql`enabled = ${body.enabled ? 1 : 0}`);
+      if (body.roleIds !== undefined) sets.push(Prisma.sql`role_ids = ${roleIdsJson}`);
       if (body.seedThreshold !== undefined) sets.push(Prisma.sql`seed_threshold = ${body.seedThreshold}`);
       if (body.resetThreshold !== undefined) sets.push(Prisma.sql`reset_threshold = ${body.resetThreshold}`);
       if (body.dailyTime !== undefined) sets.push(Prisma.sql`daily_time = ${body.dailyTime}`);
       if (body.timezone !== undefined) sets.push(Prisma.sql`timezone = ${body.timezone}`);
-      if (body.serverName !== undefined) sets.push(Prisma.sql`server_name = ${body.serverName}`);
+      if (body.announcerServerId !== undefined) sets.push(Prisma.sql`announcer_server_id = ${body.announcerServerId}`);
+      if (body.trackerServerId !== undefined) sets.push(Prisma.sql`tracker_server_id = ${body.trackerServerId}`);
+      if (body.trackerEnabled !== undefined) sets.push(Prisma.sql`tracker_enabled = ${body.trackerEnabled ? 1 : 0}`);
+      if (body.requiredSeedDays !== undefined) sets.push(Prisma.sql`required_seed_days = ${body.requiredSeedDays}`);
+      if (body.rollingWindowDays !== undefined) sets.push(Prisma.sql`rolling_window_days = ${body.rollingWindowDays}`);
+      if (body.whitelistDurationDays !== undefined) sets.push(Prisma.sql`whitelist_duration_days = ${body.whitelistDurationDays}`);
+      if (body.maxExtensionDays !== undefined) sets.push(Prisma.sql`max_extension_days = ${body.maxExtensionDays}`);
+      if (body.progressionChannelId !== undefined) sets.push(Prisma.sql`progression_channel_id = ${body.progressionChannelId}`);
+      if (body.leaderboardChannelId !== undefined) sets.push(Prisma.sql`leaderboard_channel_id = ${body.leaderboardChannelId}`);
+      if (body.appreciationChannelId !== undefined) sets.push(Prisma.sql`appreciation_channel_id = ${body.appreciationChannelId}`);
+      if (body.minProgressionDays !== undefined) sets.push(Prisma.sql`min_progression_days = ${body.minProgressionDays}`);
 
       if (sets.length === 0) {
         return fail(c, "No updatable fields provided");
@@ -95,6 +125,57 @@ seeding.patch(
       resetSecretaryDb();
       logger.error("discord-bot", "Seeding config update error", err);
       return fail(c, "Failed to update seeding config", 500);
+    }
+  }
+);
+
+// GET /seeding/servers — canonical squadjs_servers list for the config dropdown
+seeding.get(
+  "/seeding/servers",
+  requirePermission("view:discord-bot", "manage:discord-bot"),
+  async (c) => {
+    try {
+      const pool = getSquadJSPool();
+      const [rows] = await pool.query(`SELECT id, name FROM squadjs_servers ORDER BY id`);
+      const servers: SquadServerOption[] = (rows as any[]).map((r) => ({ id: Number(r.id), name: String(r.name) }));
+      return success(c, servers);
+    } catch (err) {
+      return fail(c, `Failed to load server list: ${err instanceof Error ? err.message : String(err)}`, 503);
+    }
+  }
+);
+
+// GET /seeding/live-status — last-known live state written by the bot each tick
+seeding.get(
+  "/seeding/live-status",
+  requirePermission("view:seeding-tracker", "view:discord-bot", "manage:discord-bot"),
+  async (c) => {
+    try {
+      const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+        SELECT server_resolved_ok, socket_connected, current_population, current_layer, active_session_id, updated_at
+         FROM seeding_live_status WHERE id = 1`
+      );
+      if (rows.length === 0) {
+        const empty: SeedingLiveStatus = {
+          serverResolvedOk: false, socketConnected: false, currentPopulation: null,
+          currentLayer: null, activeSessionId: null, updatedAt: null,
+        };
+        return success(c, empty);
+      }
+      const r = rows[0];
+      const status: SeedingLiveStatus = {
+        serverResolvedOk: Boolean(r.server_resolved_ok),
+        socketConnected: Boolean(r.socket_connected),
+        currentPopulation: r.current_population != null ? Number(r.current_population) : null,
+        currentLayer: r.current_layer ?? null,
+        activeSessionId: r.active_session_id != null ? Number(r.active_session_id) : null,
+        updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
+      };
+      return success(c, status);
+    } catch (err) {
+      resetSecretaryDb();
+      logger.error("discord-bot", "Seeding live-status endpoint error", err);
+      return fail(c, "Secretary database unavailable", 503);
     }
   }
 );

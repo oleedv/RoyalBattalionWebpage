@@ -1,4 +1,5 @@
 import { syncMatches } from "./match-sync";
+import { backfillUserEosIds } from "./eos-backfill";
 import { syncAllUserRoles } from "./role-sync";
 import { fetchGuildRoleDefinitions } from "./discord";
 import { logger } from "./logger";
@@ -73,6 +74,16 @@ export async function bootstrap() {
   if (env.SQUADJS_DATABASE_URL) {
     syncMatches().catch((err) => logger.error("match-sync", "Match sync failed", err));
     setInterval(() => syncMatches().catch((err) => logger.error("match-sync", "Match sync failed", err)), 15 * 60 * 1000);
+
+    // Backfill member EOS IDs from SquadJS (matched on Steam ID) on startup and every 24 hours
+    const runEosBackfill = () =>
+      backfillUserEosIds()
+        .then(({ updated, conflicts }) => {
+          if (updated > 0 || conflicts > 0) logger.info("eos-backfill", `${updated} updated, ${conflicts} conflicts`);
+        })
+        .catch((err) => logger.error("eos-backfill", "EOS backfill failed", err));
+    runEosBackfill();
+    setInterval(runEosBackfill, 24 * 60 * 60 * 1000);
   }
 
   // Auto-configure member roles from env before first sync

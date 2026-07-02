@@ -1,12 +1,16 @@
 import type { NextConfig } from "next";
 import { resolve } from "path";
 import { config } from "dotenv";
+import rootPkg from "../../package.json";
 
 // Load .env from monorepo root
 config({ path: resolve(__dirname, "../../.env") });
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  env: {
+    NEXT_PUBLIC_APP_VERSION: rootPkg.version,
+  },
   async headers() {
     return [
       {

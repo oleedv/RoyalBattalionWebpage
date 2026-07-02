@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 import Link from "next/link";
 import {
   getWhitelist,
@@ -350,7 +350,7 @@ export default function WhitelistPage() {
         />
       )}
       {tab === "activity" && (
-        <ActivityTab apiToken={apiToken} />
+        <ActivityTab apiToken={apiToken} groups={groups} clans={clans} />
       )}
     </div>
   );
@@ -2224,10 +2224,153 @@ function ClansTab({
 // ACTIVITY TAB
 // ============================================================
 
+// Human-readable labels for audit-detail fields
+const WL_DETAIL_LABELS: Record<string, string> = {
+  steamId: "Steam ID",
+  name: "Name",
+  clan: "Clan",
+  clanId: "Clan",
+  role: "Role",
+  groupId: "Group",
+  reason: "Reason",
+  expiresAt: "Expires",
+  userId: "Linked user",
+  server: "Server",
+  count: "Entries",
+  created: "Created",
+  skipped: "Skipped",
+  total: "Total",
+  textPreview: "Comment",
+  commentId: "Comment",
+  steamIds: "Steam IDs",
+  changes: "Changes",
+};
+
+// Resolve a stored value into something a human can read (ids -> names, dates, etc.)
+function wlReadableValue(field: string, value: unknown, groups: AdminGroup[], clans: Clan[]): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (field === "groupId") return groups.find((g) => g.id === value)?.name ?? String(value);
+  if (field === "clanId") return clans.find((c) => c.id === value)?.name ?? String(value);
+  if (field === "expiresAt" && typeof value === "string") {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleDateString();
+  }
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+type WlReadableChange = { key: string; label: string; from: string; to: string };
+
+// Turn a whitelist.update `changes` map into readable from -> to rows,
+// dropping internal id fields that duplicate a human-readable twin (clanId vs clan).
+function wlReadableChanges(changes: unknown, groups: AdminGroup[], clans: Clan[]): WlReadableChange[] {
+  if (!changes || typeof changes !== "object") return [];
+  const keys = Object.keys(changes as Record<string, unknown>);
+  const out: WlReadableChange[] = [];
+  for (const k of keys) {
+    const v = (changes as Record<string, unknown>)[k];
+    if (!v || typeof v !== "object" || !("from" in v) || !("to" in v)) continue;
+    if (k === "clanId" && keys.includes("clan")) continue;
+    const { from, to } = v as { from: unknown; to: unknown };
+    out.push({
+      key: k,
+      label: WL_DETAIL_LABELS[k] ?? k,
+      from: wlReadableValue(k, from, groups, clans),
+      to: wlReadableValue(k, to, groups, clans),
+    });
+  }
+  return out;
+}
+
+// Human-readable detail panel shown inline under a clicked activity row.
+function ActivityDetail({ log, groups, clans }: { log: AuditLogEntry; groups: AdminGroup[]; clans: Clan[] }) {
+  const [showRaw, setShowRaw] = useState(false);
+  const detail = (log.detail || {}) as Record<string, unknown>;
+
+  const { changes, ...rest } = detail;
+  const restEntries = Object.entries(rest).map(([k, v]) => ({
+    label: WL_DETAIL_LABELS[k] ?? k,
+    value: wlReadableValue(k, v, groups, clans),
+  }));
+
+  const fromToChanges = wlReadableChanges(changes, groups, clans);
+  // bulk_update stores `changes` as a plain map of new values (not from/to pairs)
+  const plainChanges =
+    fromToChanges.length === 0 && changes && typeof changes === "object"
+      ? Object.entries(changes as Record<string, unknown>).map(([k, v]) => ({
+          label: WL_DETAIL_LABELS[k] ?? k,
+          value: wlReadableValue(k, v, groups, clans),
+        }))
+      : [];
+
+  return (
+    <div className="rounded-sm border border-border bg-bg-secondary/40 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-xs font-medium uppercase tracking-[0.15em] text-text-muted">Details</h3>
+        <button
+          onClick={() => setShowRaw((v) => !v)}
+          className="text-[10px] uppercase tracking-wider text-text-muted transition-colors hover:text-text-primary"
+        >
+          {showRaw ? "Hide raw" : "Show raw"}
+        </button>
+      </div>
+
+      {restEntries.length > 0 && (
+        <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-4 gap-y-1.5 text-xs">
+          {restEntries.map((e) => (
+            <Fragment key={e.label}>
+              <dt className="font-medium text-text-muted">{e.label}</dt>
+              <dd className="break-words text-text-primary">{e.value}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      )}
+
+      {fromToChanges.length > 0 && (
+        <div className={restEntries.length > 0 ? "mt-3" : ""}>
+          <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-text-muted">Changes</div>
+          <div className="space-y-1.5">
+            {fromToChanges.map((c) => (
+              <div key={c.key} className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="min-w-[5rem] font-medium text-text-muted">{c.label}</span>
+                <span className="text-text-secondary">{c.from}</span>
+                <span className="text-text-muted">→</span>
+                <span className="font-medium text-text-primary">{c.to}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {plainChanges.length > 0 && (
+        <dl className="mt-3 grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-4 gap-y-1.5 text-xs">
+          {plainChanges.map((e) => (
+            <Fragment key={e.label}>
+              <dt className="font-medium text-text-muted">{e.label}</dt>
+              <dd className="break-words text-text-primary">{e.value}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      )}
+
+      {showRaw && (
+        <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap border-t border-border/50 pt-3 font-mono text-xs text-text-muted">
+          {JSON.stringify(log.detail, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 function ActivityTab({
   apiToken,
+  groups,
+  clans,
 }: {
   apiToken: string | null;
+  groups: AdminGroup[];
+  clans: Clan[];
 }) {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -2297,9 +2440,11 @@ function ActivityTab({
       case "whitelist.add":
         return `Added ${(detail.name as string) || (detail.steamId as string) || "entry"}${detail.server ? ` on ${detail.server}` : ""}`;
       case "whitelist.update": {
-        const changes = detail.changes as Record<string, unknown> | undefined;
-        if (changes) return `Changed: ${Object.keys(changes).join(", ")}`;
-        return "Updated entry";
+        const readable = wlReadableChanges(detail.changes, groups, clans);
+        if (readable.length === 0) return "Updated entry";
+        const parts = readable.map((c) => `${c.label}: ${c.from} → ${c.to}`);
+        if (parts.length <= 2) return parts.join(" · ");
+        return `${parts.slice(0, 2).join(" · ")} · +${parts.length - 2} more`;
       }
       case "whitelist.delete":
         return `Removed ${(detail.name as string) || (detail.steamId as string) || "entry"}${detail.server ? ` from ${detail.server}` : ""}`;
@@ -2309,8 +2454,12 @@ function ActivityTab({
         return `Updated ${detail.count ?? "?"} entries`;
       case "whitelist.bulk_delete":
         return `Deleted ${detail.count ?? "?"} entries`;
-      case "whitelist.comment.add":
-        return "Added comment";
+      case "whitelist.comment.add": {
+        const preview = detail.textPreview as string | undefined;
+        if (!preview) return "Added comment";
+        const trimmed = preview.length > 60 ? `${preview.slice(0, 60)}…` : preview;
+        return `Commented: "${trimmed}"`;
+      }
       case "whitelist.comment.delete":
         return "Deleted comment";
       default:
@@ -2377,47 +2526,55 @@ function ActivityTab({
                   <td colSpan={4} className="px-4 py-8 text-center text-text-muted">No activity logs found.</td>
                 </tr>
               ) : (
-                logs.map((log) => (
-                  <tr
-                    key={log.id}
-                    onClick={() => setExpandedId(expandedId === log.id ? null : log.id)}
-                    className="cursor-pointer border-b border-border/50 transition-colors hover:bg-bg-tertiary/50"
-                  >
-                    <td className="px-4 py-3 text-xs text-text-secondary" title={formatDateTime(log.createdAt)}>
-                      {formatRelativeTime(log.createdAt)}
-                    </td>
-                    <td className="px-4 py-3 text-text-primary text-xs font-medium">
-                      {log.userName}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`rounded-sm px-2 py-0.5 text-[10px] font-medium tracking-wide ${getActionBadge(log.action)}`}>
-                        {getActionLabel(log.action)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-text-secondary">
-                      {getDetailSummary(log)}
-                    </td>
-                  </tr>
-                ))
+                logs.map((log) => {
+                  const expanded = expandedId === log.id;
+                  return (
+                    <Fragment key={log.id}>
+                      <tr
+                        onClick={() => setExpandedId(expanded ? null : log.id)}
+                        className={`cursor-pointer border-b border-border/50 transition-colors hover:bg-bg-tertiary/50 ${expanded ? "bg-bg-tertiary/40" : ""}`}
+                      >
+                        <td className="px-4 py-3 text-xs text-text-secondary" title={formatDateTime(log.createdAt)}>
+                          {formatRelativeTime(log.createdAt)}
+                        </td>
+                        <td className="px-4 py-3 text-text-primary text-xs font-medium">
+                          {log.userName}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-sm px-2 py-0.5 text-[10px] font-medium tracking-wide ${getActionBadge(log.action)}`}>
+                            {getActionLabel(log.action)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-text-secondary">
+                          <div className="flex items-center justify-between gap-2">
+                            <span>{getDetailSummary(log)}</span>
+                            {log.detail && (
+                              <svg
+                                className={`h-3 w-3 shrink-0 text-text-muted transition-transform ${expanded ? "rotate-180" : ""}`}
+                                viewBox="0 0 12 12"
+                                fill="currentColor"
+                              >
+                                <path d="M6 8L2 4h8z" />
+                              </svg>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {expanded && log.detail && (
+                        <tr className="border-b border-border/50">
+                          <td colSpan={4} className="bg-bg-tertiary/20 px-4 pb-4 pt-1">
+                            <ActivityDetail log={log} groups={groups} clans={clans} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
-
-      {/* Expanded detail (below table for clicked row) */}
-      {expandedId && (() => {
-        const log = logs.find((l) => l.id === expandedId);
-        if (!log || !log.detail) return null;
-        return (
-          <div className="facet-border mt-3 rounded-sm bg-bg-card p-4">
-            <h3 className="mb-2 text-xs font-medium uppercase tracking-[0.15em] text-text-muted">Raw Detail</h3>
-            <pre className="max-h-48 overflow-auto whitespace-pre-wrap font-mono text-xs text-text-secondary">
-              {JSON.stringify(log.detail, null, 2)}
-            </pre>
-          </div>
-        );
-      })()}
 
       {/* Pagination */}
       {totalPages > 1 && (

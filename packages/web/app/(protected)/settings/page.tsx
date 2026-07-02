@@ -150,6 +150,9 @@ export default function SettingsPage() {
             <p className="text-text-muted">
               Royal Battalion Web Platform
             </p>
+            <p className="text-text-muted">
+              Version <span className="font-mono text-text-secondary">{process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}</span>
+            </p>
           </div>
         </div>
 

@@ -17,8 +17,10 @@ model User {
   avatarUrl      String?
   country        String?
   membershipDate DateTime?
-  dateOfBirth    DateTime?
-  hasLoggedIn    Boolean         @default(false)
+  dateOfBirth     DateTime?
+  birthdayOptOut  Boolean         @default(false)
+  birthdayShowAge Boolean         @default(false)
+  hasLoggedIn     Boolean         @default(false)
   disabled       Boolean         @default(false)
   disabledAt     DateTime?
   disabledReason String?         @db.Text
@@ -172,4 +174,16 @@ model AuditLog {
   @@index([createdAt])
   @@index([userId])
   @@index([resource])
+}
+
+/// Singleton (single row, id = "singleton") controlling the Discord birthday
+/// announcer. Read by the bot via its optional `website` pool; written by the
+/// webpage via the normal Prisma client. postTime is "HH:MM" 24h.
+model BirthdayConfig {
+  id        String  @id @default("singleton")
+  enabled   Boolean @default(false)
+  channelId String?
+  postTime  String  @default("09:00")
+  timezone  String  @default("Europe/Oslo")
+  updatedAt DateTime @updatedAt
 }

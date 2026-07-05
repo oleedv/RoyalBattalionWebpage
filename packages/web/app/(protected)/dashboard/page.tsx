@@ -3,10 +3,10 @@
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { linkSteam, getDashboardStats } from "@/lib/api-client";
+import { linkSteam, getDashboardStats, getBirthdayConfig, updateBirthdayConfig } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import { formatDate } from "@/lib/format";
-import type { UserWithRoles } from "shared";
+import type { UserWithRoles, BirthdayConfig } from "shared";
 import type { DashboardStats, ServerStatus } from "@/lib/api-client";
 import PlayerStatsSection from "./player-stats-section";
 import { SkeletonStatGrid } from "@/components/skeleton";
@@ -234,6 +234,125 @@ function FieldTip({ children }: { children: React.ReactNode }) {
 
 /* ── Dashboard Page ─────────────────────────────────────────────────── */
 
+/* ── Birthday admin card ────────────────────────────────────────────── */
+
+const DEFAULT_LOUNGE_CHANNEL_ID = "460898033794809856";
+
+function BirthdayAdminCard({ token }: { token: string }) {
+  const [config, setConfig] = useState<BirthdayConfig | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getBirthdayConfig(token).then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data) {
+        // Pre-fill the royal-lounge default when no channel is set yet.
+        setConfig({ ...res.data, channelId: res.data.channelId ?? DEFAULT_LOUNGE_CHANNEL_ID });
+      } else {
+        setError(res.error || "Failed to load birthday config");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  async function save() {
+    if (!config) return;
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    const res = await updateBirthdayConfig(token, config);
+    setSaving(false);
+    if (res.success && res.data) {
+      setConfig({ ...res.data, channelId: res.data.channelId ?? DEFAULT_LOUNGE_CHANNEL_ID });
+      setSaved(true);
+    } else {
+      setError(res.error || "Failed to save");
+    }
+  }
+
+  return (
+    <div className="facet-border rounded-sm bg-bg-card p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="font-display text-sm font-semibold tracking-wide text-text-primary">
+          Birthday announcements
+        </h2>
+        <label className="flex items-center gap-2 text-xs text-text-secondary">
+          <input
+            type="checkbox"
+            checked={config?.enabled ?? false}
+            disabled={!config}
+            onChange={(e) => config && setConfig({ ...config, enabled: e.target.checked })}
+            className="h-4 w-4 accent-accent"
+          />
+          Enabled
+        </label>
+      </div>
+
+      {!config ? (
+        <p className="text-sm text-text-muted">{error || "Loading..."}</p>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <label className="block">
+              <span className="mb-1 block text-[10px] font-medium tracking-wider text-text-muted uppercase">
+                Channel ID
+              </span>
+              <input
+                type="text"
+                value={config.channelId ?? ""}
+                onChange={(e) => setConfig({ ...config, channelId: e.target.value.trim() || null })}
+                placeholder={DEFAULT_LOUNGE_CHANNEL_ID}
+                className="w-full rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[10px] font-medium tracking-wider text-text-muted uppercase">
+                Post time
+              </span>
+              <input
+                type="time"
+                value={config.postTime}
+                onChange={(e) => setConfig({ ...config, postTime: e.target.value })}
+                className="w-full rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[10px] font-medium tracking-wider text-text-muted uppercase">
+                Timezone
+              </span>
+              <input
+                type="text"
+                value={config.timezone}
+                onChange={(e) => setConfig({ ...config, timezone: e.target.value.trim() })}
+                placeholder="Europe/Oslo"
+                className="w-full rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="rounded-sm bg-accent px-4 py-1.5 text-xs font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+            {saved && <span className="text-xs text-success">Saved.</span>}
+            {error && <span className="text-xs text-danger">{error}</span>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const { apiToken, user: contextUser, hasPermission } = usePermissions();
@@ -454,6 +573,9 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* ── Birthday announcements (admin) ─────────────────────────── */}
+      {hasPermission("manage:discord-bot") && <BirthdayAdminCard token={apiToken} />}
 
       {/* ── My Squad Stats ─────────────────────────────────────────── */}
       <PlayerStatsSection />

@@ -648,8 +648,8 @@ export default function DashboardPage() {
         {displayUser && (
           <BirthdayPrefsToggles
             token={apiToken}
-            initialOptOut={displayUser.birthdayOptOut}
-            initialShowAge={displayUser.birthdayShowAge}
+            initialOptOut={displayUser.birthdayOptOut ?? false}
+            initialShowAge={displayUser.birthdayShowAge ?? false}
           />
         )}
       </div>

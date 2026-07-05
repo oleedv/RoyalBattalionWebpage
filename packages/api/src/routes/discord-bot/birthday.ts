@@ -12,6 +12,17 @@ const birthday = new Hono();
 
 const SINGLETON_ID = "singleton";
 
+// A typo'd timezone would silently disable the bot's scheduler (Intl throws on it),
+// so reject anything that is not a real IANA zone at save time.
+function isValidTimeZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const DEFAULTS: BirthdayConfig = {
   enabled: false,
   channelId: null,
@@ -36,7 +47,7 @@ const patchSchema = z.object({
   enabled: z.boolean().optional(),
   channelId: z.string().regex(/^\d{5,25}$/, "channelId must be a numeric Discord ID").nullable().optional(),
   postTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "postTime must be HH:MM (24h)").optional(),
-  timezone: z.string().min(1).max(64).optional(),
+  timezone: z.string().min(1).max(64).refine(isValidTimeZone, "timezone must be a valid IANA time zone").optional(),
 });
 
 // PATCH /birthday — partial update; upserts the singleton so the first save creates it.

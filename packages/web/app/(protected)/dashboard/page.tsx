@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { linkSteam, getDashboardStats, getBirthdayConfig, updateBirthdayConfig } from "@/lib/api-client";
+import { linkSteam, getDashboardStats, getBirthdayConfig, updateBirthdayConfig, updateBirthdayPrefs } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import { formatDate } from "@/lib/format";
 import type { UserWithRoles, BirthdayConfig } from "shared";
@@ -353,6 +353,77 @@ function BirthdayAdminCard({ token }: { token: string }) {
   );
 }
 
+/* ── Birthday self-service toggles ──────────────────────────────────── */
+
+function BirthdayPrefsToggles({
+  token,
+  initialOptOut,
+  initialShowAge,
+}: {
+  token: string;
+  initialOptOut: boolean;
+  initialShowAge: boolean;
+}) {
+  const [optOut, setOptOut] = useState(initialOptOut);
+  const [showAge, setShowAge] = useState(initialShowAge);
+  const [error, setError] = useState<string | null>(null);
+
+  // Keep in sync if the context user re-syncs (token refresh every ~2 min).
+  useEffect(() => {
+    setOptOut(initialOptOut);
+    setShowAge(initialShowAge);
+  }, [initialOptOut, initialShowAge]);
+
+  async function update(next: { birthdayOptOut?: boolean; birthdayShowAge?: boolean }) {
+    setError(null);
+    const res = await updateBirthdayPrefs(token, next);
+    if (res.success && res.data) {
+      setOptOut(res.data.birthdayOptOut);
+      setShowAge(res.data.birthdayShowAge);
+    } else {
+      setError(res.error || "Failed to save");
+      // Revert the optimistic flip.
+      if (next.birthdayOptOut !== undefined) setOptOut(!next.birthdayOptOut);
+      if (next.birthdayShowAge !== undefined) setShowAge(!next.birthdayShowAge);
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t border-border/30 pt-3">
+      <div className="mb-1.5 text-[10px] font-medium tracking-wider text-text-muted uppercase">
+        Birthday
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
+        <label className="flex items-center gap-2 text-xs text-text-secondary">
+          <input
+            type="checkbox"
+            checked={optOut}
+            onChange={(e) => {
+              setOptOut(e.target.checked);
+              update({ birthdayOptOut: e.target.checked });
+            }}
+            className="h-4 w-4 accent-accent"
+          />
+          Don&apos;t announce my birthday
+        </label>
+        <label className="flex items-center gap-2 text-xs text-text-secondary">
+          <input
+            type="checkbox"
+            checked={showAge}
+            onChange={(e) => {
+              setShowAge(e.target.checked);
+              update({ birthdayShowAge: e.target.checked });
+            }}
+            className="h-4 w-4 accent-accent"
+          />
+          Show my age in the announcement
+        </label>
+      </div>
+      {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const { apiToken, user: contextUser, hasPermission } = usePermissions();
@@ -571,6 +642,15 @@ export default function DashboardPage() {
             {linkError && <p className="mt-1.5 text-xs text-danger">{linkError}</p>}
             {linkSuccess && <p className="mt-1.5 text-xs text-success">Steam ID linked.</p>}
           </div>
+        )}
+
+        {/* Birthday privacy self-service */}
+        {displayUser && (
+          <BirthdayPrefsToggles
+            token={apiToken}
+            initialOptOut={displayUser.birthdayOptOut}
+            initialShowAge={displayUser.birthdayShowAge}
+          />
         )}
       </div>
 

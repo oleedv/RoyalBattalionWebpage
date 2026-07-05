@@ -9,6 +9,8 @@ export interface User {
   country: string | null;
   membershipDate: string | null;
   dateOfBirth: string | null;
+  birthdayOptOut: boolean;
+  birthdayShowAge: boolean;
   hasLoggedIn: boolean;
   disabled: boolean;
   disabledAt: string | null;

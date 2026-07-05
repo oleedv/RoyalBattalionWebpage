@@ -181,6 +181,8 @@ auth.get("/me", authMiddleware, async (c) => {
     country: user.country,
     membershipDate: user.membershipDate?.toISOString() ?? null,
     dateOfBirth: user.dateOfBirth?.toISOString() ?? null,
+    birthdayOptOut: user.birthdayOptOut,
+    birthdayShowAge: user.birthdayShowAge,
     hasLoggedIn: user.hasLoggedIn,
     disabled: user.disabled,
     disabledAt: user.disabledAt?.toISOString() ?? null,

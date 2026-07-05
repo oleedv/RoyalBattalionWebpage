@@ -1,3 +1,10 @@
+export interface BirthdayConfig {
+  enabled: boolean;
+  channelId: string | null;
+  postTime: string; // "HH:MM" 24h
+  timezone: string;
+}
+
 export interface SeedingConfig {
   id: number;
   enabled: boolean;

@@ -77,6 +77,8 @@ function mapUser(u: any): UserWithRoles {
     country: u.country ?? null,
     membershipDate: u.membershipDate?.toISOString() ?? null,
     dateOfBirth: u.dateOfBirth?.toISOString() ?? null,
+    birthdayOptOut: u.birthdayOptOut ?? false,
+    birthdayShowAge: u.birthdayShowAge ?? false,
     hasLoggedIn: u.hasLoggedIn ?? false,
     disabled: u.disabled ?? false,
     disabledAt: u.disabledAt?.toISOString() ?? null,

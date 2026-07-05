@@ -37,6 +37,7 @@ import type {
   PlayerStats,
   SquadServerOption,
   SeedingLiveStatus,
+  BirthdayConfig,
 } from "shared";
 
 const API_ORIGIN =
@@ -809,6 +810,41 @@ export function getSeedingLiveStatus(
   return request<SeedingLiveStatus>("/discord-bot/seeding/live-status", {
     headers: authHeaders(token),
   });
+}
+
+// Birthday announcer — admin config
+export function getBirthdayConfig(
+  token: string
+): Promise<ApiResponse<BirthdayConfig>> {
+  return request<BirthdayConfig>("/discord-bot/birthday", {
+    headers: authHeaders(token),
+  });
+}
+
+export function updateBirthdayConfig(
+  token: string,
+  data: Partial<BirthdayConfig>
+): Promise<ApiResponse<BirthdayConfig>> {
+  return request<BirthdayConfig>("/discord-bot/birthday", {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+// Birthday announcer — member self-service privacy flags
+export function updateBirthdayPrefs(
+  token: string,
+  data: { birthdayOptOut?: boolean; birthdayShowAge?: boolean }
+): Promise<ApiResponse<{ birthdayOptOut: boolean; birthdayShowAge: boolean }>> {
+  return request<{ birthdayOptOut: boolean; birthdayShowAge: boolean }>(
+    "/users/me/birthday-prefs",
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify(data),
+    }
+  );
 }
 export function pauseProspect(
   token: string,

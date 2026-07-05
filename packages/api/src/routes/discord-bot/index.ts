@@ -3,6 +3,7 @@ import { authMiddleware } from "../../middleware/auth";
 import overview from "./overview";
 import messages from "./messages";
 import seeding from "./seeding";
+import birthday from "./birthday";
 import timeouts from "./timeouts";
 
 const discordBot = new Hono();
@@ -14,6 +15,7 @@ discordBot.use("*", authMiddleware);
 discordBot.route("/", overview);
 discordBot.route("/", messages);
 discordBot.route("/", seeding);
+discordBot.route("/", birthday);
 discordBot.route("/", timeouts);
 
 export default discordBot;

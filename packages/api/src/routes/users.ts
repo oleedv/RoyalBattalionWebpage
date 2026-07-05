@@ -65,6 +65,36 @@ users.post("/link-steam", authMiddleware, rateLimit(10), validate("json", linkSt
   }
 });
 
+const birthdayPrefsSchema = z
+  .object({
+    birthdayOptOut: z.boolean().optional(),
+    birthdayShowAge: z.boolean().optional(),
+  })
+  .refine((d) => d.birthdayOptOut !== undefined || d.birthdayShowAge !== undefined, {
+    message: "Provide at least one of birthdayOptOut or birthdayShowAge",
+  });
+
+// Self-service: a member edits only their OWN birthday privacy flags (mirrors
+// /link-steam — auth only, keyed on the session user id, no admin permission).
+users.patch("/me/birthday-prefs", authMiddleware, rateLimit(20), validate("json", birthdayPrefsSchema), async (c) => {
+  const userId = c.get("userId");
+  const body = c.req.valid("json");
+  try {
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(body.birthdayOptOut !== undefined && { birthdayOptOut: body.birthdayOptOut }),
+        ...(body.birthdayShowAge !== undefined && { birthdayShowAge: body.birthdayShowAge }),
+      },
+      select: { birthdayOptOut: true, birthdayShowAge: true },
+    });
+    return success(c, updated);
+  } catch (err) {
+    logger.error("users", "Failed to update birthday prefs", { userId, err });
+    return fail(c, "Failed to update birthday preferences.", 500);
+  }
+});
+
 function mapUser(u: any): UserWithRoles {
   return {
     id: u.id,

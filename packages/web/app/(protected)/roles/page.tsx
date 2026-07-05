@@ -13,6 +13,7 @@ import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { DiscordRole, Permission } from "shared";
 import { PERMISSIONS } from "shared";
+import { Skeleton, SkeletonList } from "@/components/skeleton";
 
 // ---------------------------------------------------------------------------
 // Permission group metadata
@@ -631,8 +632,16 @@ export default function RolesPage() {
   // Main render
   // -----------------------------------------------------------------------
 
-  if (loading) {
-    return <div className="text-text-secondary">Loading roles...</div>;
+  if (loading && roles.length === 0) {
+    return (
+      <div>
+        <div className="mb-8 flex items-center justify-between">
+          <Skeleton className="h-9 w-40" />
+          <Skeleton className="h-7 w-28 rounded-sm" />
+        </div>
+        <SkeletonList rows={4} />
+      </div>
+    );
   }
 
   if (error) {

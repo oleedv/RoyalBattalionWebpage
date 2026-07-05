@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { UserProfile, LinkedWhitelistEntry, LiveStatus } from "shared";
 import { formatDate } from "@/lib/format";
 import { usePermissions } from "@/lib/permission-context";
+import { Skeleton, SkeletonRegion } from "@/components/skeleton";
 
 function InfoField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -346,7 +347,32 @@ export function UserProfileContent({
 
 export function UserProfileLoading() {
   return (
-    <div className="px-6 py-12 text-center text-sm text-text-muted">Loading profile…</div>
+    <SkeletonRegion label="Loading profile…" className="overflow-hidden">
+      {/* Header: avatar circle + name/meta/badge bars */}
+      <div className="flex items-start gap-4 border-b border-border/40 px-6 py-5">
+        <Skeleton className="h-12 w-12 rounded-full" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-3 w-56" />
+          <Skeleton className="h-4 w-24 rounded-sm" />
+        </div>
+      </div>
+
+      {/* Sections: title bar + grid of label/value field bars */}
+      {[3, 4, 2].map((fields, s) => (
+        <div key={s} className="border-t border-border/40 px-6 py-4">
+          <Skeleton className="mb-3 h-3 w-28" />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {Array.from({ length: fields }).map((_, i) => (
+              <div key={i} className="space-y-1.5">
+                <Skeleton className="h-2.5 w-16" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </SkeletonRegion>
   );
 }
 

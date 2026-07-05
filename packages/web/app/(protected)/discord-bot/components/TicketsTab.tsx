@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { getTickets, getTicket, resolveDiscordNames } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
+import { Skeleton, SkeletonList } from "@/components/skeleton";
 import type { Ticket, Permission } from "shared";
 
 function fmtDate(iso: string) {
@@ -197,7 +198,17 @@ export default function TicketsTab({ apiToken }: { apiToken: string }) {
     });
   }, [tickets, search, statusFilter, tierFilter]);
 
-  if (loading) return <div className="text-text-muted">Loading tickets...</div>;
+  if (loading && tickets.length === 0)
+    return (
+      <div>
+        <div className="mb-6 flex gap-3">
+          <Skeleton className="h-9 flex-1" />
+          <Skeleton className="h-9 w-32" />
+          <Skeleton className="h-9 w-32" />
+        </div>
+        <SkeletonList rows={5} avatar />
+      </div>
+    );
   if (error) return <div className="text-danger">{error}</div>;
 
   return (

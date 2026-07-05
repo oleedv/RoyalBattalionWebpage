@@ -10,6 +10,7 @@ import {
 import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { DataTable, type Column } from "@/components/data-table";
+import { Skeleton } from "@/components/skeleton";
 import { formatDate } from "@/lib/format";
 import type { Match } from "shared";
 
@@ -298,8 +299,29 @@ export default function MatchesPage() {
     },
   ], [editingId, editDate, editMap, editLayer, editResult, editServer, editVodUrl, editError]);
 
-  if (loading) {
-    return <div className="text-text-secondary">Loading matches...</div>;
+  if (loading && matches.length === 0) {
+    return (
+      <div>
+        <div className="mb-8 flex items-center justify-between">
+          <h1 className="font-display text-3xl font-bold tracking-wide">
+            Matches
+          </h1>
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-8 w-24 rounded-sm" />
+            <Skeleton className="h-8 w-28 rounded-sm" />
+          </div>
+        </div>
+        <div className="facet-border overflow-hidden rounded-sm bg-bg-card">
+          <DataTable<Match>
+            columns={matchColumns}
+            data={[]}
+            keyExtractor={(match) => match.id}
+            loading
+            skeletonRows={8}
+          />
+        </div>
+      </div>
+    );
   }
 
   if (error) {

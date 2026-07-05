@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { NavAuthButton } from "@/components/nav-auth-button";
+import { SkeletonList } from "@/components/skeleton";
 import { getPublicMatches } from "@/lib/api-client";
 import type { Match, MatchDetail, MatchPlayer } from "shared";
 
@@ -496,19 +497,7 @@ export default function MatchesPage() {
         {/* Match List */}
         <section>
           {loading ? (
-            <div className="space-y-3">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="facet-border animate-pulse rounded-sm bg-bg-card p-5">
-                  <div className="flex items-center gap-5">
-                    <div className="hidden h-14 w-14 rounded-sm bg-bg-tertiary sm:block" />
-                    <div className="flex-1">
-                      <div className="mb-2 h-5 w-32 rounded bg-bg-tertiary" />
-                      <div className="h-3 w-48 rounded bg-bg-tertiary" />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <SkeletonList rows={3} avatar />
           ) : matches.length === 0 ? (
             <div className="py-16 text-center text-text-muted">
               No matches recorded yet.

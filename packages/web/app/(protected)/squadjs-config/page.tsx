@@ -9,6 +9,7 @@ import {
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
+import { Skeleton, SkeletonCard, SkeletonRegion } from "@/components/skeleton";
 import type { SquadJSPlugin, SquadJSPluginOptionValue } from "shared";
 
 export default function SquadJSConfigPage() {
@@ -247,8 +248,34 @@ export default function SquadJSConfigPage() {
         </div>
       )}
 
-      {loading ? (
-        <div className="text-text-secondary">Loading plugins...</div>
+      {loading && !plugins.length ? (
+        <div>
+          {/* Search */}
+          <div className="mb-6">
+            <Skeleton className="h-[38px] w-full rounded-sm sm:w-80" />
+          </div>
+
+          {/* Plugin summary */}
+          <div className="mb-4">
+            <Skeleton className="h-3 w-48" />
+          </div>
+
+          {/* Plugin cards */}
+          <SkeletonRegion className="space-y-4" label="Loading plugins…">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonCard key={i} pad="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-5 w-5 rounded-sm" />
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-3 w-14" />
+                  </div>
+                  <Skeleton className="h-6 w-11 rounded-full" />
+                </div>
+              </SkeletonCard>
+            ))}
+          </SkeletonRegion>
+        </div>
       ) : (
         <>
           {/* Search */}

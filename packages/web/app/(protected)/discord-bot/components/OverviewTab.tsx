@@ -4,6 +4,12 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { getDiscordBotOverview } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import {
+  Skeleton,
+  SkeletonCard,
+  SkeletonRegion,
+  SkeletonStatCard,
+} from "@/components/skeleton";
 import type { DiscordBotOverview, SeedingSession, BotStatus } from "shared";
 
 function StatCard({
@@ -137,8 +143,48 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
 
   useAutoRefresh(refreshOverview, 20_000, !!apiToken);
 
-  if (loading)
-    return <div className="text-text-muted">Loading overview...</div>;
+  if (loading && !data)
+    return (
+      <SkeletonRegion className="space-y-8" label="Loading overview…">
+        {/* Bot status banner */}
+        <SkeletonCard pad="p-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <Skeleton className="h-7 w-24 rounded-sm" />
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+            <div className="ml-auto flex items-center gap-4">
+              <Skeleton className="h-3 w-10" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+          </div>
+        </SkeletonCard>
+
+        {/* Tickets + Prospects stat sections */}
+        {[0, 1].map((s) => (
+          <div key={s}>
+            <Skeleton className="mb-3 h-3 w-40" />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <SkeletonStatCard />
+              <SkeletonStatCard />
+              <SkeletonStatCard />
+            </div>
+          </div>
+        ))}
+
+        {/* Seeding */}
+        <div>
+          <Skeleton className="mb-3 h-3 w-24" />
+          <SkeletonCard pad="p-4" className="flex items-center justify-between">
+            <Skeleton className="h-6 w-48 rounded-sm" />
+            <Skeleton className="h-3 w-28" />
+          </SkeletonCard>
+        </div>
+      </SkeletonRegion>
+    );
   if (error) return <div className="text-danger">{error}</div>;
   if (!data) return null;
 

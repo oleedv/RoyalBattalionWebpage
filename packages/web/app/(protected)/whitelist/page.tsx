@@ -31,6 +31,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
 import { Modal } from "@/components/modal";
 import { SearchInput } from "@/components/search-input";
+import { Skeleton, SkeletonCard, SkeletonTableRows } from "@/components/skeleton";
 import { formatDate, formatRelativeTime, formatDateTime } from "@/lib/format";
 import type { WhitelistEntry, WhitelistEntryWithComments, WhitelistComment, WhitelistCandidate, AdminGroup, Clan, ServerConfig, AuditLogEntry, PlaytimeStats } from "shared";
 
@@ -231,7 +232,59 @@ export default function WhitelistPage() {
     setTogglingSync(false);
   }
 
-  if (loading) return <div className="text-text-secondary">Loading whitelist...</div>;
+  if (loading)
+    return (
+      <div>
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <Skeleton className="h-9 w-44" />
+          <Skeleton className="h-7 w-24" />
+        </div>
+        {/* Server tabs */}
+        <div className="mb-6 flex items-center gap-3">
+          <Skeleton className="h-11 w-52" />
+        </div>
+        {/* Tabs */}
+        <div className="mb-6 flex gap-2 border-b border-border pb-2.5">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-6 w-20" />
+          ))}
+        </div>
+        {/* Search / actions row */}
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-10 w-28" />
+          <Skeleton className="ml-auto h-10 w-24" />
+        </div>
+        {/* Table */}
+        <SkeletonCard pad="p-0">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                {["Steam ID", "Name", "Clan", "Group", "Expires", "Added"].map((label) => (
+                  <th key={label} className="px-4 py-3 text-left">
+                    <Skeleton className="h-3 w-16" />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <SkeletonTableRows
+                rows={8}
+                columns={[
+                  { key: "steamId" },
+                  { key: "name" },
+                  { key: "clan" },
+                  { key: "group" },
+                  { key: "expires" },
+                  { key: "created" },
+                ]}
+              />
+            </tbody>
+          </table>
+        </SkeletonCard>
+      </div>
+    );
   if (error) return <div className="text-danger">{error}</div>;
 
   const pendingCandidates = candidates.filter((c) => !dismissed.has(c.userId));
@@ -1445,7 +1498,7 @@ function EntriesTab({
               </InfoField>
               <InfoField label="Playtime (30/90d)">
                 {playtimeLoading ? (
-                  <span className="text-text-muted">Loading...</span>
+                  <Skeleton className="h-3 w-24" />
                 ) : playtimeStats ? (
                   <span className="text-text-secondary">{playtimeStats.playtime30}h / {playtimeStats.playtime90}h</span>
                 ) : (
@@ -1454,7 +1507,7 @@ function EntriesTab({
               </InfoField>
               <InfoField label="Seed Time (30/90d)">
                 {playtimeLoading ? (
-                  <span className="text-text-muted">Loading...</span>
+                  <Skeleton className="h-3 w-24" />
                 ) : playtimeStats ? (
                   <span className="text-text-secondary">{playtimeStats.seed30}h / {playtimeStats.seed90}h</span>
                 ) : (
@@ -1528,7 +1581,7 @@ function EntriesTab({
               {activityOpen && (
                 <div className="mt-3">
                   {activityLoading ? (
-                    <div className="text-xs text-text-muted">Loading activity...</div>
+                    <Skeleton className="h-3 w-32" />
                   ) : activityLogs.length === 0 ? (
                     <div className="text-xs text-text-muted">No activity recorded.</div>
                   ) : (
@@ -2518,10 +2571,16 @@ function ActivityTab({
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-text-muted">Loading...</td>
-                </tr>
+              {loading && logs.length === 0 ? (
+                <SkeletonTableRows
+                  rows={8}
+                  columns={[
+                    { key: "time" },
+                    { key: "user" },
+                    { key: "action" },
+                    { key: "details" },
+                  ]}
+                />
               ) : logs.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-8 text-center text-text-muted">No activity logs found.</td>

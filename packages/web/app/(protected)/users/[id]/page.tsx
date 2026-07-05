@@ -50,7 +50,7 @@ export default function UserProfilePage({
         </Link>
       </div>
       <div className="rounded-sm border border-border bg-bg-card">
-        {loading && <UserProfileLoading />}
+        {loading && !profile && <UserProfileLoading />}
         {error && <UserProfileError message={error} />}
         {profile && <UserProfileContent profile={profile} />}
       </div>

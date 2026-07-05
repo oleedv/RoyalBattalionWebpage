@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { getPlayerStats } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
+import { Skeleton, SkeletonCard } from "@/components/skeleton";
 import type { PlayerStats, PlayerStatsWindow, StatWindowKey } from "shared";
 
 /* ── helpers ─────────────────────────────────────────────────────────── */
@@ -206,14 +207,14 @@ export default function PlayerStatsSection() {
 
   if (loading) {
     return (
-      <div className="facet-border animate-pulse rounded-sm bg-bg-card p-5">
-        <div className="mb-4 h-4 w-40 rounded bg-bg-tertiary" />
+      <SkeletonCard>
+        <Skeleton className="mb-4 h-4 w-40" />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-16 rounded bg-bg-tertiary" />
+            <Skeleton key={i} className="h-16 rounded" />
           ))}
         </div>
-      </div>
+      </SkeletonCard>
     );
   }
 

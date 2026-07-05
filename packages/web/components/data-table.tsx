@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode } from "react";
+import { SkeletonTableRows } from "./skeleton";
 
 export interface Column<T> {
   key: string;
@@ -16,6 +17,10 @@ interface DataTableProps<T> {
   emptyMessage?: string;
   onRowClick?: (item: T) => void;
   rowClassName?: string | ((item: T) => string);
+  /** Show skeleton rows instead of data. Use for the initial load only. */
+  loading?: boolean;
+  /** Number of skeleton rows to render while loading (default 6). */
+  skeletonRows?: number;
 }
 
 export function DataTable<T>({
@@ -25,9 +30,11 @@ export function DataTable<T>({
   emptyMessage = "No items found",
   onRowClick,
   rowClassName,
+  loading = false,
+  skeletonRows = 6,
 }: DataTableProps<T>) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" aria-busy={loading || undefined}>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left">
@@ -42,7 +49,9 @@ export function DataTable<T>({
           </tr>
         </thead>
         <tbody>
-          {data.length === 0 ? (
+          {loading ? (
+            <SkeletonTableRows rows={skeletonRows} columns={columns} />
+          ) : data.length === 0 ? (
             <tr>
               <td
                 colSpan={columns.length}

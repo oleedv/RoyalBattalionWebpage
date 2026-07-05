@@ -12,6 +12,7 @@ import {
   reassignMentor,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { Skeleton, SkeletonList } from "@/components/skeleton";
 import type { Prospect } from "shared";
 import type { MentorGroup } from "shared";
 
@@ -297,7 +298,17 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
     });
   }, [prospects, search, statusFilter]);
 
-  if (loading) return <div className="text-text-muted">Loading prospects...</div>;
+  if (loading && prospects.length === 0)
+    return (
+      <div>
+        <div className="mb-6 flex flex-wrap gap-3">
+          <Skeleton className="h-9 w-44" />
+          <Skeleton className="h-9 flex-1" />
+          <Skeleton className="h-9 w-32" />
+        </div>
+        <SkeletonList rows={5} avatar />
+      </div>
+    );
   if (error) return <div className="text-danger">{error}</div>;
 
   return (
@@ -347,8 +358,8 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
       </div>
 
       {viewMode === "mentor" ? (
-        mentorLoading ? (
-          <div className="text-text-muted">Loading mentor groups...</div>
+        mentorLoading && mentorGroups.length === 0 ? (
+          <SkeletonList rows={3} avatar />
         ) : (
           <div className="space-y-6">
             {mentorGroups.length === 0 ? (

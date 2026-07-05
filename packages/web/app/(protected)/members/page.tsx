@@ -24,6 +24,7 @@ import { formatDate, formatRelativeTime } from "@/lib/format";
 import type { UserWithRolesAndComments } from "shared";
 import type { DiscordRole } from "shared";
 import { COUNTRIES, validateCountry } from "shared";
+import { Skeleton, SkeletonTableRows } from "@/components/skeleton";
 
 function CopyableId({ value, label }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -594,7 +595,54 @@ export default function MembersPage() {
   }
 
   if (loading) {
-    return <div className="text-text-secondary">Loading members...</div>;
+    return (
+      <div>
+        {/* Header */}
+        <div className="mb-8 flex items-center justify-between">
+          <Skeleton className="h-9 w-40" />
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-8 w-28 rounded-sm" />
+            <Skeleton className="h-8 w-20 rounded-sm" />
+            <Skeleton className="h-8 w-24 rounded-sm" />
+          </div>
+        </div>
+
+        {/* Search */}
+        <Skeleton className="mb-4 h-10 w-full max-w-md rounded-sm" />
+
+        {/* Members table */}
+        <div className="facet-border overflow-hidden rounded-sm bg-bg-card" aria-busy="true">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  {["Member", "Steam ID", "Roles", "Joined", "Country"].map((label) => (
+                    <th
+                      key={label}
+                      className="px-4 py-3 text-xs font-medium uppercase tracking-[0.15em] text-text-muted"
+                    >
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <SkeletonTableRows
+                  rows={8}
+                  columns={[
+                    { key: "name" },
+                    { key: "steamId" },
+                    { key: "roles" },
+                    { key: "joined" },
+                    { key: "country" },
+                  ]}
+                />
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (error) {

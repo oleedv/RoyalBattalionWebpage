@@ -9,6 +9,11 @@ import {
   reconnectLobbyServiceSteam,
 } from "@/lib/api-client";
 import type { LobbyStats, LobbyHealth } from "@/lib/api-client";
+import {
+  Skeleton,
+  SkeletonStatGrid,
+  SkeletonTableRows,
+} from "@/components/skeleton";
 
 function StatusDot({ active }: { active: boolean }) {
   return (
@@ -141,10 +146,69 @@ export default function LobbyMonitorPage() {
     );
   }
 
-  if (loading) {
+  if (loading && !stats && !health) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <p className="text-text-muted">Loading lobby service data...</p>
+      <div>
+        {/* Header */}
+        <div className="mb-6">
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="mt-2 h-4 w-72" />
+        </div>
+
+        {/* Service Status */}
+        <div className="mb-6 rounded-sm border border-border bg-bg-secondary">
+          <div className="border-b border-border px-4 py-3">
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* API Usage Stats */}
+        <SkeletonStatGrid
+          count={4}
+          className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4"
+        />
+
+        {/* Server Discovery Cache */}
+        <div className="mb-6 rounded-sm border border-border bg-bg-secondary">
+          <div className="border-b border-border px-4 py-3">
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <div className="p-4">
+            <Skeleton className="h-4 w-40" />
+          </div>
+        </div>
+
+        {/* Recent API Calls */}
+        <div className="rounded-sm border border-border bg-bg-secondary">
+          <div className="border-b border-border px-4 py-3">
+            <Skeleton className="h-4 w-40" />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <tbody aria-busy="true">
+                <SkeletonTableRows
+                  rows={6}
+                  columns={[
+                    { key: "time" },
+                    { key: "endpoint" },
+                    { key: "caller" },
+                    { key: "server" },
+                    { key: "status" },
+                    { key: "latency", className: "text-right" },
+                  ]}
+                />
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     );
   }

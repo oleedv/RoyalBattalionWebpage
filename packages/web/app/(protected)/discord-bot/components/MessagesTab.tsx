@@ -3,9 +3,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { getBotMessages } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { SkeletonTableRows } from "@/components/skeleton";
 import type { BotMessage } from "shared";
 
 const PAGE_SIZE = 50;
+
+const MESSAGE_COLUMNS = [
+  { key: "time" },
+  { key: "author" },
+  { key: "channel" },
+  { key: "content" },
+  { key: "type" },
+];
 
 export default function MessagesTab({ apiToken }: { apiToken: string }) {
   const [messages, setMessages] = useState<BotMessage[]>([]);
@@ -183,7 +192,10 @@ export default function MessagesTab({ apiToken }: { apiToken: string }) {
           No messages found
         </div>
       ) : (
-        <div className="facet-border overflow-hidden rounded-sm bg-bg-card">
+        <div
+          className="facet-border overflow-hidden rounded-sm bg-bg-card"
+          aria-busy={loading && messages.length === 0}
+        >
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -196,7 +208,10 @@ export default function MessagesTab({ apiToken }: { apiToken: string }) {
                 </tr>
               </thead>
               <tbody>
-                {messages.map((m) => (
+                {loading && messages.length === 0 ? (
+                  <SkeletonTableRows rows={8} columns={MESSAGE_COLUMNS} />
+                ) : (
+                  messages.map((m) => (
                   <tr key={m.id} className="border-b border-border/30 last:border-0">
                     <td className="whitespace-nowrap px-4 py-2 text-text-muted">
                       {new Date(m.createdAt).toLocaleString()}
@@ -223,7 +238,8 @@ export default function MessagesTab({ apiToken }: { apiToken: string }) {
                       )}
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>

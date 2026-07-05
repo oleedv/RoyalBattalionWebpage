@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getBotLogs } from "@/lib/api-client";
+import { Skeleton, SkeletonRegion } from "@/components/skeleton";
 import type { BotLog } from "shared";
 
 const PAGE_SIZE = 100;
@@ -206,7 +207,20 @@ export default function LogsTab({ apiToken }: { apiToken: string }) {
       {/* Log entries */}
       {error ? (
         <div className="text-danger">{error}</div>
-      ) : logs.length === 0 && !loading ? (
+      ) : loading && logs.length === 0 ? (
+        <SkeletonRegion className="space-y-1" label="Loading logs…">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="facet-border rounded-sm bg-bg-card px-4 py-2.5">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-3 w-32 shrink-0" />
+                <Skeleton className="h-4 w-12 shrink-0 rounded-sm" />
+                <Skeleton className="h-4 w-20 shrink-0 rounded-sm" />
+                <Skeleton className="h-3 flex-1" />
+              </div>
+            </div>
+          ))}
+        </SkeletonRegion>
+      ) : logs.length === 0 ? (
         <div className="facet-border rounded-sm bg-bg-card px-5 py-8 text-center text-text-muted">
           No logs found
         </div>

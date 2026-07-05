@@ -392,9 +392,11 @@ export default function AuditLogsPage() {
       <div className="rounded-sm border border-border">
         <DataTable<AuditLogEntry>
           columns={auditColumns}
-          data={loading ? [] : filteredLogs}
+          data={filteredLogs}
           keyExtractor={(log) => log.id}
-          emptyMessage={loading ? "Loading..." : "No audit log entries found"}
+          emptyMessage="No audit log entries found"
+          loading={loading && logs.length === 0}
+          skeletonRows={8}
           onRowClick={(log) => setExpandedId(expandedId === log.id ? null : log.id)}
           rowClassName="group"
         />

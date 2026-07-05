@@ -8,6 +8,7 @@ import {
   resolveDiscordNames,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { Skeleton, SkeletonList } from "@/components/skeleton";
 import type { TicketTimeout } from "shared";
 
 function fmtDate(iso: string) {
@@ -144,7 +145,16 @@ export default function TimeoutsTab({
     );
   }, [timeouts, search, nameMap]);
 
-  if (loading) return <div className="text-text-muted">Loading timeouts...</div>;
+  if (loading && timeouts.length === 0)
+    return (
+      <div>
+        <div className="mb-6 flex items-center gap-3">
+          <Skeleton className="h-9 flex-1" />
+          {canManage && <Skeleton className="h-9 w-32" />}
+        </div>
+        <SkeletonList rows={4} avatar />
+      </div>
+    );
   if (error) return <div className="text-danger">{error}</div>;
 
   return (

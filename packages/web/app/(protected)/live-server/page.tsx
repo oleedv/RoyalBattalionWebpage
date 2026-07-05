@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePermissions } from "@/lib/permission-context";
 import { Modal } from "@/components/modal";
+import { SkeletonStatGrid } from "@/components/skeleton";
 
 import type { Player, ServerInfo, ChatMessage, ConsoleEntry, MetricSample, WSMessage, OnlineClanData, ChatFilter, RandomizationStatus } from "./lib/types";
 import { handleGameEvent, type GameEventAction } from "./lib/handle-game-event";
@@ -73,6 +74,10 @@ export default function LiveServerPage() {
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const apiTokenRef = useRef(apiToken);
   apiTokenRef.current = apiToken;
+  // Tracks whether the first server snapshot has ever arrived, so the
+  // pre-first-frame skeleton shows only until the initial snapshot and
+  // never flashes again on later socket events or server switches.
+  const hasSnapshotRef = useRef(false);
 
   const [connected, setConnected] = useState(false);
   const [squadjsConnected, setSquadjsConnected] = useState(false);
@@ -233,6 +238,7 @@ export default function LiveServerPage() {
           break;
         }
         case "snapshot":
+          hasSnapshotRef.current = true;
           if (msg.configured !== undefined) setSquadjsConfigured(msg.configured);
           setSquadjsConnected(msg.data.connected);
           setPlayers(msg.data.players);
@@ -608,6 +614,12 @@ export default function LiveServerPage() {
     return <div className="text-danger">Insufficient permissions.</div>;
   }
 
+  // Show the snapshot skeleton only before the very first server snapshot
+  // arrives (socket open, no data yet). Once any snapshot has been received
+  // it never returns, even when serverInfo is transiently null (e.g. SquadJS
+  // down or after a server switch).
+  const showSnapshotSkeleton = connected && !serverInfo && !hasSnapshotRef.current;
+
   const team1All = players.filter((p) => String(p.teamID) === "1");
   const team2All = players.filter((p) => String(p.teamID) === "2");
   const team1 = team1Search
@@ -929,6 +941,14 @@ export default function LiveServerPage() {
         >
           {actionFeedback}
         </div>
+      )}
+
+      {/* Server info bar skeleton (pre-first-frame only) */}
+      {showSnapshotSkeleton && (
+        <SkeletonStatGrid
+          count={6}
+          className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"
+        />
       )}
 
       {/* Server info bar */}

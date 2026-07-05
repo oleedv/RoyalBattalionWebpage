@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { usePermissions } from "@/lib/permission-context";
+import { Skeleton, SkeletonCard, SkeletonStatGrid } from "@/components/skeleton";
 import OverviewTab from "./components/OverviewTab";
 import TicketsTab from "./components/TicketsTab";
 import ProspectsTab from "./components/ProspectsTab";
@@ -24,7 +25,26 @@ export default function DiscordBotPage() {
   const { apiToken, hasPermission } = usePermissions();
   const [tab, setTab] = useState<Tab>("overview");
 
-  if (!apiToken) return <div className="text-text-secondary">Loading...</div>;
+  if (!apiToken) {
+    return (
+      <div>
+        <div className="mb-8">
+          <Skeleton className="h-9 w-48" />
+        </div>
+        <div className="mb-6 flex flex-wrap gap-1 rounded-sm border border-border bg-bg-tertiary/50 p-1">
+          {TABS.map((t) => (
+            <Skeleton key={t.key} className="h-9 flex-1" />
+          ))}
+        </div>
+        <div className="space-y-8">
+          <SkeletonCard pad="p-4">
+            <Skeleton className="h-6 w-full" />
+          </SkeletonCard>
+          <SkeletonStatGrid count={3} className="grid gap-3 sm:grid-cols-3" />
+        </div>
+      </div>
+    );
+  }
 
   const canView = hasPermission("view:discord-bot") || hasPermission("manage:discord-bot");
   if (!canView) {

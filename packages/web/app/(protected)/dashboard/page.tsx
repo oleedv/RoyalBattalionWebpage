@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/format";
 import type { UserWithRoles } from "shared";
 import type { DashboardStats, ServerStatus } from "@/lib/api-client";
 import PlayerStatsSection from "./player-stats-section";
+import { SkeletonStatGrid } from "@/components/skeleton";
 
 const CONNECT_URLS: Record<string, string> = {
   "37.153.157.204:27050": "steam://connect/37.153.157.204:27050",
@@ -459,15 +460,7 @@ export default function DashboardPage() {
 
       {/* ── Server Status ──────────────────────────────────────────── */}
       {statsLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {[0, 1].map((i) => (
-            <div key={i} className="facet-border animate-pulse rounded-sm bg-bg-card p-5">
-              <div className="mb-3 h-3 w-24 rounded bg-bg-tertiary" />
-              <div className="mb-3 h-8 w-16 rounded bg-bg-tertiary" />
-              <div className="h-1 w-full rounded-full bg-bg-tertiary" />
-            </div>
-          ))}
-        </div>
+        <SkeletonStatGrid count={2} className="grid gap-4 sm:grid-cols-2" />
       ) : stats?.servers && stats.servers.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2">
           {stats.servers.map((server) => (

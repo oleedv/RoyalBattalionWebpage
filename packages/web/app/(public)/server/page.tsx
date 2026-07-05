@@ -6,6 +6,7 @@ import Image from "next/image";
 import { NavAuthButton } from "@/components/nav-auth-button";
 import { getServerStatus, createLobby, getAdminTeamCount } from "@/lib/api-client";
 import type { ServerStatus } from "@/lib/api-client";
+import { Skeleton, SkeletonCard, SkeletonRegion } from "@/components/skeleton";
 
 const SERVERS = [
   {
@@ -292,8 +293,46 @@ export default function ServerPage() {
 
         {/* Server Cards */}
         <section className="mb-16">
-          {loading ? (
-            <div className="text-center text-text-secondary">Loading server status...</div>
+          {loading && statuses.length === 0 ? (
+            <SkeletonRegion className="grid gap-6 lg:grid-cols-2" label="Loading server status…">
+              {SERVERS.map((config) => (
+                <SkeletonCard key={config.label} pad="p-0">
+                  {/* Header */}
+                  <div className="flex items-center justify-between border-b border-border/50 px-6 py-5">
+                    <div className="flex items-center gap-4">
+                      <Skeleton className="h-12 w-12 rounded-full" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-3 w-20" />
+                        <Skeleton className="h-5 w-32" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                  {/* Status info */}
+                  <div className="px-6 py-4">
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                      <div className="space-y-2">
+                        <Skeleton className="h-2.5 w-12" />
+                        <Skeleton className="h-7 w-16" />
+                      </div>
+                      <div className="space-y-2">
+                        <Skeleton className="h-2.5 w-16" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                      <div className="col-span-2 space-y-2 sm:col-span-1">
+                        <Skeleton className="h-2.5 w-14" />
+                        <Skeleton className="h-4 w-28" />
+                      </div>
+                    </div>
+                    <Skeleton className="mt-4 h-1.5 w-full rounded-full" />
+                  </div>
+                  {/* Connect button */}
+                  <div className="border-t border-border/50 px-6 py-4">
+                    <Skeleton className="h-10 w-32 rounded-sm" />
+                  </div>
+                </SkeletonCard>
+              ))}
+            </SkeletonRegion>
           ) : (
             <div className="grid gap-6 lg:grid-cols-2">
               {SERVERS.map((config, i) => (

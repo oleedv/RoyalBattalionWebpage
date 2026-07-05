@@ -12,6 +12,7 @@ import {
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { Skeleton, SkeletonRegion, SkeletonList } from "@/components/skeleton";
 import type { Ticket, LegacyTicket, LegacyTicketMessage, Prospect, Permission } from "shared";
 
 type Tab = "tickets" | "prospects";
@@ -587,6 +588,27 @@ function ProspectDetail({ prospect, displayName }: { prospect: Prospect; display
   );
 }
 
+function DetailSkeleton() {
+  return (
+    <div className="border-t border-border/50 px-5 pb-5 pt-4">
+      <SkeletonRegion label="Loading details…" className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="space-y-2">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-4 w-28" />
+            </div>
+          ))}
+        </div>
+        <div className="space-y-3">
+          <Skeleton className="h-16 w-full rounded-sm" />
+          <Skeleton className="h-16 w-full rounded-sm" />
+        </div>
+      </SkeletonRegion>
+    </div>
+  );
+}
+
 function TicketRow({ ticket, onExpand, expanded, detail, displayName }: {
   ticket: Ticket;
   onExpand: () => void;
@@ -653,11 +675,7 @@ function TicketRow({ ticket, onExpand, expanded, detail, displayName }: {
         </a>
       </div>
       {expanded && detail && <TicketDetail ticket={detail} displayName={displayName} />}
-      {expanded && !detail && (
-        <div className="border-t border-border/50 px-5 py-6 text-center text-sm text-text-muted">
-          Loading details...
-        </div>
-      )}
+      {expanded && !detail && <DetailSkeleton />}
     </div>
   );
 }
@@ -727,11 +745,7 @@ function LegacyTicketRow({ ticket, onExpand, expanded, detail }: {
         </a>
       </div>
       {expanded && detail && <LegacyTicketDetail ticket={detail} />}
-      {expanded && !detail && (
-        <div className="border-t border-border/50 px-5 py-6 text-center text-sm text-text-muted">
-          Loading details...
-        </div>
-      )}
+      {expanded && !detail && <DetailSkeleton />}
     </div>
   );
 }
@@ -803,11 +817,7 @@ function ProspectRow({ prospect, onExpand, expanded, detail, displayName }: {
         </a>
       </div>
       {expanded && detail && <ProspectDetail prospect={detail} displayName={displayName} />}
-      {expanded && !detail && (
-        <div className="border-t border-border/50 px-5 py-6 text-center text-sm text-text-muted">
-          Loading details...
-        </div>
-      )}
+      {expanded && !detail && <DetailSkeleton />}
     </div>
   );
 }
@@ -858,6 +868,8 @@ export default function TicketsPage() {
   const [tierFilter, setTierFilter] = useState("all");
   const [pageSize, setPageSize] = useState(getStoredPageSize);
   const [page, setPage] = useState(0);
+  const [ticketsLoaded, setTicketsLoaded] = useState(false);
+  const [prospectsLoaded, setProspectsLoaded] = useState(false);
 
   // Tickets state
   const [tickets, setTicketsState] = useState<Ticket[]>([]);
@@ -939,6 +951,7 @@ export default function TicketsPage() {
         if (legacyRes.success && legacyRes.data) {
           setLegacyTickets(legacyRes.data);
         }
+        setTicketsLoaded(true);
       });
     }
     if (tab === "prospects" && prospects.length === 0) {
@@ -948,6 +961,7 @@ export default function TicketsPage() {
           const ids = res.data.flatMap((p) => [p.userId, p.closedBy, p.mentorId].filter(Boolean) as string[]);
           resolveNames(ids);
         } else setError(res.error || "Failed to load prospects");
+        setProspectsLoaded(true);
       });
     }
   }, [apiToken, tab]);
@@ -1091,9 +1105,8 @@ export default function TicketsPage() {
     ? ["all", "open", "closing", "closed"]
     : ["all", "open", "closed", "accepted", "denied"];
 
-  if (!apiToken) {
-    return <div className="text-text-secondary">Loading...</div>;
-  }
+  const initialLoading =
+    !apiToken || (tab === "tickets" ? !ticketsLoaded : !prospectsLoaded);
 
   if (error) {
     return <div className="text-danger">{error}</div>;
@@ -1174,7 +1187,9 @@ export default function TicketsPage() {
       {/* Content */}
       {tab === "tickets" && (
         <div className="space-y-3">
-          {filteredUnifiedTickets.length === 0 ? (
+          {initialLoading ? (
+            <SkeletonList rows={6} avatar />
+          ) : filteredUnifiedTickets.length === 0 ? (
             <div className="facet-border rounded-sm bg-bg-card px-5 py-8 text-center text-text-muted">
               {tickets.length === 0 && legacyTickets.length === 0 ? "No tickets found" : "No tickets match your search"}
             </div>
@@ -1205,7 +1220,9 @@ export default function TicketsPage() {
 
       {tab === "prospects" && (
         <div className="space-y-3">
-          {filteredProspects.length === 0 ? (
+          {initialLoading ? (
+            <SkeletonList rows={6} avatar />
+          ) : filteredProspects.length === 0 ? (
             <div className="facet-border rounded-sm bg-bg-card px-5 py-8 text-center text-text-muted">
               {prospects.length === 0 ? "No prospect applications found" : "No prospects match your search"}
             </div>

@@ -1,21 +1,11 @@
 import Link from "next/link";
 import Image from "next/image";
 
-const TECH_STACK = [
-  { name: "Next.js", url: "https://nextjs.org" },
-  { name: "Tailwind CSS", url: "https://tailwindcss.com" },
-  { name: "Hono", url: "https://hono.dev" },
-  { name: "Prisma", url: "https://www.prisma.io" },
-  { name: "MariaDB", url: "https://mariadb.org" },
-  { name: "Bun", url: "https://bun.sh" },
-];
-
 export function Footer() {
   return (
     <footer className="border-t border-border bg-bg-primary">
       <div className="mx-auto max-w-7xl px-6 py-12">
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Brand */}
+        <div className="grid gap-10 sm:grid-cols-2">
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-3">
               <Image
@@ -34,12 +24,11 @@ export function Footer() {
             </p>
           </div>
 
-          {/* Links */}
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:items-end">
             <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
               Legal
             </h3>
-            <nav className="flex flex-col gap-2">
+            <nav className="flex flex-col gap-2 sm:items-end">
               <Link
                 href="/privacy"
                 className="text-sm text-text-secondary transition-colors hover:text-accent"
@@ -62,36 +51,13 @@ export function Footer() {
               </a>
             </nav>
           </div>
-
-          {/* Built With */}
-          <div className="flex flex-col gap-3">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
-              Built With &lt;3 Using
-            </h3>
-            <div className="flex flex-wrap gap-1.5">
-              {TECH_STACK.map((tech) => (
-                <a
-                  key={tech.name}
-                  href={tech.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-sm border border-border bg-bg-tertiary px-2 py-0.5 text-[10px] text-text-muted transition-colors hover:border-accent/40 hover:text-accent"
-                >
-                  {tech.name}
-                </a>
-              ))}
-            </div>
-          </div>
         </div>
 
-        {/* Divider */}
-        <div className="my-8 h-px bg-border" />
+        <div className="my-8 h-px bg-gradient-to-r from-transparent via-accent/30 to-transparent" />
 
-        {/* Bottom */}
         <div className="flex flex-col items-center gap-3 text-center">
           <p className="text-xs text-text-muted">
-            Made by{" "}
-            <span className="font-semibold text-accent">RB | Ole</span>
+            Made by <span className="font-semibold text-accent">RB | Ole</span>
           </p>
           <p className="text-xs text-text-muted">
             &copy; 2024 &ndash; 2026 Royal Battalion. All rights reserved.

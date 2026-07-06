@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -165,6 +167,15 @@ export function DesignGallery() {
           </Tabs>
           <Input placeholder="Plain input" className="w-48" />
           <Skeleton className="h-8 w-32" />
+          <label className="flex items-center gap-2 text-sm text-text-secondary">
+            <Switch defaultChecked aria-label="Demo switch" /> Enabled
+          </label>
+          <ToggleGroup defaultValue={["30d"]} aria-label="Range">
+            <ToggleGroupItem value="7d">7D</ToggleGroupItem>
+            <ToggleGroupItem value="30d">30D</ToggleGroupItem>
+            <ToggleGroupItem value="90d">90D</ToggleGroupItem>
+            <ToggleGroupItem value="all">All</ToggleGroupItem>
+          </ToggleGroup>
         </div>
         <Card className="p-0">
           <EmptyState

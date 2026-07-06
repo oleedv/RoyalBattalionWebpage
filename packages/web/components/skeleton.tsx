@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type HTMLAttributes, type ReactNode } from "react";
 
 /**
  * Skeleton loading primitives.
@@ -21,11 +21,15 @@ import { type ReactNode } from "react";
  */
 
 /** Single pulsing placeholder bar. Decorative. Size/shape via className. */
-export function Skeleton({ className = "" }: { className?: string }) {
+export function Skeleton({
+  className = "",
+  ...props
+}: { className?: string } & HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       aria-hidden="true"
       className={`animate-pulse rounded bg-bg-tertiary ${className}`}
+      {...props}
     />
   );
 }

@@ -7,16 +7,25 @@ import { cn } from "@/lib/utils";
 
 export function SearchInput({
   onSearch,
+  value,
+  onChange,
   placeholder = "Search...",
   debounceMs = 250,
   className,
 }: {
-  onSearch: (value: string) => void;
+  /** Debounced callback, fires after debounceMs of typing inactivity. */
+  onSearch?: (value: string) => void;
+  /** Controlled value. When set, the parent owns the input state. */
+  value?: string;
+  /** Immediate per-keystroke callback for controlled usage. */
+  onChange?: (value: string) => void;
   placeholder?: string;
   debounceMs?: number;
   className?: string;
 }) {
-  const [value, setValue] = useState("");
+  const [internal, setInternal] = useState("");
+  const isControlled = value !== undefined;
+  const shown = isControlled ? value : internal;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(onSearch);
   latest.current = onSearch;
@@ -29,27 +38,31 @@ export function SearchInput({
   );
 
   function handleChange(next: string) {
-    setValue(next);
+    if (!isControlled) setInternal(next);
+    onChange?.(next);
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => latest.current(next), debounceMs);
+    if (latest.current) {
+      timer.current = setTimeout(() => latest.current?.(next), debounceMs);
+    }
   }
 
   function handleClear() {
     if (timer.current) clearTimeout(timer.current);
-    setValue("");
-    latest.current("");
+    if (!isControlled) setInternal("");
+    onChange?.("");
+    latest.current?.("");
   }
 
   return (
     <div className={cn("relative", className)}>
       <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-text-muted" />
       <Input
-        value={value}
+        value={shown}
         onChange={(e) => handleChange(e.target.value)}
         placeholder={placeholder}
         className="pl-8 pr-8"
       />
-      {value && (
+      {shown && (
         <button
           type="button"
           aria-label="Clear search"

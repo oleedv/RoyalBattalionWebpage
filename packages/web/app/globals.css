@@ -24,6 +24,13 @@
   --color-success: #22c55e;
   --color-warning: #f59e0b;
 
+  /* Team + external-brand tokens (chart/team surfaces) */
+  --color-team-one: #4a90d9;
+  --color-team-one-bright: #7ab3ef;
+  --color-team-two: #d94a4a;
+  --color-team-two-bright: #ef7a7a;
+  --color-discord: #5865f2;
+
   --font-display: var(--font-cinzel), "Cinzel", serif;
   --font-body: var(--font-outfit), "Outfit", system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), "JetBrains Mono", ui-monospace, monospace;
@@ -55,6 +62,12 @@ html.light {
   --color-danger: #b91c1c;
   --color-success: #15803d;
   --color-warning: #b45309;
+
+  --color-team-one: #35659f;
+  --color-team-one-bright: #4a7db8;
+  --color-team-two: #b03a3a;
+  --color-team-two-bright: #c25858;
+  --color-discord: #5865f2;
 }
 
 /* ---- shadcn/Base UI variable bridge: both themes resolve through our --color-* tokens ---- */
@@ -330,4 +343,46 @@ body {
   mask-composite: exclude;
   -webkit-mask-composite: xor;
   pointer-events: none;
+}
+
+/* Gilded grade for in-game media: dark vignette + gold wash. */
+.graded-media {
+  position: relative;
+  overflow: hidden;
+}
+.graded-media > img,
+.graded-media > video {
+  filter: saturate(0.82) contrast(1.06);
+}
+.graded-media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at center, transparent 45%, color-mix(in srgb, var(--color-bg-primary) 78%, transparent) 100%),
+    linear-gradient(160deg, color-mix(in srgb, var(--color-accent) 14%, transparent) 0%, transparent 55%);
+}
+
+/* One-time scroll reveal (JS adds .reveal-visible once). */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+.reveal-visible {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Gold aura for the hero lion (token-derived, no raw rgba). */
+.ember-lion-glow {
+  filter: drop-shadow(0 0 40px color-mix(in srgb, var(--color-accent) 30%, transparent));
 }

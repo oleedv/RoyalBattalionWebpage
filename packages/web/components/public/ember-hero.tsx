@@ -71,6 +71,7 @@ export function EmberHero({
         (entries) => {
           visible = entries.some((e) => e.isIntersecting);
           if (visible) {
+            cancelAnimationFrame(raf);
             last = performance.now();
             raf = requestAnimationFrame(frame);
           }

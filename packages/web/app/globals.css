@@ -1,5 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700&display=swap");
 @import "tailwindcss";
+@import "tw-animate-css";
 
 @theme {
   --color-bg-primary: #08080a;
@@ -24,8 +24,9 @@
   --color-success: #22c55e;
   --color-warning: #f59e0b;
 
-  --font-display: "Cinzel", serif;
-  --font-body: "Outfit", system-ui, sans-serif;
+  --font-display: var(--font-cinzel), "Cinzel", serif;
+  --font-body: var(--font-outfit), "Outfit", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), "JetBrains Mono", ui-monospace, monospace;
 }
 
 html {
@@ -35,16 +36,91 @@ html {
 
 html.light {
   color-scheme: light;
-  --color-bg-primary: #f5f5f0;
-  --color-bg-secondary: #eaeae4;
-  --color-bg-tertiary: #ddddd6;
-  --color-bg-card: #ffffff;
-  --color-bg-card-hover: #f8f8f4;
-  --color-text-primary: #1a1a1e;
-  --color-text-secondary: #555558;
-  --color-text-muted: #8a8a8e;
-  --color-border: #d0d0cc;
-  --color-border-accent: #c8a84e44;
+  /* Parchment theme: warm ivory ground, ink text, gold deepened to bronze for AA contrast */
+  --color-bg-primary: #f3efe5;
+  --color-bg-secondary: #ece7d9;
+  --color-bg-tertiary: #e2dbc8;
+  --color-bg-card: #faf7ef;
+  --color-bg-card-hover: #f5f1e6;
+  --color-accent: #8a7430;
+  --color-accent-muted: #7d6a2c;
+  --color-accent-dim: #a3925a;
+  --color-accent-bright: #6e5c24;
+  --color-text-primary: #1c1a14;
+  --color-text-secondary: #5c574a;
+  /* #6a6353 clears WCAG AA: ~5.2:1 on bg-primary, ~4.8:1 on bg-secondary */
+  --color-text-muted: #6a6353;
+  --color-border: #e2dbc8;
+  --color-border-accent: #8a743055;
+  --color-danger: #b91c1c;
+  --color-success: #15803d;
+  --color-warning: #b45309;
+}
+
+/* ---- shadcn/Base UI variable bridge: both themes resolve through our --color-* tokens ---- */
+:root {
+  --radius: 0.125rem;
+  --background: var(--color-bg-primary);
+  --foreground: var(--color-text-primary);
+  --card: var(--color-bg-card);
+  --card-foreground: var(--color-text-primary);
+  --popover: var(--color-bg-secondary);
+  --popover-foreground: var(--color-text-primary);
+  --primary: var(--color-accent);
+  --primary-foreground: #08080a;
+  --secondary: var(--color-bg-tertiary);
+  --secondary-foreground: var(--color-text-primary);
+  --muted: var(--color-bg-tertiary);
+  --muted-foreground: var(--color-text-secondary);
+  --accent-ui: var(--color-bg-card-hover);
+  --accent-ui-foreground: var(--color-text-primary);
+  --destructive: var(--color-danger);
+  --destructive-foreground: #eeeee8;
+  --input: var(--color-border);
+  --ring: var(--color-accent);
+  --sidebar: var(--color-bg-secondary);
+  --sidebar-foreground: var(--color-text-primary);
+  --sidebar-primary: var(--color-accent);
+  --sidebar-primary-foreground: #08080a;
+  --sidebar-accent: var(--color-bg-card-hover);
+  --sidebar-accent-foreground: var(--color-accent-bright);
+  --sidebar-border: var(--color-border);
+  --sidebar-ring: var(--color-accent);
+}
+
+html.light {
+  --primary-foreground: #faf7ef;
+  --destructive-foreground: #faf7ef;
+  --sidebar-primary-foreground: #faf7ef;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-ui: var(--accent-ui);
+  --color-accent-ui-foreground: var(--accent-ui-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 }
 
 body {

@@ -9,3 +9,4 @@ dist/
 prisma/*.db
 packages/api/src/generated/
 .claude/worktrees/
+.superpowers/

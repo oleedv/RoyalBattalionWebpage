@@ -4,10 +4,12 @@ import * as React from "react";
 import {
   flexRender,
   getCoreRowModel,
+  getExpandedRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type ExpandedState,
   type RowSelectionState,
   type SortingState,
 } from "@tanstack/react-table";
@@ -15,6 +17,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -28,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { SkeletonTableRows } from "@/components/skeleton";
 import { cn } from "@/lib/utils";
 
 export type ColumnMeta = { mono?: boolean; className?: string };
@@ -41,6 +45,12 @@ interface DataTableProps<TData> {
   pageSize?: number;
   emptyState?: React.ReactNode;
   className?: string;
+  /** Show skeleton rows instead of data. Use for the initial load only. */
+  loading?: boolean;
+  /** Number of skeleton rows to render while loading (default 6). */
+  skeletonRows?: number;
+  /** When set, rows get a disclosure chevron toggling a full-width detail cell. */
+  renderDetail?: (row: TData) => React.ReactNode;
 }
 
 export function DataTable<TData>({
@@ -52,50 +62,82 @@ export function DataTable<TData>({
   pageSize = 20,
   emptyState,
   className,
+  loading = false,
+  skeletonRows = 6,
+  renderDetail,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
+  const [expanded, setExpanded] = React.useState<ExpandedState>({});
 
   const allColumns = React.useMemo<ColumnDef<TData, unknown>[]>(() => {
-    if (!enableSelection) return columns;
-    const select: ColumnDef<TData, unknown> = {
-      id: "__select",
-      size: 32,
-      enableSorting: false,
-      header: ({ table }) => (
-        <Checkbox
-          aria-label="Select all rows"
-          checked={table.getIsAllPageRowsSelected()}
-          indeterminate={
-            table.getIsSomePageRowsSelected() &&
-            !table.getIsAllPageRowsSelected()
-          }
-          onCheckedChange={(value) =>
-            table.toggleAllPageRowsSelected(value === true)
-          }
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          aria-label="Select row"
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(value === true)}
-        />
-      ),
-    };
-    return [select, ...columns];
-  }, [columns, enableSelection]);
+    const prefix: ColumnDef<TData, unknown>[] = [];
+    if (enableSelection) {
+      prefix.push({
+        id: "__select",
+        size: 32,
+        enableSorting: false,
+        header: ({ table }) => (
+          <Checkbox
+            aria-label="Select all rows"
+            checked={table.getIsAllPageRowsSelected()}
+            indeterminate={
+              table.getIsSomePageRowsSelected() &&
+              !table.getIsAllPageRowsSelected()
+            }
+            onCheckedChange={(value) =>
+              table.toggleAllPageRowsSelected(value === true)
+            }
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            aria-label="Select row"
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(value === true)}
+          />
+        ),
+      });
+    }
+    if (renderDetail) {
+      prefix.push({
+        id: "__expander",
+        size: 32,
+        enableSorting: false,
+        header: () => null,
+        cell: ({ row }) => (
+          <button
+            type="button"
+            aria-label={row.getIsExpanded() ? "Collapse row" : "Expand row"}
+            aria-expanded={row.getIsExpanded()}
+            className="inline-flex items-center text-text-muted hover:text-text-primary"
+            onClick={() => row.toggleExpanded()}
+          >
+            {row.getIsExpanded() ? (
+              <ChevronDown className="size-4" />
+            ) : (
+              <ChevronRight className="size-4" />
+            )}
+          </button>
+        ),
+      });
+    }
+    return prefix.length > 0 ? [...prefix, ...columns] : columns;
+  }, [columns, enableSelection, renderDetail]);
 
   const table = useReactTable({
     data,
     columns: allColumns,
-    state: { sorting, rowSelection },
+    state: { sorting, rowSelection, expanded },
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
+    onExpandedChange: setExpanded,
     getRowId,
     enableRowSelection: enableSelection,
+    getRowCanExpand: () => Boolean(renderDetail),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getExpandedRowModel: getExpandedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageSize } },
   });
@@ -105,7 +147,10 @@ export function DataTable<TData>({
 
   return (
     <div className={cn("relative", className)}>
-      <div className="overflow-hidden rounded-sm border border-border">
+      <div
+        className="overflow-hidden rounded-sm border border-border"
+        aria-busy={loading || undefined}
+      >
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (
@@ -148,7 +193,12 @@ export function DataTable<TData>({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.length === 0 ? (
+            {loading ? (
+              <SkeletonTableRows
+                rows={skeletonRows}
+                columns={allColumns.map((c, i) => ({ key: c.id ?? `c${i}` }))}
+              />
+            ) : table.getRowModel().rows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={allColumns.length} className="h-32">
                   {emptyState ?? (
@@ -160,33 +210,44 @@ export function DataTable<TData>({
               </TableRow>
             ) : (
               table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() ? "selected" : undefined}
-                  className="h-8"
-                >
-                  {row.getVisibleCells().map((cell) => {
-                    const meta = cell.column.columnDef.meta as
-                      | ColumnMeta
-                      | undefined;
-                    return (
+                <React.Fragment key={row.id}>
+                  <TableRow
+                    data-state={row.getIsSelected() ? "selected" : undefined}
+                    className="h-8"
+                  >
+                    {row.getVisibleCells().map((cell) => {
+                      const meta = cell.column.columnDef.meta as
+                        | ColumnMeta
+                        | undefined;
+                      return (
+                        <TableCell
+                          key={cell.id}
+                          className={cn(
+                            "py-1 text-[13px]",
+                            meta?.mono &&
+                              "font-mono text-xs tabular-nums text-text-secondary",
+                            meta?.className,
+                          )}
+                        >
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                  {renderDetail && row.getIsExpanded() && (
+                    <TableRow className="hover:bg-transparent">
                       <TableCell
-                        key={cell.id}
-                        className={cn(
-                          "py-1 text-[13px]",
-                          meta?.mono &&
-                            "font-mono text-xs tabular-nums text-text-secondary",
-                          meta?.className,
-                        )}
+                        colSpan={allColumns.length}
+                        className="bg-bg-secondary/30 px-4 py-3"
                       >
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
+                        {renderDetail(row.original)}
                       </TableCell>
-                    );
-                  })}
-                </TableRow>
+                    </TableRow>
+                  )}
+                </React.Fragment>
               ))
             )}
           </TableBody>

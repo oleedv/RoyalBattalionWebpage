@@ -45,6 +45,39 @@ test("selection drives the bulk bar", () => {
   expect(screen.getByText("3 selected")).toBeDefined();
 });
 
+test("loading renders skeleton rows with aria-busy, hiding data", () => {
+  const { container } = render(
+    <DataTable
+      columns={columns}
+      data={data}
+      getRowId={(r) => r.id}
+      loading
+      skeletonRows={4}
+    />,
+  );
+  expect(container.querySelector("[aria-busy='true']")).not.toBeNull();
+  expect(screen.getAllByRole("row")).toHaveLength(5); // header + 4 skeletons
+  expect(screen.queryByText("Brick")).toBeNull();
+  expect(screen.queryByText("No results.")).toBeNull();
+});
+
+test("expandable rows toggle a full-width detail cell", () => {
+  render(
+    <DataTable
+      columns={columns}
+      data={data}
+      getRowId={(r) => r.id}
+      renderDetail={(row) => <div>Detail for {row.name}</div>}
+    />,
+  );
+  expect(screen.queryByText("Detail for Brick")).toBeNull();
+  fireEvent.click(screen.getAllByRole("button", { name: "Expand row" })[0]);
+  const detail = screen.getByText("Detail for Brick");
+  expect(detail.closest("td")!.getAttribute("colspan")).toBe("3"); // expander + 2 columns
+  fireEvent.click(screen.getByRole("button", { name: "Collapse row" }));
+  expect(screen.queryByText("Detail for Brick")).toBeNull();
+});
+
 test("paginates", () => {
   render(
     <DataTable

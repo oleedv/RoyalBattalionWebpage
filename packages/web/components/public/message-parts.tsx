@@ -47,7 +47,7 @@ export function Linkify({ text }: { text: string }) {
   return (
     <>
       {parts.map((part, i) =>
-        URL_REGEX.test(part) ? (
+        i % 2 === 1 ? (
           <a
             key={i}
             href={part}

@@ -38,3 +38,13 @@ test("MessageAttachments renders video for video urls", () => {
   expect(container.querySelector("video")).not.toBeNull();
   expect(screen.getByRole("link", { name: "Download" })).toBeDefined();
 });
+
+test("Linkify handles multiple urls with long interstitial text", () => {
+  const text =
+    "first https://a.example/one then a much longer stretch of plain prose between the links https://b.example/two end";
+  render(<p><Linkify text={text} /></p>);
+  const links = screen.getAllByRole("link");
+  expect(links).toHaveLength(2);
+  expect(links[0].getAttribute("href")).toBe("https://a.example/one");
+  expect(links[1].getAttribute("href")).toBe("https://b.example/two");
+});

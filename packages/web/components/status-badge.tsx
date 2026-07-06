@@ -40,9 +40,10 @@ export function StatusBadge({
   className?: string;
   children?: React.ReactNode;
 }) {
-  const v = variant ? VARIANTS[variant] : undefined;
+  const v: { tone: Tone; label: string; pulse?: boolean } | undefined =
+    variant ? VARIANTS[variant] : undefined;
   const resolvedTone = tone ?? v?.tone ?? "neutral";
-  const resolvedPulse = pulse !== undefined ? pulse : Boolean((v as any)?.pulse);
+  const resolvedPulse = pulse ?? v?.pulse ?? false;
   const content = children ?? v?.label;
 
   return (

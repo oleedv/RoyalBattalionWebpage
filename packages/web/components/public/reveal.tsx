@@ -15,12 +15,7 @@ export function Reveal({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(() => {
-    if (typeof window === "undefined" || typeof IntersectionObserver === "undefined") {
-      return true;
-    }
-    return false;
-  });
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;

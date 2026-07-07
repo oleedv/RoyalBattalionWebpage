@@ -91,3 +91,86 @@ test("paginates", () => {
   fireEvent.click(screen.getByRole("button", { name: "Next page" }));
   expect(screen.getByText("Falke")).toBeDefined();
 });
+
+// Fixtures for new-prop tests (2-field row to avoid collision with the 3-field Row above)
+type SmRow = { id: string; name: string };
+const smRows: SmRow[] = [
+  { id: "1", name: "Alpha" },
+  { id: "2", name: "Beta" },
+];
+const smCols = [{ accessorKey: "name", header: "Name" }] as ColumnDef<SmRow, unknown>[];
+
+test("onRowClick fires for row clicks but not for interactive children", () => {
+  const clicked: string[] = [];
+  render(
+    <DataTable
+      columns={[
+        ...smCols,
+        {
+          id: "actions",
+          header: "",
+          cell: ({ row }) => <button>act-{row.original.id}</button>,
+        },
+      ]}
+      data={smRows}
+      getRowId={(r) => r.id}
+      onRowClick={(r) => clicked.push(r.id)}
+    />,
+  );
+  fireEvent.click(screen.getByText("Alpha"));
+  expect(clicked).toEqual(["1"]);
+  fireEvent.click(screen.getByText("act-2"));
+  expect(clicked).toEqual(["1"]); // button click must not bubble into onRowClick
+});
+
+test("rowClassName applies per-row classes", () => {
+  render(
+    <DataTable
+      columns={smCols}
+      data={smRows}
+      getRowId={(r) => r.id}
+      rowClassName={(r) => (r.id === "2" ? "opacity-50" : undefined)}
+    />,
+  );
+  const beta = screen.getByText("Beta").closest("tr")!;
+  expect(beta.className).toContain("opacity-50");
+  const alpha = screen.getByText("Alpha").closest("tr")!;
+  expect(alpha.className).not.toContain("opacity-50");
+});
+
+test("initialSorting sorts on first render", () => {
+  render(
+    <DataTable
+      columns={smCols}
+      data={[{ id: "1", name: "Zulu" }, { id: "2", name: "Alpha" }]}
+      getRowId={(r) => r.id}
+      initialSorting={[{ id: "name", desc: false }]}
+    />,
+  );
+  const cells = screen.getAllByRole("row").slice(1); // skip header row
+  expect(cells[0].textContent).toContain("Alpha");
+  expect(cells[1].textContent).toContain("Zulu");
+});
+
+test("serverPagination renders all rows and drives the callback pager", () => {
+  const pages: number[] = [];
+  const many: SmRow[] = Array.from({ length: 30 }, (_, i) => ({
+    id: String(i),
+    name: `P${i}`,
+  }));
+  render(
+    <DataTable
+      columns={smCols}
+      data={many}
+      getRowId={(r) => r.id}
+      pageSize={10}
+      serverPagination={{ page: 2, totalPages: 5, onPageChange: (p) => pages.push(p) }}
+    />,
+  );
+  // no client slicing: all 30 rows render even though pageSize is 10
+  expect(screen.getAllByRole("row").length).toBe(31);
+  expect(screen.getByText("2/5")).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+  fireEvent.click(screen.getByRole("button", { name: "Previous page" }));
+  expect(pages).toEqual([3, 1]);
+});

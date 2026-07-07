@@ -51,6 +51,21 @@ interface DataTableProps<TData> {
   skeletonRows?: number;
   /** When set, rows get a disclosure chevron toggling a full-width detail cell. */
   renderDetail?: (row: TData) => React.ReactNode;
+  /** Whole-row drill-in. Ignored for clicks on interactive elements inside cells. */
+  onRowClick?: (row: TData) => void;
+  /** Per-row class hook (e.g. de-emphasize expired rows). */
+  rowClassName?: (row: TData) => string | undefined;
+  /** Initial sort state (tanstack SortingState). */
+  initialSorting?: SortingState;
+  /**
+   * Server-side pagination: render all passed rows and drive the pager via
+   * callback instead of slicing client-side.
+   */
+  serverPagination?: {
+    page: number;
+    totalPages: number;
+    onPageChange: (page: number) => void;
+  };
 }
 
 export function DataTable<TData>({
@@ -65,8 +80,14 @@ export function DataTable<TData>({
   loading = false,
   skeletonRows = 6,
   renderDetail,
+  onRowClick,
+  rowClassName,
+  initialSorting,
+  serverPagination,
 }: DataTableProps<TData>) {
-  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [sorting, setSorting] = React.useState<SortingState>(
+    initialSorting ?? [],
+  );
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [expanded, setExpanded] = React.useState<ExpandedState>({});
 
@@ -138,12 +159,19 @@ export function DataTable<TData>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    getPaginationRowModel: serverPagination ? undefined : getPaginationRowModel(),
     initialState: { pagination: { pageSize } },
   });
 
   const selectedRows = table.getSelectedRowModel().rows.map((r) => r.original);
   const pageCount = table.getPageCount();
+
+  function handleRowClick(e: React.MouseEvent, row: TData) {
+    if (!onRowClick) return;
+    const target = e.target as HTMLElement;
+    if (target.closest("a,button,input,select,textarea,label,[role=checkbox]")) return;
+    onRowClick(row);
+  }
 
   return (
     <div className={cn("relative", className)}>
@@ -213,7 +241,12 @@ export function DataTable<TData>({
                 <React.Fragment key={row.id}>
                   <TableRow
                     data-state={row.getIsSelected() ? "selected" : undefined}
-                    className="h-8"
+                    onClick={(e) => handleRowClick(e, row.original)}
+                    className={cn(
+                      "h-8",
+                      onRowClick && "cursor-pointer",
+                      rowClassName?.(row.original),
+                    )}
                   >
                     {row.getVisibleCells().map((cell) => {
                       const meta = cell.column.columnDef.meta as
@@ -254,17 +287,27 @@ export function DataTable<TData>({
         </Table>
       </div>
 
-      {pageCount > 1 && (
+      {(serverPagination ? serverPagination.totalPages > 1 : pageCount > 1) && (
         <div className="mt-2 flex items-center justify-end gap-2">
           <span className="font-mono text-xs tabular-nums text-text-muted">
-            {table.getState().pagination.pageIndex + 1}/{pageCount}
+            {serverPagination
+              ? `${serverPagination.page}/${serverPagination.totalPages}`
+              : `${table.getState().pagination.pageIndex + 1}/${pageCount}`}
           </span>
           <Button
             variant="outline"
             size="icon"
             aria-label="Previous page"
-            disabled={!table.getCanPreviousPage()}
-            onClick={() => table.previousPage()}
+            disabled={
+              serverPagination
+                ? serverPagination.page <= 1
+                : !table.getCanPreviousPage()
+            }
+            onClick={() =>
+              serverPagination
+                ? serverPagination.onPageChange(serverPagination.page - 1)
+                : table.previousPage()
+            }
           >
             <ChevronLeft className="size-4" />
           </Button>
@@ -272,8 +315,16 @@ export function DataTable<TData>({
             variant="outline"
             size="icon"
             aria-label="Next page"
-            disabled={!table.getCanNextPage()}
-            onClick={() => table.nextPage()}
+            disabled={
+              serverPagination
+                ? serverPagination.page >= serverPagination.totalPages
+                : !table.getCanNextPage()
+            }
+            onClick={() =>
+              serverPagination
+                ? serverPagination.onPageChange(serverPagination.page + 1)
+                : table.nextPage()
+            }
           >
             <ChevronRight className="size-4" />
           </Button>

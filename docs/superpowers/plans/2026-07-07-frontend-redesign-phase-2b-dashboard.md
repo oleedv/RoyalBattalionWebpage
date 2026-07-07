@@ -1670,7 +1670,11 @@ test("birthday pref switch flips optimistically and reverts on failure", async (
     name: "Don't announce my birthday",
   });
   expect(optOut.getAttribute("aria-checked")).toBe("false");
-  fireEvent.click(optOut);
+  // Base UI Switch renders span[role=switch]; happy-dom synthetic clicks don't
+  // reach its pointer handlers, so toggle via the keyboard path (Space).
+  optOut.focus();
+  fireEvent.keyDown(optOut, { key: " " });
+  fireEvent.keyUp(optOut, { key: " " });
   await waitFor(() =>
     expect(notify.error).toHaveBeenCalledWith("DB down", "Failed to save"),
   );

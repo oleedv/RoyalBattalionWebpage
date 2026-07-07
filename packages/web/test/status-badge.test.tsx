@@ -47,3 +47,17 @@ test("matchResultVariant maps results case-insensitively", () => {
   expect(matchResultVariant("DRAW")).toBe("match-draw");
   expect(matchResultVariant("unknown")).toBe("match-draw");
 });
+
+test("whitelist variants render their tones and accept label overrides", () => {
+  const { container } = render(
+    <>
+      <StatusBadge variant="wl-expired" />
+      <StatusBadge variant="wl-expiring">3d left</StatusBadge>
+      <StatusBadge variant="wl-permanent" />
+    </>,
+  );
+  expect(screen.getByText("Expired").className).toContain("text-danger");
+  expect(screen.getByText("3d left").className).toContain("text-warning");
+  expect(screen.getByText("Permanent").className).toContain("text-text-secondary");
+  expect(container.querySelectorAll("[data-slot=pulse-dot]").length).toBe(0);
+});

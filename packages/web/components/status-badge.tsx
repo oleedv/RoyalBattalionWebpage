@@ -23,6 +23,9 @@ const VARIANTS = {
   "ticket-accepted": { tone: "success", label: "Accepted" },
   "ticket-denied": { tone: "danger", label: "Denied" },
   "ticket-legacy": { tone: "warning", label: "Legacy" },
+  "wl-expired": { tone: "danger", label: "Expired" },
+  "wl-expiring": { tone: "warning", label: "Expiring" },
+  "wl-permanent": { tone: "neutral", label: "Permanent" },
 } as const satisfies Record<string, { tone: Tone; label: string; pulse?: boolean }>;
 
 export type StatusVariant = keyof typeof VARIANTS;

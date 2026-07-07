@@ -25,10 +25,11 @@ function makeServer(overrides: Partial<ServerStatus> = {}): ServerStatus {
 }
 
 test("renders name, players, map, online badge and connect link", () => {
-  render(<ServerStatusCard server={makeServer()} />);
+  const { container } = render(<ServerStatusCard server={makeServer()} />);
   expect(screen.getByText("Royal Battalion Main")).toBeDefined();
-  const playerCountsAll = screen.getAllByText("87");
-  expect(playerCountsAll.length).toBeGreaterThan(0);
+  // "87" also appears in the sparkline legend — target the header count span.
+  const countSpan = container.querySelector(".font-mono.text-3xl");
+  expect(countSpan?.textContent).toBe("87");
   expect(screen.getByText("/ 100")).toBeDefined();
   expect(screen.getByText("Narva AAS v2")).toBeDefined();
   expect(screen.getByText("Online")).toBeDefined();

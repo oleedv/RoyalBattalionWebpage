@@ -11,7 +11,7 @@ import {
   Cog,
   KeyRound,
   ScrollText,
-  FlaskConical,
+  FileCode2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -31,7 +31,7 @@ export const DASHBOARD_ITEM: NavItem = {
   icon: LayoutDashboard,
 };
 
-// Permission strings and hrefs verified against app/(protected)/layout.tsx.
+// Reconciled against the 2026-07-05 spec §3 and app/(protected)/layout.tsx perms.
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Operations",
@@ -46,7 +46,13 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Live Server",
         href: "/live-server",
         icon: Radio,
-        requiredPermissions: ["view:live-server", "manage:live-server"],
+        // manage:rcon-console is standalone-sufficient (spec §5 gating alignment):
+        // the API admits such users to the console WS, so they need a nav path.
+        requiredPermissions: [
+          "view:live-server",
+          "manage:live-server",
+          "manage:rcon-console",
+        ],
       },
       {
         label: "Tickets",
@@ -63,13 +69,13 @@ export const NAV_GROUPS: NavGroup[] = [
         ],
       },
       {
-        label: "Seeding Tracker",
-        href: "/seeding-tracker",
+        label: "Seeding",
+        href: "/seeding",
         icon: Sprout,
-        requiredPermissions: ["view:seeding-tracker"],
+        requiredPermissions: ["view:seeding-tracker", "manage:discord-bot"],
       },
       {
-        label: "Matches",
+        label: "Match Manager",
         href: "/match-manager",
         icon: Swords,
         requiredPermissions: ["manage:matches"],
@@ -121,9 +127,9 @@ export const NAV_GROUPS: NavGroup[] = [
         requiredPermissions: ["view:audit-logs"],
       },
       {
-        label: "Lobby API",
-        href: "/lobby-monitor",
-        icon: FlaskConical,
+        label: "API Docs",
+        href: "/api-docs",
+        icon: FileCode2,
         requiredPermissions: ["developer"],
       },
     ],

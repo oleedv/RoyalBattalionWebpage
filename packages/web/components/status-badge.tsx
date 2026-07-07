@@ -68,3 +68,11 @@ export function StatusBadge({
     </span>
   );
 }
+
+/** Map a match result string to its StatusBadge variant. */
+export function matchResultVariant(result: string): StatusVariant {
+  const r = result.toLowerCase();
+  if (r === "win") return "match-win";
+  if (r === "loss") return "match-loss";
+  return "match-draw";
+}

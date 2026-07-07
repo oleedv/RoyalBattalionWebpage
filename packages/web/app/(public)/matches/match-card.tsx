@@ -3,14 +3,7 @@
 import React, { useState } from "react";
 import type { Match, MatchPlayer } from "shared";
 import { getMapThumbnailUrls } from "@/lib/map-thumbnails";
-import { StatusBadge, type StatusVariant } from "@/components/status-badge";
-
-function resultVariant(result: string): StatusVariant {
-  const r = result.toLowerCase();
-  if (r === "win") return "match-win";
-  if (r === "loss") return "match-loss";
-  return "match-draw";
-}
+import { StatusBadge, matchResultVariant } from "@/components/status-badge";
 
 const FLAG_BASE = "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons";
 const FACTION_FLAGS: Record<string, string> = {
@@ -228,7 +221,7 @@ export function MatchCard({ match }: { match: Match }) {
                     {detail.team1.faction}
                     <FactionFlag code={detail.team1.faction} className="h-3.5 w-3.5" />
                   </div>
-                  <StatusBadge variant={resultVariant(detail.team1.result)} />
+                  <StatusBadge variant={matchResultVariant(detail.team1.result)} />
                 </div>
                 <div className="flex h-8 w-8 items-center justify-center text-xs font-bold text-text-secondary">
                   vs
@@ -238,7 +231,7 @@ export function MatchCard({ match }: { match: Match }) {
                     <FactionFlag code={detail.team2.faction} className="h-3.5 w-3.5" />
                     {detail.team2.faction}
                   </div>
-                  <StatusBadge variant={resultVariant(detail.team2.result)} />
+                  <StatusBadge variant={matchResultVariant(detail.team2.result)} />
                 </div>
                 <div className="ml-2">
                   <svg
@@ -252,7 +245,7 @@ export function MatchCard({ match }: { match: Match }) {
                 </div>
               </>
             ) : (
-              <StatusBadge variant={resultVariant(match.result)} />
+              <StatusBadge variant={matchResultVariant(match.result)} />
             )}
           </div>
         </div>
@@ -290,10 +283,10 @@ export function MatchCard({ match }: { match: Match }) {
                   <span className="font-display text-sm font-semibold tracking-wide text-text-primary">
                     {detail.team1.factionFull || detail.team1.faction}
                   </span>
-                  <StatusBadge variant={resultVariant(detail.team1.result)} />
+                  <StatusBadge variant={matchResultVariant(detail.team1.result)} />
                 </div>
                 <div className="flex items-center gap-2">
-                  <StatusBadge variant={resultVariant(detail.team2.result)} />
+                  <StatusBadge variant={matchResultVariant(detail.team2.result)} />
                   <span className="font-display text-sm font-semibold tracking-wide text-text-primary">
                     {detail.team2.factionFull || detail.team2.faction}
                   </span>

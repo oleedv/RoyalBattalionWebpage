@@ -10,7 +10,7 @@ import {
 import type { Match } from "shared";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { getMapThumbnailUrls } from "@/lib/map-thumbnails";
-import { StatusBadge, type StatusVariant } from "@/components/status-badge";
+import { StatusBadge, matchResultVariant } from "@/components/status-badge";
 import { DiscordIcon } from "@/components/public/discord-icon";
 import { MapImg } from "@/app/(public)/matches/match-card";
 
@@ -71,13 +71,6 @@ export function ServersSection() {
   );
 }
 
-function resultVariant(result: string): StatusVariant {
-  const r = result.toLowerCase();
-  if (r === "win") return "match-win";
-  if (r === "loss") return "match-loss";
-  return "match-draw";
-}
-
 export function RecentMatchesSection() {
   const [matches, setMatches] = useState<Match[]>([]);
   useEffect(() => {
@@ -116,7 +109,7 @@ export function RecentMatchesSection() {
                     })}
                   </div>
                 </div>
-                <StatusBadge variant={resultVariant(m.result)} />
+                <StatusBadge variant={matchResultVariant(m.result)} />
               </div>
             </Link>
           ))}

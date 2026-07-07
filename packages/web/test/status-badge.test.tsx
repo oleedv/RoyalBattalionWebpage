@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { render, screen } from "@testing-library/react";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, matchResultVariant } from "@/components/status-badge";
 
 test("renders label and tone class", () => {
   render(<StatusBadge tone="success">Online</StatusBadge>);
@@ -39,4 +39,11 @@ test("variant supplies tone, label and pulse defaults", () => {
 test("children override the variant label", () => {
   render(<StatusBadge variant="ticket-open">Open — escalated</StatusBadge>);
   expect(screen.getByText("Open — escalated")).toBeDefined();
+});
+
+test("matchResultVariant maps results case-insensitively", () => {
+  expect(matchResultVariant("WIN")).toBe("match-win");
+  expect(matchResultVariant("loss")).toBe("match-loss");
+  expect(matchResultVariant("DRAW")).toBe("match-draw");
+  expect(matchResultVariant("unknown")).toBe("match-draw");
 });

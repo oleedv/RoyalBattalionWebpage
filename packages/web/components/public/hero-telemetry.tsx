@@ -9,7 +9,7 @@ import {
 } from "@/lib/api-client";
 import type { Match } from "shared";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { StatusBadge, type StatusVariant } from "@/components/status-badge";
+import { StatusBadge, matchResultVariant } from "@/components/status-badge";
 
 export type TelemetryFetchers = {
   servers: typeof getServerStatus;
@@ -22,13 +22,6 @@ const DEFAULT_FETCHERS: TelemetryFetchers = {
   admins: getAdminTeamCount,
   matches: getPublicMatches,
 };
-
-function matchVariant(result: string): StatusVariant {
-  const r = result.toLowerCase();
-  if (r === "win") return "match-win";
-  if (r === "loss") return "match-loss";
-  return "match-draw";
-}
 
 function Dot({ online }: { online: boolean }) {
   return (
@@ -128,7 +121,7 @@ export function HeroTelemetry({
           label="Last Match"
           value={
             lastMatch ? (
-              <StatusBadge variant={matchVariant(lastMatch.result)} />
+              <StatusBadge variant={matchResultVariant(lastMatch.result)} />
             ) : (
               "--"
             )

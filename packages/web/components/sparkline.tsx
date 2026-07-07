@@ -87,6 +87,46 @@ export function multiSparklineCoords(
 }
 
 /**
+ * Single-series filled-area sparkline on a shared 0-based scale. Color comes
+ * from `className` (a text-* utility) via currentColor. Used as a decorative
+ * background behind the live-server InfoCell values (absorbs the deleted
+ * page-local live-server/components/sparkline.tsx).
+ */
+export function AreaSparkline({
+  values,
+  width = 120,
+  height = 48,
+  fixedMax,
+  className = "text-accent",
+}: {
+  values: number[];
+  width?: number;
+  height?: number;
+  fixedMax?: number;
+  className?: string;
+}) {
+  if (values.length < 2) return null;
+  const max = fixedMax ?? Math.max(...values, 1);
+  const coords = multiSparklineCoords(values, width, height, max);
+  const line = coords.map((c) => `${c.x},${c.y}`).join(" ");
+  const area = `${line} ${width},${height} 0,${height}`;
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      className={`h-full w-full ${className}`}
+      aria-hidden="true"
+    >
+      <polygon fill="currentColor" fillOpacity="0.15" points={area} />
+      <polyline fill="none" stroke="currentColor" strokeWidth="1.5" points={line} />
+    </svg>
+  );
+}
+
+/**
  * Multi-series area sparkline with a shared 0-based scale and a legend of
  * current values. Used by the dashboard server cards (players vs queue).
  */

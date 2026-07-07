@@ -59,3 +59,24 @@ test("MultiSparkline returns null when no series has two points", () => {
   );
   expect(container.innerHTML).toBe("");
 });
+
+import { AreaSparkline } from "@/components/sparkline";
+
+test("AreaSparkline returns null below two points", () => {
+  const { container } = render(<AreaSparkline values={[5]} />);
+  expect(container.querySelector("svg")).toBeNull();
+});
+
+test("AreaSparkline draws an area + line with the color class", () => {
+  const { container } = render(
+    <AreaSparkline values={[0, 10, 20]} fixedMax={20} className="text-warning" />,
+  );
+  const svg = container.querySelector("svg")!;
+  expect(svg).not.toBeNull();
+  expect(svg.getAttribute("preserveAspectRatio")).toBe("none");
+  // happy-dom returns svg.className as a plain string (not SVGAnimatedString), so use getAttribute
+  expect(svg.getAttribute("class")).toContain("text-warning");
+  expect(svg.getAttribute("class")).toContain("h-full");
+  expect(container.querySelector("polygon")).not.toBeNull();
+  expect(container.querySelector("polyline")).not.toBeNull();
+});

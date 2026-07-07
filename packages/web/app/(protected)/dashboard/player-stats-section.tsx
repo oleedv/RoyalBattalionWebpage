@@ -8,7 +8,7 @@ import { Skeleton, SkeletonCard } from "@/components/skeleton";
 import { StatCard, StatGroup } from "@/components/stat-card";
 import { InfoTip } from "@/components/info-tip";
 import { EmptyState } from "@/components/empty-state";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   PlayerStatsCharts,
@@ -131,13 +131,14 @@ export default function PlayerStatsSection({
           className="py-8"
           message="Link your Steam ID above to unlock your personal Squad stats — kills, K/D, playtime, squad-lead time and more."
           action={
-            <Button
-              variant="outlineGold"
-              size="sm"
-              render={<a href="#steam-link" />}
+            // Real anchor with button styling: keeps link semantics and avoids
+            // Base UI's non-native-button warning from Button render={<a/>}.
+            <a
+              href="#steam-link"
+              className={buttonVariants({ variant: "outlineGold", size: "sm" })}
             >
               Link Steam ID
-            </Button>
+            </a>
           }
         />
       </SectionCard>
@@ -152,13 +153,12 @@ export default function PlayerStatsSection({
           className="py-8"
           message="No recorded activity on our servers yet. Jump in-game and your stats will show up here."
           action={
-            <Button
-              variant="outlineGold"
-              size="sm"
-              render={<Link href="/server" />}
+            <Link
+              href="/server"
+              className={buttonVariants({ variant: "outlineGold", size: "sm" })}
             >
               How to Connect
-            </Button>
+            </Link>
           }
         />
       </SectionCard>

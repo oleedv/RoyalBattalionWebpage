@@ -128,7 +128,7 @@ export function RecentMatchesSection() {
 
 const WHITELIST_STEPS = [
   {
-    title: "Join the Fight",
+    title: "Enter the Field",
     body: "Play on our servers and become part of the community.",
   },
   {

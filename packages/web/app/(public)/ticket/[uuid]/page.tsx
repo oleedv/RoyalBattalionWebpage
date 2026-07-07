@@ -2,147 +2,21 @@
 
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { NavAuthButton } from "@/components/nav-auth-button";
 import { getTicketByUuid } from "@/lib/api-client";
 import type { Ticket } from "shared";
+import { Linkify, MessageAttachments } from "@/components/public/message-parts";
+import { DescriptionList, InfoField } from "@/components/description-list";
+import { StatusBadge } from "@/components/status-badge";
+import { PublicPageHeading } from "@/components/public/page-heading";
+import { SkeletonRegion, SkeletonText } from "@/components/skeleton";
 
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    open: "bg-accent/15 text-accent border-accent/30",
-    closed: "bg-text-muted/15 text-text-secondary border-text-muted/30",
-  };
-  return (
-    <span className={`rounded-sm border px-2.5 py-1 text-xs font-medium ${colors[status] || colors.closed}`}>
-      {status}
-    </span>
-  );
-}
-
-function extractUrls(arr: unknown[]): string[] {
-  return arr
-    .map((item) => {
-      if (typeof item === "string") return item;
-      if (item && typeof item === "object" && "url" in item) return (item as { url: string }).url;
-      return null;
-    })
-    .filter(Boolean) as string[];
-}
-
-function parseAttachments(raw: string | string[] | null): string[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return extractUrls(raw);
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return extractUrls(parsed);
-  } catch {
-    // Not JSON
-  }
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
-}
-
-function stripQuery(url: string): string {
-  const q = url.indexOf("?");
-  return q === -1 ? url : url.slice(0, q);
-}
-
-function isImageUrl(url: string): boolean {
-  return /\.(png|jpe?g|gif|webp)$/i.test(stripQuery(url));
-}
-
-function isVideoUrl(url: string): boolean {
-  return /\.(mp4|webm|mov|m4v)$/i.test(stripQuery(url));
-}
-
-const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
-
-function Linkify({ text }: { text: string }) {
-  const parts = text.split(URL_REGEX);
-  return (
-    <>
-      {parts.map((part, i) =>
-        URL_REGEX.test(part) ? (
-          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-accent underline break-all hover:text-accent-bright">
-            {part}
-          </a>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </>
-  );
-}
-
-function MessageAttachments({ attachments }: { attachments: string | null }) {
-  const urls = parseAttachments(attachments);
-  if (urls.length === 0) return null;
-
-  return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {urls.map((url, i) => {
-        if (isVideoUrl(url)) {
-          return (
-            <div key={i} className="flex flex-col gap-1">
-              <video
-                src={url}
-                controls
-                preload="metadata"
-                className="max-h-64 max-w-96 rounded-sm border border-border/50"
-              />
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-                className="self-start text-xs text-accent underline hover:text-accent-bright"
-              >
-                Download
-              </a>
-            </div>
-          );
-        }
-        if (isImageUrl(url)) {
-          return (
-            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
-              <img
-                src={url}
-                alt={`Attachment ${i + 1}`}
-                className="max-h-32 max-w-48 rounded-sm border border-border/50 object-cover transition-opacity hover:opacity-80"
-                loading="lazy"
-              />
-            </a>
-          );
-        }
-        return (
-          <a
-            key={i}
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs text-accent transition-colors hover:bg-bg-card-hover"
-          >
-            Attachment {i + 1}
-          </a>
-        );
-      })}
-    </div>
-  );
-}
-
-function TierBadge({ tier }: { tier: string }) {
-  const labels: Record<string, string> = {
-    normal: "Normal",
-    community_officer: "Community Officer",
-    admin_officer: "Admin Officer",
-    comp_team: "Comp Team",
-    whitelist: "Whitelist",
-  };
-  return (
-    <span className="rounded-sm border border-border bg-bg-tertiary px-2.5 py-1 text-xs text-text-secondary">
-      {labels[tier] || tier}
-    </span>
-  );
-}
+const TIER_LABELS: Record<string, string> = {
+  normal: "Normal",
+  community_officer: "Community Officer",
+  admin_officer: "Admin Officer",
+  comp_team: "Comp Team",
+  whitelist: "Whitelist",
+};
 
 export default function TicketPage({ params }: { params: Promise<{ uuid: string }> }) {
   const { uuid } = use(params);
@@ -162,174 +36,122 @@ export default function TicketPage({ params }: { params: Promise<{ uuid: string 
   }, [uuid]);
 
   return (
-    <div className="min-h-screen">
-      {/* Navigation */}
-      <nav className="border-b border-border/50 bg-bg-primary/60 backdrop-blur-xl">
-        <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-6">
-          <Link href="/" className="flex items-center gap-3">
-            <Image
-              src="/img/rb_newlion2024_4_RS.png"
-              alt="Royal Battalion"
-              width={36}
-              height={36}
-              className="rounded-sm"
-            />
-            <span className="font-display text-lg font-semibold tracking-[0.15em] text-accent">
-              ROYAL BATTALION
-            </span>
+    <main className="mx-auto max-w-4xl px-6 pb-16 pt-28">
+      {loading && (
+        <SkeletonRegion label="Loading ticket…" className="space-y-4">
+          <SkeletonText lines={2} />
+          <SkeletonText lines={4} />
+        </SkeletonRegion>
+      )}
+
+      {error && (
+        <div className="text-center">
+          <h1 className="font-display mb-4 text-3xl font-bold tracking-wide">Ticket Not Found</h1>
+          <p className="text-text-secondary">{error}</p>
+          <Link href="/" className="mt-6 inline-block text-sm text-accent hover:text-accent-bright">
+            Back to Home
           </Link>
-          <div className="flex items-center gap-6">
-            <Link
-              href="/"
-              className="text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent"
-            >
-              Home
-            </Link>
-            <Link
-              href="/server"
-              className="text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent"
-            >
-              Server
-            </Link>
-            <NavAuthButton className="glow-button rounded-sm border border-accent/40 bg-accent/10 px-5 py-2 text-sm font-semibold tracking-wide text-accent transition-all hover:bg-accent/20 hover:border-accent/60" />
-          </div>
         </div>
-      </nav>
+      )}
 
-      <main className="mx-auto max-w-4xl px-6 py-16">
-        {loading && (
-          <div className="text-center text-text-secondary">Loading ticket...</div>
-        )}
-
-        {error && (
-          <div className="text-center">
-            <h1 className="font-display mb-4 text-3xl font-bold tracking-wide">Ticket Not Found</h1>
-            <p className="text-text-secondary">{error}</p>
-            <Link href="/" className="mt-6 inline-block text-sm text-accent hover:text-accent-bright">
-              Back to Home
-            </Link>
+      {ticket && (
+        <>
+          <PublicPageHeading title={`Ticket #${ticket.id}`} />
+          <div className="-mt-6 mb-8 flex items-center justify-center gap-3">
+            <StatusBadge
+              variant={ticket.status === "open" ? "ticket-open" : "ticket-closed"}
+            />
+            <StatusBadge tone="neutral">{TIER_LABELS[ticket.tier] || ticket.tier}</StatusBadge>
           </div>
-        )}
 
-        {ticket && (
-          <>
-            {/* Header */}
-            <div className="mb-8">
-              <div className="mb-4 flex items-center justify-center gap-3">
-                <div className="h-px w-12 bg-gradient-to-r from-transparent to-accent/40" />
-                <div className="h-1.5 w-1.5 rotate-45 bg-accent/50" />
-                <div className="h-px w-12 bg-gradient-to-l from-transparent to-accent/40" />
-              </div>
-              <h1 className="font-display mb-4 text-center text-3xl font-bold tracking-wide sm:text-4xl">
-                Ticket #{ticket.id}
-              </h1>
-              <div className="flex items-center justify-center gap-3">
-                <StatusBadge status={ticket.status} />
-                <TierBadge tier={ticket.tier} />
-              </div>
-            </div>
+          {/* Info grid */}
+          <div className="facet-border mb-6 rounded-sm bg-bg-card p-5">
+            <DescriptionList className="lg:grid-cols-4">
+              <InfoField label="User ID" mono>{ticket.userId}</InfoField>
+              <InfoField label="Created">{new Date(ticket.createdAt).toLocaleString()}</InfoField>
+              {ticket.closedAt && (
+                <InfoField label="Closed">{new Date(ticket.closedAt).toLocaleString()}</InfoField>
+              )}
+              {ticket.closedBy && (
+                <InfoField label="Closed By">{ticket.closedBy}</InfoField>
+              )}
+            </DescriptionList>
+          </div>
 
-            {/* Info grid */}
+          {/* Events timeline */}
+          {ticket.events && ticket.events.length > 0 && (
             <div className="facet-border mb-6 rounded-sm bg-bg-card p-5">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">User ID</span>
-                  <div className="mt-0.5 text-sm text-text-primary">{ticket.userId}</div>
-                </div>
-                <div>
-                  <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Created</span>
-                  <div className="mt-0.5 text-sm text-text-primary">{new Date(ticket.createdAt).toLocaleString()}</div>
-                </div>
-                {ticket.closedAt && (
-                  <div>
-                    <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Closed</span>
-                    <div className="mt-0.5 text-sm text-text-primary">{new Date(ticket.closedAt).toLocaleString()}</div>
+              <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Timeline</h2>
+              <div className="space-y-3">
+                {ticket.events.map((event) => (
+                  <div key={event.id} className="flex items-start gap-3">
+                    <div className="mt-1.5 h-2 w-2 rounded-full bg-accent/50" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-text-primary capitalize">
+                          {event.eventType}
+                        </span>
+                        <span className="text-xs text-text-muted">by {event.actorId}</span>
+                      </div>
+                      {event.detail && (
+                        <p className="text-xs text-text-secondary">{event.detail}</p>
+                      )}
+                      <span className="text-xs text-text-muted">
+                        {new Date(event.createdAt).toLocaleString()}
+                      </span>
+                    </div>
                   </div>
-                )}
-                {ticket.closedBy && (
-                  <div>
-                    <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Closed By</span>
-                    <div className="mt-0.5 text-sm text-text-primary">{ticket.closedBy}</div>
-                  </div>
-                )}
+                ))}
               </div>
             </div>
+          )}
 
-            {/* Events timeline */}
-            {ticket.events && ticket.events.length > 0 && (
-              <div className="facet-border mb-6 rounded-sm bg-bg-card p-5">
-                <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Timeline</h2>
-                <div className="space-y-3">
-                  {ticket.events.map((event) => (
-                    <div key={event.id} className="flex items-start gap-3">
-                      <div className="mt-1.5 h-2 w-2 rounded-full bg-accent/50" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-text-primary capitalize">
-                            {event.eventType}
-                          </span>
-                          <span className="text-xs text-text-muted">by {event.actorId}</span>
-                        </div>
-                        {event.detail && (
-                          <p className="text-xs text-text-secondary">{event.detail}</p>
-                        )}
-                        <span className="text-xs text-text-muted">
-                          {new Date(event.createdAt).toLocaleString()}
+          {/* Messages */}
+          {ticket.messages && ticket.messages.length > 0 && (
+            <div className="facet-border rounded-sm bg-bg-card p-5">
+              <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Messages</h2>
+              <div className="space-y-3">
+                {ticket.messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`rounded-sm border p-4 ${
+                      msg.isStaff
+                        ? "border-accent/20 bg-accent/5"
+                        : "border-border/50 bg-bg-tertiary/30"
+                    }`}
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="text-sm font-medium text-text-primary">
+                        {msg.authorTag}
+                      </span>
+                      {msg.isStaff && (
+                        <span className="rounded-sm bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent uppercase">
+                          Staff
                         </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Messages */}
-            {ticket.messages && ticket.messages.length > 0 && (
-              <div className="facet-border rounded-sm bg-bg-card p-5">
-                <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Messages</h2>
-                <div className="space-y-3">
-                  {ticket.messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`rounded-sm border p-4 ${
-                        msg.isStaff
-                          ? "border-accent/20 bg-accent/5"
-                          : "border-border/50 bg-bg-tertiary/30"
-                      }`}
-                    >
-                      <div className="mb-2 flex items-center gap-2">
-                        <span className="text-sm font-medium text-text-primary">
-                          {msg.authorTag}
-                        </span>
-                        {msg.isStaff && (
-                          <span className="rounded-sm bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent uppercase">
-                            Staff
-                          </span>
-                        )}
-                        <span className="text-xs text-text-muted">
-                          {new Date(msg.createdAt).toLocaleString()}
-                        </span>
-                      </div>
-                      {msg.content && (
-                        <p className="whitespace-pre-wrap text-sm text-text-secondary">
-                          <Linkify text={msg.content} />
-                        </p>
                       )}
-                      <MessageAttachments attachments={msg.attachments} />
+                      <span className="font-mono text-xs text-text-muted">
+                        {new Date(msg.createdAt).toLocaleString()}
+                      </span>
                     </div>
-                  ))}
-                </div>
+                    {msg.content && (
+                      <p className="whitespace-pre-wrap text-sm text-text-secondary">
+                        <Linkify text={msg.content} />
+                      </p>
+                    )}
+                    <MessageAttachments attachments={msg.attachments} />
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
+          )}
 
-            {!ticket.events?.length && !ticket.messages?.length && (
-              <div className="facet-border rounded-sm bg-bg-card px-5 py-8 text-center text-text-muted">
-                No events or messages recorded for this ticket.
-              </div>
-            )}
-          </>
-        )}
-      </main>
-    </div>
+          {!ticket.events?.length && !ticket.messages?.length && (
+            <div className="facet-border rounded-sm bg-bg-card px-5 py-8 text-center text-text-muted">
+              No events or messages recorded for this ticket.
+            </div>
+          )}
+        </>
+      )}
+    </main>
   );
 }

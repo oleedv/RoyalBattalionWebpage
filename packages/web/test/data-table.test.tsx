@@ -109,7 +109,12 @@ test("onRowClick fires for row clicks but not for interactive children", () => {
         {
           id: "actions",
           header: "",
-          cell: ({ row }) => <button>act-{row.original.id}</button>,
+          cell: ({ row }) => (
+            <>
+              <button>act-{row.original.id}</button>
+              <a href={`/profile/${row.original.id}`}>link-{row.original.id}</a>
+            </>
+          ),
         },
       ]}
       data={smRows}
@@ -121,6 +126,8 @@ test("onRowClick fires for row clicks but not for interactive children", () => {
   expect(clicked).toEqual(["1"]);
   fireEvent.click(screen.getByText("act-2"));
   expect(clicked).toEqual(["1"]); // button click must not bubble into onRowClick
+  fireEvent.click(screen.getByText("link-2"));
+  expect(clicked).toEqual(["1"]); // anchor click (entries "profile ->") must not either
 });
 
 test("rowClassName applies per-row classes", () => {

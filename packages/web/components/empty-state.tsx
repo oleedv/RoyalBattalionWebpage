@@ -5,11 +5,19 @@ export function EmptyState({
   message,
   action,
   className,
+  variant = "default",
 }: {
   message: string;
   action?: React.ReactNode;
   className?: string;
+  variant?: "default" | "hint";
 }) {
+  if (variant === "hint") {
+    return (
+      <p className={cn("font-mono text-xs text-text-muted", className)}>{message}</p>
+    );
+  }
+
   return (
     <div
       className={cn(

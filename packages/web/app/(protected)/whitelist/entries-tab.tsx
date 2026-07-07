@@ -469,7 +469,7 @@ export default function EntriesTab({
 
       {/* Bulk action dialog */}
       <Dialog open={pendingBulk !== null} onOpenChange={(o) => { if (!o) setPendingBulk(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="font-display text-lg font-semibold tracking-wide">
               {pendingBulk ? BULK_TITLES[pendingBulk.action] : ""}

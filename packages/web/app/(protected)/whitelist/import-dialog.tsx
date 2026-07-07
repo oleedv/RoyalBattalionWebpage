@@ -103,7 +103,7 @@ export default function ImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="font-display text-lg font-semibold tracking-wide">
             Import Whitelist ({activeServer})

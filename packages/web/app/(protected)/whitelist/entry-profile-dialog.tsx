@@ -247,7 +247,7 @@ export default function EntryProfileDialog({
 
   return (
     <Dialog open={entry !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-2xl gap-0 p-0">
+      <DialogContent className="max-w-2xl sm:max-w-2xl gap-0 p-0">
         {current && (
           <>
             <DialogHeader className="border-b border-border px-6 py-4">

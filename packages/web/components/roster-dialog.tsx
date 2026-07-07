@@ -29,7 +29,7 @@ export function RosterDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-0">
+      <DialogContent className="max-w-md sm:max-w-md p-0">
         <DialogHeader className="border-b border-border px-5 py-3">
           <DialogTitle className="text-sm font-semibold tracking-wide">
             {title} ({rows.length})

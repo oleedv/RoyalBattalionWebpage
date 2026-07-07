@@ -34,7 +34,7 @@ export default function CfgDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="flex max-w-3xl flex-col gap-0 p-0">
+      <DialogContent className="flex max-w-3xl sm:max-w-3xl flex-col gap-0 p-0">
         <DialogHeader className="flex-row items-center justify-between border-b border-border px-6 py-4">
           <DialogTitle className="font-display text-lg font-semibold tracking-wide">
             admins.cfg ({activeServer})

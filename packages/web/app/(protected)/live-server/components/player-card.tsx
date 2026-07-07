@@ -100,7 +100,7 @@ export function PlayerCard({
           )}
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-text-muted">Team</span>
-            <span className={`text-xs font-medium ${String(player.teamID) === "1" ? "text-blue-400" : String(player.teamID) === "2" ? "text-red-400" : "text-text-muted"}`}>
+            <span className={`text-xs font-medium ${String(player.teamID) === "1" ? "text-team-one" : String(player.teamID) === "2" ? "text-team-two" : "text-text-muted"}`}>
               Team {player.teamID}
             </span>
           </div>

@@ -600,14 +600,14 @@ export default function LiveServerPage() {
       case "connect": return "text-success";
       case "disconnect": return "text-text-muted";
       case "teamkill": return "text-danger/70";
-      case "kill": return "text-red-400";
-      case "wound": return "text-orange-400/70";
-      case "revive": return "text-emerald-400";
-      case "squad": return "text-blue-400";
+      case "kill": return "text-danger";
+      case "wound": return "text-warning/70";
+      case "revive": return "text-success";
+      case "squad": return "text-team-one";
       case "newgame": return "text-accent font-bold";
-      case "admincam": return "text-purple-400";
+      case "admincam": return "text-accent";
       case "rconerror": return "text-danger font-bold";
-      case "teamchange": return "text-blue-400/70";
+      case "teamchange": return "text-team-one/70";
       case "squadchange": return "text-text-muted";
       case "autokick": return "text-danger";
       case "roundend": return "text-accent font-bold";
@@ -752,9 +752,9 @@ export default function LiveServerPage() {
               }
               const player = players.find((p) => p.steamID === msg.steamID || p.eosID === msg.eosID);
               const teamColor = String(player?.teamID) === "1"
-                ? "text-blue-400"
+                ? "text-team-one"
                 : String(player?.teamID) === "2"
-                  ? "text-red-400"
+                  ? "text-team-two"
                   : "text-text-secondary";
               return (
                 <div key={i} className="mb-1.5 text-xs">
@@ -1095,7 +1095,7 @@ export default function LiveServerPage() {
                         onClick={() => { handleDemoteCommander(player); setDemoteDropdownOpen(false); }}
                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-bg-tertiary"
                       >
-                        <span className={`font-medium ${team === "1" ? "text-blue-400" : "text-red-400"}`}>T{team}</span>
+                        <span className={`font-medium ${team === "1" ? "text-team-one" : "text-team-two"}`}>T{team}</span>
                         <span className="text-text-primary">{player.name}</span>
                       </button>
                     ))}
@@ -1137,7 +1137,7 @@ export default function LiveServerPage() {
               ) : (
                 <button
                   onClick={() => setRandomizeModalOpen(true)}
-                  className="rounded-sm border border-purple-500/30 bg-purple-500/5 px-3 py-1.5 text-xs font-medium text-purple-400 transition-colors hover:bg-purple-500/15"
+                  className="rounded-sm border border-accent/30 bg-accent/5 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/15"
                 >
                   Randomize
                 </button>
@@ -1147,7 +1147,7 @@ export default function LiveServerPage() {
           {isDeveloper && (
             <button
               onClick={handleTestWarn}
-              className="rounded-sm border border-yellow-500/30 bg-yellow-500/5 px-3 py-1.5 text-xs font-medium text-yellow-400 transition-colors hover:bg-yellow-500/15"
+              className="rounded-sm border border-warning/30 bg-warning/5 px-3 py-1.5 text-xs font-medium text-warning transition-colors hover:bg-warning/15"
             >
               Test Warn
             </button>
@@ -1231,7 +1231,7 @@ export default function LiveServerPage() {
                   onClick={() => { setClanMoveTargetTeam(t); setClanMoveSelectedKey(null); }}
                   className={`flex-1 rounded-sm border px-4 py-2 text-sm font-medium transition-colors ${
                     clanMoveTargetTeam === t
-                      ? t === "1" ? "border-blue-500/40 bg-blue-500/10 text-blue-400" : "border-red-500/40 bg-red-500/10 text-red-400"
+                      ? t === "1" ? "border-team-one/40 bg-team-one/10 text-team-one" : "border-team-two/40 bg-team-two/10 text-team-two"
                       : "border-border bg-bg-tertiary text-text-muted hover:text-text-primary"
                   }`}
                 >
@@ -1277,7 +1277,7 @@ export default function LiveServerPage() {
                       {willMove.map((m) => (
                         <div key={m.steamId} className="flex items-center justify-between rounded-sm border border-warning/20 bg-warning/5 px-2.5 py-1">
                           <span className="text-xs text-text-primary">{m.name}</span>
-                          <span className={`text-[10px] font-medium ${String(m.teamID) === "1" ? "text-blue-400" : "text-red-400"}`}>T{m.teamID}</span>
+                          <span className={`text-[10px] font-medium ${String(m.teamID) === "1" ? "text-team-one" : "text-team-two"}`}>T{m.teamID}</span>
                         </div>
                       ))}
                     </div>
@@ -1285,12 +1285,12 @@ export default function LiveServerPage() {
                 )}
                 {alreadyOn.length > 0 && (
                   <div>
-                    <p className="mb-1 text-xs font-medium tracking-wide text-green-400 uppercase">Already on Team {clanMoveTargetTeam} ({alreadyOn.length})</p>
+                    <p className="mb-1 text-xs font-medium tracking-wide text-success uppercase">Already on Team {clanMoveTargetTeam} ({alreadyOn.length})</p>
                     <div className="space-y-0.5">
                       {alreadyOn.map((m) => (
-                        <div key={m.steamId} className="flex items-center justify-between rounded-sm border border-green-500/20 bg-green-500/5 px-2.5 py-1">
+                        <div key={m.steamId} className="flex items-center justify-between rounded-sm border border-success/20 bg-success/5 px-2.5 py-1">
                           <span className="text-xs text-text-primary">{m.name}</span>
-                          <span className={`text-[10px] font-medium ${String(m.teamID) === "1" ? "text-blue-400" : "text-red-400"}`}>T{m.teamID}</span>
+                          <span className={`text-[10px] font-medium ${String(m.teamID) === "1" ? "text-team-one" : "text-team-two"}`}>T{m.teamID}</span>
                         </div>
                       ))}
                     </div>
@@ -1346,7 +1346,7 @@ export default function LiveServerPage() {
                 onClick={() => setRandomizeMode("all")}
                 className={`flex-1 rounded-sm border px-4 py-2 text-sm font-medium transition-colors ${
                   randomizeMode === "all"
-                    ? "border-purple-500/40 bg-purple-500/10 text-purple-400"
+                    ? "border-accent/40 bg-accent/10 text-accent"
                     : "border-border bg-bg-tertiary text-text-muted hover:text-text-primary"
                 }`}
               >
@@ -1357,7 +1357,7 @@ export default function LiveServerPage() {
                 onClick={() => setRandomizeMode("squad")}
                 className={`flex-1 rounded-sm border px-4 py-2 text-sm font-medium transition-colors ${
                   randomizeMode === "squad"
-                    ? "border-purple-500/40 bg-purple-500/10 text-purple-400"
+                    ? "border-accent/40 bg-accent/10 text-accent"
                     : "border-border bg-bg-tertiary text-text-muted hover:text-text-primary"
                 }`}
               >
@@ -1380,14 +1380,14 @@ export default function LiveServerPage() {
           </button>
           <button
             onClick={() => { handleQueueRandomize(randomizeMode); setRandomizeModalOpen(false); }}
-            className="rounded-sm border border-purple-500/30 bg-purple-500/5 px-5 py-2 text-sm font-medium text-purple-400 transition-colors hover:bg-purple-500/15"
+            className="rounded-sm border border-accent/30 bg-accent/5 px-5 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/15"
             title="Will queue and execute after next game starts"
           >
             Queue
           </button>
           <button
             onClick={() => { handleRunRandomize(randomizeMode); setRandomizeModalOpen(false); }}
-            className="rounded-sm bg-purple-500 px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-purple-500/80"
+            className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted"
             title="Will execute immediately"
           >
             Run

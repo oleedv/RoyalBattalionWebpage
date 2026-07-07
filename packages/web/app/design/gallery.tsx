@@ -25,7 +25,11 @@ import { FilterBar } from "@/components/filter-bar";
 import { DataTable } from "@/components/data-table-v2";
 import { PageHeader } from "@/components/page-header";
 import { StatCard, StatGroup } from "@/components/stat-card";
-import { Sparkline, MultiSparkline } from "@/components/sparkline";
+import { Sparkline, MultiSparkline, AreaSparkline } from "@/components/sparkline";
+import { ConnectionStatus, ServerScope } from "@/components/connection-status";
+import { TerminalPane, type TerminalLine } from "@/components/terminal-pane";
+import { AccessDeniedCard } from "@/components/access-denied-card";
+import { SQUAD_COMMANDS, isDestructiveCommand } from "shared";
 import { ConfigCard } from "@/components/config-card";
 import { CapacityBar } from "@/components/capacity-bar";
 import { TimezoneCombobox } from "@/components/timezone-combobox";
@@ -215,6 +219,42 @@ export function DesignGallery() {
             </main>
           </SidebarProvider>
         </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-semibold tracking-wide text-text-primary">
+          Live Server composites
+        </h2>
+        <div className="flex flex-wrap items-center gap-6">
+          <ConnectionStatus tone="success" label="Connected" />
+          <ConnectionStatus tone="warning" label="SquadJS disconnected" active />
+          <ConnectionStatus tone="danger" label="Disconnected" />
+          <ServerScope servers={["main", "battle"]} active="main" onSwitch={() => {}} variant="select" />
+        </div>
+        <ServerScope servers={["main", "battle"]} active="main" onSwitch={() => {}} variant="tabs" />
+        <div className="relative h-10 w-40 overflow-hidden rounded-sm border border-border">
+          <AreaSparkline values={[3, 8, 5, 12, 9, 16, 22]} className="text-accent" fixedMax={30} />
+        </div>
+        <TerminalPane
+          className="h-64"
+          commands={SQUAD_COMMANDS}
+          isDestructive={isDestructiveCommand}
+          onSubmit={() => {}}
+          onClear={() => {}}
+          placeholder="AdminBroadcast Hello"
+          emptyHint="Type an RCON command and press Enter."
+          lines={
+            [
+              { id: 1, command: "ListPlayers", output: "2 players online", success: true },
+              { id: 2, command: "AdminKick 77 afk", output: "", success: false, error: "player not found" },
+            ] as TerminalLine[]
+          }
+          status={<ConnectionStatus tone="success" label="Connected · main" />}
+        />
+        <AccessDeniedCard
+          message="You do not have access to the RCON console."
+          cta={{ href: "/live-server", label: "Open Live Server Monitor" }}
+        />
       </section>
     </div>
   );

@@ -12,6 +12,7 @@ import {
   importCounts,
   formatImportResult,
   generateCfgContent,
+  wlAuditDetailProps,
 } from "@/app/(protected)/whitelist/lib";
 import type { AdminGroup, Clan, WhitelistEntry, AuditLogEntry } from "shared";
 
@@ -186,4 +187,28 @@ test("generateCfgContent groups by clan, sorts groups, drops expired", () => {
   expect(cfg).toContain("Admin=76561198000000001:Whitelist // Olie");
   expect(cfg).toContain("Admin=2:Admin // 2"); // role fallback + steamId as name
   expect(cfg).not.toContain("Admin=3:"); // expired dropped
+});
+
+test("wlAuditDetailProps splits detail into fields, from-to and plain changes", () => {
+  const log: AuditLogEntry = {
+    id: "1", userId: "u", userName: "Ole", action: "whitelist.update",
+    resource: "WhitelistEntry", resourceId: "e1", createdAt: "",
+    detail: { server: "main", changes: { groupId: { from: "g1", to: "g2" } } },
+  };
+  const p = wlAuditDetailProps(log, groups, clans);
+  expect(p.fields).toEqual([{ label: "Server", value: "main" }]);
+  expect(p.changes).toEqual([
+    { key: "groupId", label: "Group", from: "Whitelist", to: "SuperAdmin" },
+  ]);
+  expect(p.plainChanges).toEqual([]);
+  expect(p.raw).toBe(log.detail);
+
+  const bulk: AuditLogEntry = {
+    ...log,
+    action: "whitelist.bulk_update",
+    detail: { count: 3, changes: { groupId: "g2" } },
+  };
+  const bp = wlAuditDetailProps(bulk, groups, clans);
+  expect(bp.changes).toEqual([]);
+  expect(bp.plainChanges).toEqual([{ label: "Group", value: "SuperAdmin" }]);
 });

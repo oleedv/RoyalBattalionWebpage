@@ -5,6 +5,7 @@ import type {
   WhitelistEntry,
 } from "shared";
 import type { BulkAddSkippedEntry } from "@/lib/api-client";
+import type { AuditChange, AuditField } from "@/components/audit-detail";
 
 export const SQUAD_PERMISSIONS = [
   "startvote", "cheat", "private", "config", "manageserver", "featuretest",
@@ -316,6 +317,32 @@ export function formatImportResult(
     msg += `. Skipped ${skipped.length}: ${sample}${extra}`;
   }
   return msg;
+}
+
+/* ── AuditDetail adapter ─────────────────────────────────────────────── */
+
+// Split an audit log's detail into the AuditDetail renderer's inputs.
+export function wlAuditDetailProps(
+  log: AuditLogEntry,
+  groups: AdminGroup[],
+  clans: Clan[],
+): { fields: AuditField[]; changes: AuditChange[]; plainChanges: AuditField[]; raw: unknown } {
+  const detail = (log.detail || {}) as Record<string, unknown>;
+  const { changes, ...rest } = detail;
+  const fields = Object.entries(rest).map(([k, v]) => ({
+    label: WL_DETAIL_LABELS[k] ?? k,
+    value: wlReadableValue(k, v, groups, clans),
+  }));
+  const fromTo = wlReadableChanges(changes, groups, clans);
+  // bulk_update stores `changes` as a plain map of new values (not from/to pairs)
+  const plainChanges =
+    fromTo.length === 0 && changes && typeof changes === "object"
+      ? Object.entries(changes as Record<string, unknown>).map(([k, v]) => ({
+          label: WL_DETAIL_LABELS[k] ?? k,
+          value: wlReadableValue(k, v, groups, clans),
+        }))
+      : [];
+  return { fields, changes: fromTo, plainChanges, raw: log.detail };
 }
 
 /* ── admins.cfg generation ───────────────────────────────────────────── */

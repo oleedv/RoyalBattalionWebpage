@@ -43,7 +43,12 @@ test("save PATCHes the edited config and toasts success", async () => {
   render(<BirthdayAdminCard token="tok" api={api} notify={notify} />);
   await screen.findByLabelText("Channel ID");
 
-  fireEvent.click(screen.getByRole("switch"));
+  // Base UI Switch renders span[role=switch]; happy-dom synthetic clicks don't
+  // reach its pointer handlers, so toggle via the keyboard path (Space).
+  const sw = screen.getByRole("switch");
+  sw.focus();
+  fireEvent.keyDown(sw, { key: " " });
+  fireEvent.keyUp(sw, { key: " " });
   fireEvent.change(screen.getByLabelText("Post time"), {
     target: { value: "10:30" },
   });

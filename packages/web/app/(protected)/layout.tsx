@@ -31,6 +31,13 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const [candidateCount, setCandidateCount] = useState(0);
   const onlineUsers = usePresence(apiToken, pathname);
 
+  // Read the shadcn sidebar cookie once so collapse survives reloads.
+  const [sidebarDefaultOpen] = useState(
+    () =>
+      typeof document === "undefined" ||
+      !document.cookie.includes("sidebar_state=false"),
+  );
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/login");
@@ -199,16 +206,16 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
 
   return (
     <PermissionProvider permissions={permissions} apiToken={apiToken} user={user}>
-      <SidebarProvider>
+      <SidebarProvider defaultOpen={sidebarDefaultOpen}>
         <AppSidebar
           permissions={permissions}
           badges={{ "/whitelist": candidateCount }}
           onlineUsers={onlineUsers}
           userName={session.user?.name || "User"}
         />
-        <SidebarInset>
+        <SidebarInset className="min-w-0">
           {/* Mobile header: 56px bar with hamburger trigger */}
-          <header className="flex h-14 items-center gap-3 border-b border-border bg-bg-secondary px-4 md:hidden">
+          <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-bg-secondary px-4 md:hidden">
             <SidebarTrigger aria-label="Toggle menu" />
             <Link href="/" className="flex items-center gap-2">
               <Image

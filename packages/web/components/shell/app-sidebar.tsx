@@ -64,6 +64,13 @@ function isActiveHref(pathname: string, href: string) {
 
 function PresenceBlock({ onlineUsers }: { onlineUsers: PresenceUser[] }) {
   const [open, setOpen] = React.useState(false);
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  function openRoster() {
+    if (isMobile) setOpenMobile(false);
+    setOpen(true);
+  }
+
   if (onlineUsers.length === 0) return null;
 
   const stackUsers = onlineUsers.map((u) => ({
@@ -80,7 +87,7 @@ function PresenceBlock({ onlineUsers }: { onlineUsers: PresenceUser[] }) {
       <div className="group-data-[collapsible=icon]:hidden">
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={openRoster}
           className="mb-1.5 block px-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted transition-colors hover:text-accent"
         >
           Online ({onlineUsers.length})
@@ -88,7 +95,7 @@ function PresenceBlock({ onlineUsers }: { onlineUsers: PresenceUser[] }) {
         <div className="px-2">
           <AvatarStack
             users={stackUsers}
-            onClick={() => setOpen(true)}
+            onClick={openRoster}
             label={`View ${onlineUsers.length} online ${onlineUsers.length === 1 ? "user" : "users"}`}
           />
         </div>
@@ -99,7 +106,7 @@ function PresenceBlock({ onlineUsers }: { onlineUsers: PresenceUser[] }) {
           <SidebarMenuItem>
             <SidebarMenuButton
               tooltip={`${onlineUsers.length} online`}
-              onClick={() => setOpen(true)}
+              onClick={openRoster}
             >
               <Users />
               <span>{onlineUsers.length} online</span>
@@ -193,7 +200,7 @@ export function AppSidebar({
                       render={
                         <Link href={item.href}>
                           <item.icon />
-                          <span>{item.label}</span>
+                          <span className="truncate">{item.label}</span>
                           <NavBadge count={badges[item.href] ?? 0} />
                         </Link>
                       }

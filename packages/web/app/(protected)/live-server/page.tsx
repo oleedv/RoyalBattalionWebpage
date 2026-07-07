@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import { usePermissions } from "@/lib/permission-context";
 import { Modal } from "@/components/modal";
 import { SkeletonStatGrid } from "@/components/skeleton";
@@ -611,7 +612,24 @@ export default function LiveServerPage() {
   const onSelectPlayer = useCallback((p: Player) => setSelectedPlayer(p), []);
 
   if (!canView) {
-    return <div className="text-danger">Insufficient permissions.</div>;
+    return (
+      <div className="facet-border w-full max-w-md rounded-sm bg-bg-card p-8 text-center">
+        <h1 className="font-display mb-3 text-xl font-bold tracking-wide text-text-primary">
+          Insufficient Permissions
+        </h1>
+        <p className="text-sm text-text-secondary">
+          You do not have access to the live server monitor.
+        </p>
+        {hasPermission("manage:rcon-console") && (
+          <Link
+            href="/live-server/console"
+            className="mt-4 inline-block rounded-sm bg-accent px-6 py-2.5 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-bright"
+          >
+            Open RCON Console
+          </Link>
+        )}
+      </div>
+    );
   }
 
   // Show the snapshot skeleton only before the very first server snapshot

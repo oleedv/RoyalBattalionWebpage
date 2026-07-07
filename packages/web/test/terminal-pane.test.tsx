@@ -62,13 +62,22 @@ test("cancelling the confirm does not submit", () => {
   expect((props.onSubmit as any)).not.toHaveBeenCalled();
 });
 
-test("autocomplete lists first-token matches; Tab and click accept", async () => {
+test("autocomplete lists first-token matches; click accepts", async () => {
   const props = base();
   render(<TerminalPane {...(props as any)} />);
   const input = screen.getByPlaceholderText("AdminBroadcast Hello") as HTMLInputElement;
   fireEvent.change(input, { target: { value: "ListP" } });
   await waitFor(() => expect(screen.getByText("ListPlayers")).toBeDefined());
   fireEvent.click(screen.getByText("ListPlayers"));
+  expect(input.value).toBe("ListPlayers ");
+});
+
+test("Tab accepts the first suggestion", () => {
+  const props = base();
+  render(<TerminalPane {...(props as any)} />);
+  const input = screen.getByPlaceholderText("AdminBroadcast Hello") as HTMLInputElement;
+  fireEvent.change(input, { target: { value: "ListP" } });
+  fireEvent.keyDown(input, { key: "Tab" });
   expect(input.value).toBe("ListPlayers ");
 });
 

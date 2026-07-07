@@ -43,7 +43,7 @@ export function PlayerCard({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent showCloseButton={false} className="max-w-xs bg-bg-secondary p-4">
+      <DialogContent showCloseButton={false} className="max-w-xs sm:max-w-xs bg-bg-secondary p-4">
         <div className="mb-3 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import Link from "next/link";
 import { usePermissions } from "@/lib/permission-context";
 import {
   Dialog,
@@ -19,6 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { AccessDeniedCard } from "@/components/access-denied-card";
 import { SkeletonStatGrid } from "@/components/skeleton";
 
 import type { Player, ServerInfo, ChatMessage, ConsoleEntry, MetricSample, WSMessage, OnlineClanData, ChatFilter, RandomizationStatus } from "./lib/types";
@@ -641,22 +641,10 @@ export default function LiveServerPage() {
 
   if (!canView) {
     return (
-      <div className="facet-border w-full max-w-md rounded-sm bg-bg-card p-8 text-center">
-        <h1 className="font-display mb-3 text-xl font-bold tracking-wide text-text-primary">
-          Insufficient Permissions
-        </h1>
-        <p className="text-sm text-text-secondary">
-          You do not have access to the live server monitor.
-        </p>
-        {hasPermission("manage:rcon-console") && (
-          <Link
-            href="/live-server/console"
-            className="mt-4 inline-block rounded-sm bg-accent px-6 py-2.5 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-bright"
-          >
-            Open RCON Console
-          </Link>
-        )}
-      </div>
+      <AccessDeniedCard
+        message="You do not have access to the live server monitor."
+        cta={hasPermission("manage:rcon-console") ? { href: "/live-server/console", label: "Open RCON Console" } : undefined}
+      />
     );
   }
 
@@ -1216,7 +1204,7 @@ export default function LiveServerPage() {
 
       {/* Clan move modal */}
       <Dialog open={clanMoveModalOpen} onOpenChange={(o) => { if (!o) { setClanMoveModalOpen(false); setClanMoveSelectedKey(null); } }}>
-        <DialogContent className="max-w-md p-6">
+        <DialogContent className="max-w-md sm:max-w-md p-6">
           <DialogHeader>
             <DialogTitle className="font-display text-base font-semibold tracking-wide">Move Clan</DialogTitle>
           </DialogHeader>
@@ -1333,7 +1321,7 @@ export default function LiveServerPage() {
 
       {/* Randomize modal */}
       <Dialog open={randomizeModalOpen} onOpenChange={(o) => { if (!o) setRandomizeModalOpen(false); }}>
-        <DialogContent className="max-w-md p-6">
+        <DialogContent className="max-w-md sm:max-w-md p-6">
           <DialogHeader>
             <DialogTitle className="font-display text-base font-semibold tracking-wide">Randomize Teams</DialogTitle>
           </DialogHeader>
@@ -1530,7 +1518,7 @@ export default function LiveServerPage() {
 
       {/* Expanded Chat/Console modal */}
       <Dialog open={expandedPanel !== null} onOpenChange={(o) => { if (!o) setExpandedPanel(null); }}>
-        <DialogContent className="flex h-[85vh] w-[90vw] max-w-6xl flex-col p-0">
+        <DialogContent showCloseButton={false} className="flex h-[85vh] w-[90vw] max-w-6xl sm:max-w-6xl flex-col p-0">
           <DialogTitle className="sr-only">{expandedPanel === "chat" ? "Chat" : "Console"}</DialogTitle>
           {expandedPanel === "chat" && (
             <div className="facet-border flex flex-1 flex-col rounded-sm bg-bg-card min-h-0">
@@ -1547,7 +1535,7 @@ export default function LiveServerPage() {
 
       {/* Warn modal */}
       <Dialog open={!!warnTarget} onOpenChange={(o) => { if (!o) setWarnTarget(null); }}>
-        <DialogContent className="max-w-md p-6">
+        <DialogContent className="max-w-md sm:max-w-md p-6">
           <DialogHeader>
             <DialogTitle className="font-display text-base font-semibold tracking-wide">Warn {warnTarget?.name}</DialogTitle>
           </DialogHeader>
@@ -1597,7 +1585,7 @@ export default function LiveServerPage() {
 
       {/* Kick modal */}
       <Dialog open={!!kickTarget} onOpenChange={(o) => { if (!o) setKickTarget(null); }}>
-        <DialogContent className="max-w-md p-6">
+        <DialogContent className="max-w-md sm:max-w-md p-6">
           <DialogHeader>
             <DialogTitle className="font-display text-base font-semibold tracking-wide">Kick {kickTarget?.name}</DialogTitle>
           </DialogHeader>
@@ -1628,7 +1616,7 @@ export default function LiveServerPage() {
 
       {/* Ban modal */}
       <Dialog open={!!banTarget} onOpenChange={(o) => { if (!o) setBanTarget(null); }}>
-        <DialogContent className="max-w-md p-6">
+        <DialogContent className="max-w-md sm:max-w-md p-6">
           <DialogHeader>
             <DialogTitle className="font-display text-base font-semibold tracking-wide">Ban {banTarget?.name}</DialogTitle>
           </DialogHeader>
@@ -1679,7 +1667,7 @@ export default function LiveServerPage() {
 
       {/* Switch squad modal */}
       <Dialog open={!!switchSquadTarget} onOpenChange={(o) => { if (!o) setSwitchSquadTarget(null); }}>
-        <DialogContent className="max-w-md p-6">
+        <DialogContent className="max-w-md sm:max-w-md p-6">
           <DialogHeader>
             <DialogTitle className="font-display text-base font-semibold tracking-wide">Switch Squad: {switchSquadTarget?.squadName}</DialogTitle>
           </DialogHeader>
@@ -1713,7 +1701,7 @@ export default function LiveServerPage() {
 
       {/* Test Warn (developer) */}
       <Dialog open={testWarnOpen} onOpenChange={(o) => { if (!o) setTestWarnOpen(false); }}>
-        <DialogContent className="max-w-md p-6">
+        <DialogContent className="max-w-md sm:max-w-md p-6">
           <DialogHeader>
             <DialogTitle className="font-display text-base font-semibold tracking-wide">Test Warn</DialogTitle>
           </DialogHeader>

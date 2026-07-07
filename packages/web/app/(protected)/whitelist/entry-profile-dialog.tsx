@@ -254,6 +254,7 @@ export default function EntryProfileDialog({
               <DialogTitle className="font-display text-lg font-semibold tracking-wide">
                 {current.name || "Unnamed"}
               </DialogTitle>
+              <div className="font-mono text-xs text-text-muted">{current.steamId}</div>
             </DialogHeader>
 
             {/* Info grid */}
@@ -262,11 +263,13 @@ export default function EntryProfileDialog({
                 <InfoField label="Steam ID" mono>
                   <CopyableId value={current.steamId} />
                 </InfoField>
-                {editing && (
-                  <InfoField label="Name">
+                <InfoField label="Name">
+                  {editing ? (
                     <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Name" />
-                  </InfoField>
-                )}
+                  ) : (
+                    current.name || <span className="text-text-muted">--</span>
+                  )}
+                </InfoField>
                 <InfoField label="Clan">
                   {editing ? (
                     <select value={editClanId} onChange={(e) => setEditClanId(e.target.value)} className="w-full rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent focus:outline-none">

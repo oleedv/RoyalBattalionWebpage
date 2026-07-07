@@ -51,8 +51,10 @@ function baseProps(over: Record<string, unknown> = {}) {
 
 test("renders identity fields, resolved addedByName, playtime and comments", async () => {
   render(<EntryProfileDialog {...(baseProps() as any)} />);
-  expect(screen.getByText("Olie")).toBeDefined();
-  expect(screen.getByText("76561198000000001")).toBeDefined();
+  // Name appears in the dialog title AND the info-grid Name field.
+  expect(screen.getAllByText("Olie").length).toBe(2);
+  // Steam ID appears in the header sub-line AND the CopyableId field.
+  expect(screen.getAllByText("76561198000000001").length).toBe(2);
   expect(screen.getByText("Royal Secretary Bot")).toBeDefined(); // never the raw snowflake
   expect(screen.queryByText("raw-id")).toBeNull();
   expect(screen.getByText("Permanent")).toBeDefined();

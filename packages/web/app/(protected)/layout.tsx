@@ -17,6 +17,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/skeleton";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const { data: session, status } = useSession();
@@ -233,6 +234,7 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           <div className="p-4 sm:p-6 md:p-8">{children}</div>
         </SidebarInset>
       </SidebarProvider>
+      <Toaster position="bottom-right" />
     </PermissionProvider>
   );
 }

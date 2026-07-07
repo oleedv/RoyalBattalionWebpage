@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import Image from "next/image";
-import { NavAuthButton } from "@/components/nav-auth-button";
+import { PublicPageHeading } from "@/components/public/page-heading";
 
 export const metadata: Metadata = {
   title: "Privacy Policy - Royal Battalion",
@@ -10,43 +8,9 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen">
-      <nav className="fixed top-0 z-50 w-full border-b border-border/50 bg-bg-primary/60 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:h-18 sm:px-6">
-          <Link href="/" className="flex items-center gap-2 sm:gap-3">
-            <Image
-              src="/img/rb_newlion2024_4_RS.png"
-              alt="Royal Battalion"
-              width={32}
-              height={32}
-              className="rounded-sm sm:h-9 sm:w-9"
-            />
-            <span className="font-display text-sm font-semibold tracking-[0.15em] text-accent sm:text-lg">
-              ROYAL BATTALION
-            </span>
-          </Link>
-          <div className="flex items-center gap-3 sm:gap-6">
-            <Link
-              href="/server"
-              className="hidden text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent sm:block"
-            >
-              Server
-            </Link>
-            <Link
-              href="/matches"
-              className="hidden text-sm font-medium text-text-secondary tracking-wide transition-colors hover:text-accent sm:block"
-            >
-              Matches
-            </Link>
-            <NavAuthButton className="glow-button relative rounded-sm border border-accent/40 bg-accent/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-accent transition-all hover:bg-accent/20 hover:border-accent/60 sm:px-5 sm:py-2 sm:text-sm" />
-          </div>
-        </div>
-      </nav>
-
-      <main className="mx-auto max-w-3xl px-6 pt-28 pb-16">
-        <h1 className="font-display mb-8 text-3xl font-bold tracking-wide">
-          Privacy Policy
-        </h1>
+    <>
+      <PublicPageHeading title="Privacy Policy" />
+      <main className="mx-auto max-w-3xl px-6 pb-16 pt-28">
         <p className="mb-6 text-sm text-text-muted">
           Last updated: February 25, 2026
         </p>
@@ -338,6 +302,6 @@ export default function PrivacyPage() {
           </section>
         </div>
       </main>
-    </div>
+    </>
   );
 }

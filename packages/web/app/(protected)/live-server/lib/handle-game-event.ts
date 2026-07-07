@@ -1,4 +1,4 @@
-import type { Player, ServerInfo, ChatMessage, ConsoleEntry, RandomizationStatus } from "./types";
+import type { Player, ServerInfo, ChatMessage, ConsoleEntry, RandomizationStatus, BalanceStatus } from "./types";
 
 export type GameEventAction =
   | { type: "setPlayers"; players: Player[] }
@@ -8,7 +8,8 @@ export type GameEventAction =
   | { type: "setTickRate"; tickRate: number }
   | { type: "appendConsole"; entry: Omit<ConsoleEntry, "time"> }
   | { type: "requestClanRefresh" }
-  | { type: "setRandomizationStatus"; status: RandomizationStatus | null };
+  | { type: "setRandomizationStatus"; status: RandomizationStatus | null }
+  | { type: "setBalanceStatus"; status: BalanceStatus | null };
 
 export function handleGameEvent(event: string, data: unknown): GameEventAction[] {
   const actions: GameEventAction[] = [];
@@ -211,6 +212,23 @@ export function handleGameEvent(event: string, data: unknown): GameEventAction[]
       } else if (rqe.action === "failed") {
         actions.push({ type: "setRandomizationStatus", status: null });
         addConsole("broadcast", "Randomization failed");
+      }
+      break;
+    }
+    case "BALANCE_QUEUE_EVENT": {
+      const bqe = data as { action: string; requestedBy?: string };
+      if (bqe.action === "queued") {
+        actions.push({ type: "setBalanceStatus", status: { pending: true, requestedBy: bqe.requestedBy, requestedAt: new Date().toISOString() } });
+        addConsole("broadcast", "Team balance queued for round end");
+      } else if (bqe.action === "cancelled") {
+        actions.push({ type: "setBalanceStatus", status: null });
+        addConsole("broadcast", "Queued team balance cancelled");
+      } else if (bqe.action === "executed") {
+        actions.push({ type: "setBalanceStatus", status: null });
+        addConsole("broadcast", "Team balance executed");
+      } else if (bqe.action === "failed") {
+        actions.push({ type: "setBalanceStatus", status: null });
+        addConsole("broadcast", "Team balance failed");
       }
       break;
     }

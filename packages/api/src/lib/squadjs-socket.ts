@@ -71,6 +71,7 @@ const EVENTS_TO_RELAY = [
   "GRACE_PERIOD_EVENT",
   "SWAP_QUEUE_EVENT",
   "RANDOMIZE_QUEUE_EVENT",
+  "BALANCE_QUEUE_EVENT",
 ];
 
 export interface GracePeriodEvent {
@@ -141,6 +142,7 @@ interface ServerState {
   gracePeriodActive: boolean;
   gracePeriodEndTime: number | null;
   randomizationStatus: { pending: boolean; mode?: string; requestedBy?: string; requestedAt?: string } | null;
+  balanceStatus: { pending: boolean; requestedBy?: string; requestedAt?: string } | null;
 }
 
 // Parse env: SQUADJS_SERVERS="staging|ws://ip:4001|token,production|ws://ip:4000|token"
@@ -223,6 +225,7 @@ class SquadJSSocketManager {
       gracePeriodActive: false,
       gracePeriodEndTime: null,
       randomizationStatus: null,
+      balanceStatus: null,
     };
 
     this.servers.set(key, state);
@@ -341,6 +344,14 @@ class SquadJSSocketManager {
       state.lastEventTime = Date.now();
       if (result && typeof result === "object" && "pending" in result) {
         state.randomizationStatus = result as ServerState["randomizationStatus"];
+      }
+    });
+
+    // Request balance status via plugin API method
+    state.socket.emit("callApiMethod", "getBalanceStatus", (result: unknown) => {
+      state.lastEventTime = Date.now();
+      if (result && typeof result === "object" && "pending" in result) {
+        state.balanceStatus = result as ServerState["balanceStatus"];
       }
     });
 
@@ -590,6 +601,15 @@ class SquadJSSocketManager {
         }
         break;
       }
+      case "BALANCE_QUEUE_EVENT": {
+        const bqe = data as { action: string; requestedBy?: string; [key: string]: unknown };
+        if (bqe.action === "queued") {
+          state.balanceStatus = { pending: true, requestedBy: bqe.requestedBy, requestedAt: new Date().toISOString() };
+        } else if (bqe.action === "cancelled" || bqe.action === "executed" || bqe.action === "failed") {
+          state.balanceStatus = null;
+        }
+        break;
+      }
     }
 
     this.broadcast(key, event, data);
@@ -646,6 +666,7 @@ class SquadJSSocketManager {
       gracePeriodActive: state.gracePeriodActive,
       gracePeriodEndTime: state.gracePeriodEndTime,
       randomizationStatus: state.randomizationStatus,
+      balanceStatus: state.balanceStatus,
     };
   }
 

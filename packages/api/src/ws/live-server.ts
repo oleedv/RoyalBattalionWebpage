@@ -476,6 +476,46 @@ async function handleAdminAction(
         break;
       }
 
+      case "previewbalance": {
+        if (!hasPermission(ws, "manage:balance-teams")) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "manage:balance-teams permission required" }));
+          return;
+        }
+        const plan = await squadjsSocket.callMethod(serverKey, "getBalancePlan");
+        ws.send(JSON.stringify({ type: "balance_plan", data: plan }));
+        break;
+      }
+
+      case "queuebalance": {
+        if (!hasPermission(ws, "manage:balance-teams")) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "manage:balance-teams permission required" }));
+          return;
+        }
+        const qbResult = await squadjsSocket.callMethod(serverKey, "queueBalance", ws.data.userName) as { success?: boolean; error?: string };
+        if (qbResult?.success === false) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: qbResult.error || "Queue failed" }));
+          return;
+        }
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.queuebalance", "LiveServer", serverKey, {});
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "queuebalance", data: qbResult }));
+        break;
+      }
+
+      case "cancelbalance": {
+        if (!hasPermission(ws, "manage:balance-teams")) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: "manage:balance-teams permission required" }));
+          return;
+        }
+        const cbResult = await squadjsSocket.callMethod(serverKey, "cancelBalance") as { success?: boolean; error?: string };
+        if (cbResult?.success === false) {
+          ws.send(JSON.stringify({ type: "action_result", success: false, error: cbResult.error || "Cancel failed" }));
+          return;
+        }
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.cancelbalance", "LiveServer", serverKey, {});
+        ws.send(JSON.stringify({ type: "action_result", success: true, action: "cancelbalance", data: cbResult }));
+        break;
+      }
+
       case "testwarn": {
         if (!ws.data.permissions.includes("developer")) {
           ws.send(JSON.stringify({ type: "action_result", success: false, error: "Developer only" }));

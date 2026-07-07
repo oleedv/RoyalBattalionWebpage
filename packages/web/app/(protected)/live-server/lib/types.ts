@@ -49,6 +49,26 @@ export interface RandomizationStatus {
   requestedAt?: string;
 }
 
+export interface BalanceStatus {
+  pending: boolean;
+  requestedBy?: string;
+  requestedAt?: string;
+}
+
+export interface BalanceMove {
+  eosID: string;
+  name: string;
+  fromTeam: number;
+  toTeam: number;
+}
+
+export interface BalancePlan {
+  team1: { count: number; skill: number };
+  team2: { count: number; skill: number };
+  moves: BalanceMove[];
+  totalPlayers: number;
+}
+
 export interface Snapshot {
   connected: boolean;
   players: Player[];
@@ -58,6 +78,7 @@ export interface Snapshot {
   tickRate: number | null;
   metricHistory: MetricSample[];
   randomizationStatus?: RandomizationStatus | null;
+  balanceStatus?: BalanceStatus | null;
 }
 
 export type OnlineClanEntry = { id: string; tag: string; members: { teamID: string; steamId: string; name: string }[] };
@@ -70,7 +91,8 @@ export type WSMessage =
   | { type: "action_progress"; action: string; count: number; estimatedSeconds: number }
   | { type: "action_result"; success: boolean; error?: string; action?: string }
   | { type: "online_clans"; data: OnlineClanData }
-  | { type: "rcon_response"; command: string; output: string; success: boolean; error?: string };
+  | { type: "rcon_response"; command: string; output: string; success: boolean; error?: string }
+  | { type: "balance_plan"; data: BalancePlan };
 
 export interface ConsoleEntry {
   time: string;

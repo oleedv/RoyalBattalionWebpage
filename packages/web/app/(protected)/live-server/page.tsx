@@ -5,7 +5,7 @@ import { usePermissions } from "@/lib/permission-context";
 import { Modal } from "@/components/modal";
 import { SkeletonStatGrid } from "@/components/skeleton";
 
-import type { Player, ServerInfo, ChatMessage, ConsoleEntry, MetricSample, WSMessage, OnlineClanData, ChatFilter, RandomizationStatus } from "./lib/types";
+import type { Player, ServerInfo, ChatMessage, ConsoleEntry, MetricSample, WSMessage, OnlineClanData, ChatFilter, RandomizationStatus, BalanceStatus, BalancePlan } from "./lib/types";
 import { handleGameEvent, type GameEventAction } from "./lib/handle-game-event";
 import { InfoCell } from "./components/info-cell";
 import { Sparkline } from "./components/sparkline";
@@ -69,6 +69,7 @@ export default function LiveServerPage() {
   const isDeveloper = permissions.includes("developer");
   const canClanMove = hasPermission("manage:clan-move");
   const canRandomize = hasPermission("manage:randomize");
+  const canBalance = hasPermission("manage:balance-teams");
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -132,6 +133,10 @@ export default function LiveServerPage() {
   const [randomizationStatus, setRandomizationStatus] = useState<RandomizationStatus | null>(null);
   const [randomizeModalOpen, setRandomizeModalOpen] = useState(false);
   const [randomizeMode, setRandomizeMode] = useState<"all" | "squad">("all");
+  const [balanceStatus, setBalanceStatus] = useState<BalanceStatus | null>(null);
+  const [balanceModalOpen, setBalanceModalOpen] = useState(false);
+  const [balancePlan, setBalancePlan] = useState<BalancePlan | null>(null);
+  const [balancePreviewLoading, setBalancePreviewLoading] = useState(false);
   const [demoteDropdownOpen, setDemoteDropdownOpen] = useState(false);
   const demoteDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -206,6 +211,9 @@ export default function LiveServerPage() {
         case "setRandomizationStatus":
           setRandomizationStatus(action.status);
           break;
+        case "setBalanceStatus":
+          setBalanceStatus(action.status);
+          break;
       }
     }
   }, []);
@@ -248,6 +256,7 @@ export default function LiveServerPage() {
           setTickRate(msg.data.tickRate);
           if (msg.data.metricHistory?.length) setMetricHistory(msg.data.metricHistory);
           if (msg.data.randomizationStatus != null) setRandomizationStatus(msg.data.randomizationStatus);
+          if (msg.data.balanceStatus != null) setBalanceStatus(msg.data.balanceStatus);
           // Request clan data after snapshot
           if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify({ action: "get_online_clans" }));
@@ -262,6 +271,7 @@ export default function LiveServerPage() {
           setActionFeedback(`Moving ${msg.count} player${msg.count !== 1 ? "s" : ""}... ~${msg.estimatedSeconds}s`);
           break;
         case "action_result":
+          setBalancePreviewLoading(false);
           if (msg.success) {
             setActionFeedback(`${msg.action} executed successfully`);
           } else {
@@ -271,6 +281,11 @@ export default function LiveServerPage() {
           break;
         case "online_clans":
           setOnlineClans(msg.data);
+          break;
+        case "balance_plan":
+          setBalancePlan(msg.data);
+          setBalancePreviewLoading(false);
+          setBalanceModalOpen(true);
           break;
       }
     } catch (err) {
@@ -540,6 +555,20 @@ export default function LiveServerPage() {
 
   function handleCancelRandomize() {
     sendAction({ action: "cancelrandomize" });
+  }
+
+  function handlePreviewBalance() {
+    setBalancePreviewLoading(true);
+    sendAction({ action: "previewbalance" });
+  }
+
+  function handleQueueBalance() {
+    sendAction({ action: "queuebalance" });
+    setBalanceModalOpen(false);
+  }
+
+  function handleCancelBalance() {
+    sendAction({ action: "cancelbalance" });
   }
 
   function handleTestWarn() {
@@ -1092,6 +1121,32 @@ export default function LiveServerPage() {
             </button>
           )}
 
+          {/* Balance Teams */}
+          {canBalance && (
+            <>
+              <div className="h-6 w-px bg-border/50" />
+              {balanceStatus?.pending ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-warning">Balance queued</span>
+                  <button
+                    onClick={handleCancelBalance}
+                    className="rounded-sm border border-danger/30 bg-danger/5 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/15"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handlePreviewBalance}
+                  disabled={balancePreviewLoading}
+                  className="rounded-sm border border-sky-500/30 bg-sky-500/5 px-3 py-1.5 text-xs font-medium text-sky-400 transition-colors hover:bg-sky-500/15 disabled:opacity-50"
+                >
+                  {balancePreviewLoading ? "Computing..." : "Balance"}
+                </button>
+              )}
+            </>
+          )}
+
           {/* Randomize Teams */}
           {canRandomize && (
             <>
@@ -1289,6 +1344,63 @@ export default function LiveServerPage() {
             className="rounded-sm bg-warning px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-warning/80 disabled:opacity-40"
           >
             {clanMoveSelectedKey ? `Move ${getMovableClans(clanMoveTargetTeam).find((c) => c.key === clanMoveSelectedKey)?.count || 0} players` : "Select a clan"}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Balance preview modal */}
+      <Modal open={balanceModalOpen} onClose={() => setBalanceModalOpen(false)} className="max-w-lg bg-bg-secondary p-6">
+        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">Balance Teams</h3>
+        {!balancePlan ? (
+          <p className="text-sm text-text-muted">Computing balance plan...</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-sm border border-border bg-bg-tertiary p-3">
+                <div className="text-xs text-text-muted">Team 1</div>
+                <div className="text-sm text-text-primary">{balancePlan.team1.count} players</div>
+                <div className="text-xs text-text-muted">skill {balancePlan.team1.skill}</div>
+              </div>
+              <div className="rounded-sm border border-border bg-bg-tertiary p-3">
+                <div className="text-xs text-text-muted">Team 2</div>
+                <div className="text-sm text-text-primary">{balancePlan.team2.count} players</div>
+                <div className="text-xs text-text-muted">skill {balancePlan.team2.skill}</div>
+              </div>
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-text-muted">
+                {balancePlan.moves.length} of {balancePlan.totalPlayers} players would move
+              </div>
+              {balancePlan.moves.length > 0 && (
+                <div className="max-h-48 overflow-y-auto rounded-sm border border-border bg-bg-tertiary p-2 text-xs">
+                  {balancePlan.moves.map((m) => (
+                    <div key={m.eosID} className="flex justify-between py-0.5">
+                      <span className="truncate text-text-secondary">{m.name}</span>
+                      <span className="ml-2 shrink-0 text-text-muted">T{m.fromTeam} &rarr; T{m.toTeam}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-text-muted">
+              Recomputed fresh at round end (during voting); actual moves may differ if players join or leave before then.
+            </p>
+          </div>
+        )}
+        <div className="mt-4 flex justify-end gap-3">
+          <button
+            onClick={() => setBalanceModalOpen(false)}
+            className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleQueueBalance}
+            disabled={!balancePlan}
+            className="rounded-sm bg-sky-500 px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-sky-500/80 disabled:opacity-50"
+            title="Queue this balance to run at the end of the current round"
+          >
+            Queue for round end
           </button>
         </div>
       </Modal>

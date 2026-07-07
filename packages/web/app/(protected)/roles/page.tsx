@@ -198,6 +198,11 @@ const PERMISSION_GROUPS: PermGroup[] = [
         description: "Queue or run team randomization",
       },
       {
+        perm: "manage:balance-teams",
+        label: "Balance Teams",
+        description: "Queue a skill-weighted team balance for round end",
+      },
+      {
         perm: "manage:rcon-console",
         label: "RCON Console",
         description: "Run arbitrary RCON commands via the live console",

@@ -11,7 +11,7 @@ import {
   shouldAnimateEmbers,
   type Mote,
 } from "@/lib/ember-field";
-import { getChartTokens } from "@/lib/chart-tokens";
+import { useChartTokens } from "@/lib/chart-tokens";
 import { cn } from "@/lib/utils";
 
 /** Lion emblem in a drifting gold ember field with depth parallax.
@@ -29,6 +29,10 @@ export function EmberHero({
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lionRef = useRef<HTMLDivElement>(null);
+
+  const tokens = useChartTokens();
+  const goldRef = useRef(tokens.series[1]);
+  goldRef.current = tokens.series[1];
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -52,7 +56,6 @@ export function EmberHero({
       return; // static lion, empty canvas
     }
 
-    const gold = getChartTokens().series[1];
     let field: Mote[] = createMotes(motes);
     const mouse = { x: 0, y: 0 };
     let visible = true;
@@ -94,7 +97,7 @@ export function EmberHero({
         const x = (m.x + swayOffset(m, t)) * canvas!.width + p.dx;
         const y = m.y * canvas!.height + p.dy;
         ctx.globalAlpha = flicker(m.phase, t) * (0.35 + m.depth * 0.65);
-        ctx.fillStyle = gold;
+        ctx.fillStyle = goldRef.current;
         ctx.beginPath();
         ctx.arc(x, y, m.r, 0, Math.PI * 2);
         ctx.fill();

@@ -166,11 +166,6 @@ body {
   background: var(--color-accent-dim);
 }
 
-/* Diamond shape */
-.diamond {
-  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
-}
-
 @layer components {
   /* Noise overlay texture */
   .noise-overlay::before {

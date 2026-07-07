@@ -195,7 +195,7 @@ export function DesignGallery() {
         </h2>
         <div className="h-[420px] overflow-hidden rounded-sm border border-border">
           <SidebarProvider>
-            <AppSidebar permissions={["developer"]} />
+            <AppSidebar permissions={["developer"]} userName="Preview User" />
             <main className="flex-1 p-6">
               <PageHeader breadcrumb={["Operations", "Whitelist"]} title="WHITELIST" />
               <p className="text-sm text-text-secondary">

@@ -9,7 +9,8 @@ import { SkeletonStatGrid } from "@/components/skeleton";
 import type { Player, ServerInfo, ChatMessage, ConsoleEntry, MetricSample, WSMessage, OnlineClanData, ChatFilter, RandomizationStatus } from "./lib/types";
 import { handleGameEvent, type GameEventAction } from "./lib/handle-game-event";
 import { InfoCell } from "./components/info-cell";
-import { Sparkline } from "./components/sparkline";
+import { AreaSparkline } from "@/components/sparkline";
+import { ConnectionStatus, ServerScope } from "@/components/connection-status";
 import { MapImg, getMapThumbnailUrls } from "./components/map-img";
 import { TeamColumn } from "./components/team-column";
 import { PlayerCard } from "./components/player-card";
@@ -901,50 +902,30 @@ export default function LiveServerPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div
-              className={`h-2 w-2 rounded-full transition-all duration-150 ${
-                connected && squadjsConnected
-                  ? "bg-success"
-                  : connected
-                    ? "bg-warning"
-                    : "bg-danger"
-              } ${activity ? "scale-150 brightness-150" : ""}`}
-            />
-            <span className="text-xs text-text-muted">
-              {connected && squadjsConnected
+          <ConnectionStatus
+            tone={connected && squadjsConnected ? "success" : connected ? "warning" : "danger"}
+            active={activity}
+            label={
+              connected && squadjsConnected
                 ? "Connected"
                 : connected && !squadjsConfigured
                   ? "SquadJS not configured (SQUADJS_SERVERS env var missing)"
                   : connected
                     ? "API connected, SquadJS disconnected"
-                    : "Disconnected"}
-            </span>
-          </div>
+                    : "Disconnected"
+            }
+          />
         </div>
       </div>
 
       {/* Server tabs */}
-      {serverKeys.length > 1 && (
-        <div className="mb-6 flex gap-1 border-b border-border">
-          {serverKeys.map((key) => (
-            <button
-              key={key}
-              onClick={() => switchServer(key)}
-              className={`relative px-5 py-2.5 text-sm font-medium tracking-wide capitalize transition-colors ${
-                activeServer === key
-                  ? "text-accent"
-                  : "text-text-muted hover:text-text-secondary"
-              }`}
-            >
-              {key}
-              {activeServer === key && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+      <ServerScope
+        servers={serverKeys}
+        active={activeServer}
+        onSwitch={switchServer}
+        variant="tabs"
+        className="mb-6"
+      />
 
       {/* Action feedback */}
       {actionFeedback && (
@@ -973,10 +954,10 @@ export default function LiveServerPage() {
       {serverInfo && (
         <div className="facet-border mb-4 grid grid-cols-2 gap-3 rounded-sm bg-bg-card p-3 sm:grid-cols-3 lg:grid-cols-6">
           <InfoCell label="Players" value={`${serverInfo.playerCount} / ${serverInfo.maxPlayers}`}>
-            <Sparkline data={metricHistory.map((s) => s.playerCount)} color="var(--color-accent)" fixedMax={serverInfo.maxPlayers || 100} />
+            <AreaSparkline values={metricHistory.map((s) => s.playerCount)} className="text-accent" fixedMax={serverInfo.maxPlayers || 100} />
           </InfoCell>
           <InfoCell label="Queue" value={`${serverInfo.publicQueue + serverInfo.reserveQueue}`}>
-            <Sparkline data={metricHistory.map((s) => s.publicQueue + s.reserveQueue)} color="var(--color-warning)" fixedMax={25} />
+            <AreaSparkline values={metricHistory.map((s) => s.publicQueue + s.reserveQueue)} className="text-warning" fixedMax={25} />
           </InfoCell>
           <InfoCell label="Layer" value={layerName(serverInfo.currentLayer)}>
             {layerName(serverInfo.currentLayer) !== "--" && (
@@ -997,7 +978,7 @@ export default function LiveServerPage() {
             )}
           </InfoCell>
           <InfoCell label="Tick Rate" value={tickRate ? `${tickRate.toFixed(1)}` : "--"}>
-            <Sparkline data={metricHistory.map((s) => s.tickRate ?? 0)} color="var(--color-success)" />
+            <AreaSparkline values={metricHistory.map((s) => s.tickRate ?? 0)} className="text-success" />
           </InfoCell>
           <InfoCell label="Slots" value={`${serverInfo.publicSlots}+${serverInfo.reserveSlots}`} />
         </div>

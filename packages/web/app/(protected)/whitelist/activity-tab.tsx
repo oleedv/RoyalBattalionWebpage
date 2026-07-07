@@ -125,7 +125,7 @@ export default function ActivityTab({
       },
       {
         id: "details",
-        header: "Summary",
+        header: "Details",
         enableSorting: false,
         cell: ({ row }) => (
           <span className="text-xs text-text-secondary">

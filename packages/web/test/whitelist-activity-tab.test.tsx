@@ -39,7 +39,8 @@ test("expanding a row shows the AuditDetail panel", async () => {
   render(<ActivityTab token="tok" groups={groups} clans={clans} api={makeApi([log])} />);
   await screen.findByText("Ole");
   fireEvent.click(screen.getByRole("button", { name: "Expand row" }));
-  expect(screen.getByText("Details")).toBeDefined();
+  // "Details" appears twice once expanded: the column header + the panel heading.
+  expect(screen.getAllByText("Details").length).toBe(2);
   expect(screen.getByText("Server")).toBeDefined();
   expect(screen.getByRole("button", { name: "Show raw" })).toBeDefined();
 });

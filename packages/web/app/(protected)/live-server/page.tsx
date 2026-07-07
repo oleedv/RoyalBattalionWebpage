@@ -3,7 +3,22 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePermissions } from "@/lib/permission-context";
-import { Modal } from "@/components/modal";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { SkeletonStatGrid } from "@/components/skeleton";
 
 import type { Player, ServerInfo, ChatMessage, ConsoleEntry, MetricSample, WSMessage, OnlineClanData, ChatFilter, RandomizationStatus } from "./lib/types";
@@ -127,6 +142,7 @@ export default function LiveServerPage() {
   const [restartConfirm, setRestartConfirm] = useState(false);
   const [nextLayerInput, setNextLayerInput] = useState("");
   const [changeLayerInput, setChangeLayerInput] = useState("");
+  const [changeLayerConfirm, setChangeLayerConfirm] = useState(false);
   const [onlineClans, setOnlineClans] = useState<OnlineClanData>({});
   const [clanMoveModalOpen, setClanMoveModalOpen] = useState(false);
   const [clanMoveTargetTeam, setClanMoveTargetTeam] = useState<"1" | "2">("1");
@@ -145,6 +161,8 @@ export default function LiveServerPage() {
   const [chatSearch, setChatSearch] = useState("");
   const [consoleSearch, setConsoleSearch] = useState("");
   const [expandedPanel, setExpandedPanel] = useState<"chat" | "console" | null>(null);
+  const [testWarnOpen, setTestWarnOpen] = useState(false);
+  const [testWarnEosId, setTestWarnEosId] = useState("");
 
   // Refs for metric sampling interval (needs current values without re-creating interval)
   const serverInfoRef = useRef(serverInfo);
@@ -509,9 +527,13 @@ export default function LiveServerPage() {
 
   function handleChangeLayerNow() {
     if (!changeLayerInput.trim()) return;
-    if (!window.confirm(`Change the CURRENT layer to "${changeLayerInput.trim()}" now? This restarts the round.`)) return;
+    setChangeLayerConfirm(true);
+  }
+
+  function confirmChangeLayerNow() {
     sendAction({ action: "changelayer", message: changeLayerInput.trim() });
     setChangeLayerInput("");
+    setChangeLayerConfirm(false);
   }
 
   function handleDemoteCommander(player: Player) {
@@ -545,9 +567,14 @@ export default function LiveServerPage() {
   }
 
   function handleTestWarn() {
-    const eosId = prompt("Enter EOS ID to warn:");
-    if (!eosId?.trim()) return;
-    sendAction({ action: "testwarn", eosId: eosId.trim() });
+    setTestWarnEosId("");
+    setTestWarnOpen(true);
+  }
+
+  function confirmTestWarn() {
+    if (!testWarnEosId.trim()) return;
+    sendAction({ action: "testwarn", eosId: testWarnEosId.trim() });
+    setTestWarnOpen(false);
   }
 
   function isCommander(player: Player): boolean {
@@ -1130,58 +1157,69 @@ export default function LiveServerPage() {
       </div>{/* end shrink-0 */}
 
       {/* End Match confirmation */}
-      <Modal open={endMatchConfirm} onClose={() => setEndMatchConfirm(false)} className="max-w-md bg-bg-secondary p-6">
-        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
-          End Match
-        </h3>
-        <p className="text-sm text-text-secondary">
-          Are you sure you want to end the current match? This will immediately end the game for all players.
-        </p>
-        <div className="mt-4 flex justify-end gap-3">
-          <button
-            onClick={() => setEndMatchConfirm(false)}
-            className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleEndMatch}
-            className="rounded-sm bg-danger px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-danger/80 disabled:opacity-40"
-          >
-            End Match
-          </button>
-        </div>
-      </Modal>
+      <AlertDialog open={endMatchConfirm} onOpenChange={setEndMatchConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display tracking-wide">End Match</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to end the current match? This will immediately end the
+              game for all players.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleEndMatch}>
+              End Match
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Restart Match confirmation */}
-      <Modal open={restartConfirm} onClose={() => setRestartConfirm(false)} className="max-w-md bg-bg-secondary p-6">
-        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
-          Restart Match
-        </h3>
-        <p className="text-sm text-text-secondary">
-          Are you sure you want to restart the current match? This will reload the current layer and restart the round for all players.
-        </p>
-        <div className="mt-4 flex justify-end gap-3">
-          <button
-            onClick={() => setRestartConfirm(false)}
-            className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleRestartMatch}
-            className="rounded-sm bg-danger px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-danger/80 disabled:opacity-40"
-          >
-            Restart Match
-          </button>
-        </div>
-      </Modal>
+      <AlertDialog open={restartConfirm} onOpenChange={setRestartConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display tracking-wide">Restart Match</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to restart the current match? This will reload the current
+              layer and restart the round for all players.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleRestartMatch}>
+              Restart Match
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Change Layer Now confirmation */}
+      <AlertDialog open={changeLayerConfirm} onOpenChange={setChangeLayerConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display tracking-wide">Change Layer Now</AlertDialogTitle>
+            <AlertDialogDescription>
+              Change the CURRENT layer to{" "}
+              <span className="font-mono text-text-primary">{changeLayerInput.trim()}</span> now?
+              This restarts the round.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmChangeLayerNow}>
+              Change Now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Clan move modal */}
-      <Modal open={clanMoveModalOpen} onClose={() => { setClanMoveModalOpen(false); setClanMoveSelectedKey(null); }} className="max-w-md bg-bg-secondary p-6">
-        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
-          Move Clan
-        </h3>
+      <Dialog open={clanMoveModalOpen} onOpenChange={(o) => { if (!o) { setClanMoveModalOpen(false); setClanMoveSelectedKey(null); } }}>
+        <DialogContent className="max-w-md p-6">
+          <DialogHeader>
+            <DialogTitle className="font-display text-base font-semibold tracking-wide">Move Clan</DialogTitle>
+          </DialogHeader>
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-xs font-medium tracking-wide text-text-muted uppercase">Target Team</label>
@@ -1290,13 +1328,15 @@ export default function LiveServerPage() {
             {clanMoveSelectedKey ? `Move ${getMovableClans(clanMoveTargetTeam).find((c) => c.key === clanMoveSelectedKey)?.count || 0} players` : "Select a clan"}
           </button>
         </div>
-      </Modal>
+        </DialogContent>
+      </Dialog>
 
       {/* Randomize modal */}
-      <Modal open={randomizeModalOpen} onClose={() => setRandomizeModalOpen(false)} className="max-w-md bg-bg-secondary p-6">
-        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
-          Randomize Teams
-        </h3>
+      <Dialog open={randomizeModalOpen} onOpenChange={(o) => { if (!o) setRandomizeModalOpen(false); }}>
+        <DialogContent className="max-w-md p-6">
+          <DialogHeader>
+            <DialogTitle className="font-display text-base font-semibold tracking-wide">Randomize Teams</DialogTitle>
+          </DialogHeader>
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-xs font-medium tracking-wide text-text-muted uppercase">Mode</label>
@@ -1353,7 +1393,8 @@ export default function LiveServerPage() {
             Run
           </button>
         </div>
-      </Modal>
+        </DialogContent>
+      </Dialog>
 
       {/* Main grid: Players + Chat */}
       <div className="grid gap-4 lg:grid-cols-[3fr_2fr] flex-1 min-h-0">
@@ -1488,28 +1529,28 @@ export default function LiveServerPage() {
       </div>
 
       {/* Expanded Chat/Console modal */}
-      <Modal
-        open={expandedPanel !== null}
-        onClose={() => setExpandedPanel(null)}
-        className="max-w-6xl w-[90vw] h-[85vh] bg-bg-secondary p-0 flex flex-col"
-      >
-        {expandedPanel === "chat" && (
-          <div className="facet-border flex flex-1 flex-col rounded-sm bg-bg-card min-h-0">
-            {renderChatContent(true)}
-          </div>
-        )}
-        {expandedPanel === "console" && (
-          <div className="facet-border flex flex-1 flex-col rounded-sm bg-bg-card min-h-0">
-            {renderConsoleContent(true)}
-          </div>
-        )}
-      </Modal>
+      <Dialog open={expandedPanel !== null} onOpenChange={(o) => { if (!o) setExpandedPanel(null); }}>
+        <DialogContent className="flex h-[85vh] w-[90vw] max-w-6xl flex-col p-0">
+          <DialogTitle className="sr-only">{expandedPanel === "chat" ? "Chat" : "Console"}</DialogTitle>
+          {expandedPanel === "chat" && (
+            <div className="facet-border flex flex-1 flex-col rounded-sm bg-bg-card min-h-0">
+              {renderChatContent(true)}
+            </div>
+          )}
+          {expandedPanel === "console" && (
+            <div className="facet-border flex flex-1 flex-col rounded-sm bg-bg-card min-h-0">
+              {renderConsoleContent(true)}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Warn modal */}
-      <Modal open={!!warnTarget} onClose={() => setWarnTarget(null)} className="max-w-md bg-bg-secondary p-6">
-        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
-          Warn {warnTarget?.name}
-        </h3>
+      <Dialog open={!!warnTarget} onOpenChange={(o) => { if (!o) setWarnTarget(null); }}>
+        <DialogContent className="max-w-md p-6">
+          <DialogHeader>
+            <DialogTitle className="font-display text-base font-semibold tracking-wide">Warn {warnTarget?.name}</DialogTitle>
+          </DialogHeader>
         <div className="space-y-3">
           <div className="flex flex-wrap gap-1.5">
             {WARN_TEMPLATES.map((t) => (
@@ -1551,13 +1592,15 @@ export default function LiveServerPage() {
             Send Warning
           </button>
         </div>
-      </Modal>
+        </DialogContent>
+      </Dialog>
 
       {/* Kick modal */}
-      <Modal open={!!kickTarget} onClose={() => setKickTarget(null)} className="max-w-md bg-bg-secondary p-6">
-        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
-          Kick {kickTarget?.name}
-        </h3>
+      <Dialog open={!!kickTarget} onOpenChange={(o) => { if (!o) setKickTarget(null); }}>
+        <DialogContent className="max-w-md p-6">
+          <DialogHeader>
+            <DialogTitle className="font-display text-base font-semibold tracking-wide">Kick {kickTarget?.name}</DialogTitle>
+          </DialogHeader>
         <input
           type="text"
           value={kickReason}
@@ -1580,13 +1623,15 @@ export default function LiveServerPage() {
             Kick Player
           </button>
         </div>
-      </Modal>
+        </DialogContent>
+      </Dialog>
 
       {/* Ban modal */}
-      <Modal open={!!banTarget} onClose={() => setBanTarget(null)} className="max-w-md bg-bg-secondary p-6">
-        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
-          Ban {banTarget?.name}
-        </h3>
+      <Dialog open={!!banTarget} onOpenChange={(o) => { if (!o) setBanTarget(null); }}>
+        <DialogContent className="max-w-md p-6">
+          <DialogHeader>
+            <DialogTitle className="font-display text-base font-semibold tracking-wide">Ban {banTarget?.name}</DialogTitle>
+          </DialogHeader>
         <div className="space-y-3">
           <div>
             <label className="mb-1.5 block text-xs font-medium tracking-wide text-text-muted uppercase">Duration</label>
@@ -1629,13 +1674,15 @@ export default function LiveServerPage() {
             Ban Player
           </button>
         </div>
-      </Modal>
+        </DialogContent>
+      </Dialog>
 
       {/* Switch squad modal */}
-      <Modal open={!!switchSquadTarget} onClose={() => setSwitchSquadTarget(null)} className="max-w-md bg-bg-secondary p-6">
-        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">
-          Switch Squad: {switchSquadTarget?.squadName}
-        </h3>
+      <Dialog open={!!switchSquadTarget} onOpenChange={(o) => { if (!o) setSwitchSquadTarget(null); }}>
+        <DialogContent className="max-w-md p-6">
+          <DialogHeader>
+            <DialogTitle className="font-display text-base font-semibold tracking-wide">Switch Squad: {switchSquadTarget?.squadName}</DialogTitle>
+          </DialogHeader>
         <div className="space-y-3 text-sm">
           <div className="rounded-sm border border-warning/20 bg-warning/5 px-3 py-2 text-warning">
             This is a force team switch. It may exceed the 50-player team cap.
@@ -1661,7 +1708,41 @@ export default function LiveServerPage() {
             Switch {switchSquadTarget?.players.length} Players
           </button>
         </div>
-      </Modal>
+        </DialogContent>
+      </Dialog>
+
+      {/* Test Warn (developer) */}
+      <Dialog open={testWarnOpen} onOpenChange={(o) => { if (!o) setTestWarnOpen(false); }}>
+        <DialogContent className="max-w-md p-6">
+          <DialogHeader>
+            <DialogTitle className="font-display text-base font-semibold tracking-wide">Test Warn</DialogTitle>
+          </DialogHeader>
+          <input
+            type="text"
+            value={testWarnEosId}
+            onChange={(e) => setTestWarnEosId(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") confirmTestWarn(); }}
+            placeholder="EOS ID to warn"
+            className="w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+            autoFocus
+          />
+          <div className="mt-4 flex justify-end gap-3">
+            <button
+              onClick={() => setTestWarnOpen(false)}
+              className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmTestWarn}
+              disabled={!testWarnEosId.trim()}
+              className="rounded-sm bg-accent px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-accent-muted disabled:opacity-40"
+            >
+              Send Test Warn
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Player card */}
       {selectedPlayer && (

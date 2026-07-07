@@ -44,7 +44,7 @@ export function InfoTip({ text, label }: { text: string; label: string }) {
         onClick={() => setOpen((v) => !v)}
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
-        className="flex items-center justify-center rounded-full text-text-muted/60 transition-colors hover:text-accent focus-visible:text-accent focus:outline-none"
+        className="relative flex items-center justify-center rounded-full text-text-muted/60 outline-none transition-colors after:absolute after:-inset-2.5 hover:text-accent focus-visible:text-accent focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         <svg
           viewBox="0 0 24 24"

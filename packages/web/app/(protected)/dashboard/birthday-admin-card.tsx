@@ -91,7 +91,7 @@ export default function BirthdayAdminCard({
     <ConfigCard
       title="Birthday announcements"
       headerAction={
-        <label className="flex items-center gap-2 text-xs text-text-secondary">
+        <div className="flex items-center gap-2 text-xs text-text-secondary">
           <Switch
             checked={config?.enabled ?? false}
             onCheckedChange={handleEnabledChange}
@@ -99,7 +99,7 @@ export default function BirthdayAdminCard({
             aria-label="Birthday announcements enabled"
           />
           Enabled
-        </label>
+        </div>
       }
       footer={
         config ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,8 +24,13 @@ import { SearchInput } from "@/components/search-input-v2";
 import { FilterBar } from "@/components/filter-bar";
 import { DataTable } from "@/components/data-table-v2";
 import { PageHeader } from "@/components/page-header";
-import { StatCard } from "@/components/stat-card";
-import { Sparkline } from "@/components/sparkline";
+import { StatCard, StatGroup } from "@/components/stat-card";
+import { Sparkline, MultiSparkline } from "@/components/sparkline";
+import { ConfigCard } from "@/components/config-card";
+import { CapacityBar } from "@/components/capacity-bar";
+import { TimezoneCombobox } from "@/components/timezone-combobox";
+import { InfoTip } from "@/components/info-tip";
+import { FieldTip } from "@/components/field-tip";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AppSidebar } from "@/components/shell/app-sidebar";
 
@@ -190,6 +196,11 @@ export function DesignGallery() {
       </section>
 
       <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold">Dashboard composites</h2>
+        <GalleryDashboardComposites />
+      </section>
+
+      <section className="space-y-3">
         <h2 className="font-display text-lg font-bold">
           Admin sidebar (embedded preview)
         </h2>
@@ -205,6 +216,69 @@ export function DesignGallery() {
           </SidebarProvider>
         </div>
       </section>
+    </div>
+  );
+}
+
+function GalleryDashboardComposites() {
+  const [tz, setTz] = useState("Europe/Oslo");
+  return (
+    <div className="space-y-4">
+      <ConfigCard
+        title="Birthday announcements"
+        description="ConfigCard: permission-gated feature config on a content page."
+        headerAction={
+          <label className="flex items-center gap-2 text-xs text-text-secondary">
+            <Switch defaultChecked aria-label="Enabled" /> Enabled
+          </label>
+        }
+        footer={
+          <Button variant="gold" size="sm">
+            Save
+          </Button>
+        }
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <span className="mb-1 block text-[10px] font-medium tracking-wider text-text-muted uppercase">
+              Timezone
+            </span>
+            <TimezoneCombobox value={tz} onChange={setTz} />
+          </div>
+          <div>
+            <span className="mb-1 block text-[10px] font-medium tracking-wider text-text-muted uppercase">
+              Capacity
+            </span>
+            <CapacityBar value={87} max={100} className="mt-3" />
+          </div>
+        </div>
+      </ConfigCard>
+
+      <StatGroup label="Stat tiles">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard label="KDR" value="1.42" accent tip="Kills divided by deaths." />
+          <StatCard label="Playtime" value="42h" hint="last 30 days" />
+          <StatCard label="Open Tickets" value={3} href="#" />
+          <StatCard label="Trend" value="87">
+            <MultiSparkline
+              series={[
+                { values: [40, 60, 87], label: "Players", className: "text-accent" },
+                { values: [0, 2, 4], label: "Queue", className: "text-warning" },
+              ]}
+              fixedMax={100}
+              className="w-28"
+            />
+          </StatCard>
+        </div>
+      </StatGroup>
+
+      <p className="text-xs text-text-secondary">
+        Read-only field:{" "}
+        <FieldTip>
+          <code className="font-mono text-accent">76561198012345678</code>
+        </FieldTip>{" "}
+        · Explainer: <InfoTip label="Seed time" text="Time on the server while seeding." />
+      </p>
     </div>
   );
 }

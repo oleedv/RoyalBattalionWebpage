@@ -30,7 +30,7 @@ test("getChartTokens falls back to dark theme values when properties are unset",
 
 test("useChartTokens re-reads tokens when the html theme class changes", async () => {
   root().style.setProperty("--color-accent", "#111111");
-  const { result } = renderHook(() => useChartTokens());
+  const { result, unmount } = renderHook(() => useChartTokens());
   expect(result.current.accent).toBe("#111111");
 
   root().style.setProperty("--color-accent", "#222222");
@@ -39,4 +39,5 @@ test("useChartTokens re-reads tokens when the html theme class changes", async (
     await new Promise((r) => setTimeout(r, 0));
   });
   expect(result.current.accent).toBe("#222222");
+  unmount();
 });

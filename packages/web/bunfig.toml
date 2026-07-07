@@ -1,6 +1,5 @@
 [test]
 preload = ["./test/setup.ts"]
-root = "."
 
 [test.alias]
 "next/image" = "./test/mocks/next-image.tsx"

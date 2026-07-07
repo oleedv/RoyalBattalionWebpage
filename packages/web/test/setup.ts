@@ -2,10 +2,8 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 GlobalRegistrator.register();
 
-// Set up a base URL for happy-dom so relative paths work
 if (typeof window !== "undefined") {
-  // @ts-ignore
-  window._isTestEnv = true;
+  // Base URL for happy-dom URL construction (needed by tests without the next/image mock path).
   Object.defineProperty(window.location, "href", {
     writable: true,
     value: "http://localhost:3000/",

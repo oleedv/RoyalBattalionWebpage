@@ -36,7 +36,7 @@ function FactionFlag({ code, className = "h-4 w-4" }: { code: string; className?
   return <img src={src} alt={code} className={`${className} object-contain`} />;
 }
 
-function MapImg({ urls, alt, className }: { urls: string[]; alt: string; className?: string }) {
+export function MapImg({ urls, alt, className }: { urls: string[]; alt: string; className?: string }) {
   const [idx, setIdx] = useState(0);
   if (idx >= urls.length) return null;
   return (

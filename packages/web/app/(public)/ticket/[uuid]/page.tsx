@@ -96,7 +96,7 @@ export default function TicketPage({ params }: { params: Promise<{ uuid: string 
                       {event.detail && (
                         <p className="text-xs text-text-secondary">{event.detail}</p>
                       )}
-                      <span className="text-xs text-text-muted">
+                      <span className="font-mono text-xs text-text-muted">
                         {new Date(event.createdAt).toLocaleString()}
                       </span>
                     </div>

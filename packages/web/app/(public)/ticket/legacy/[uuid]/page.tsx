@@ -10,8 +10,8 @@ import { PublicPageHeading } from "@/components/public/page-heading";
 import { SkeletonRegion, SkeletonText } from "@/components/skeleton";
 
 const MSG_STYLES: Record<string, { border: string; bg: string; label: string; labelColor: string }> = {
-  from_user: { border: "border-border/50", bg: "bg-bg-tertiary/30", label: "User", labelColor: "bg-blue-500/15 text-blue-400" },
-  chat: { border: "border-border/50", bg: "bg-bg-tertiary/30", label: "Chat", labelColor: "bg-blue-500/15 text-blue-400" },
+  from_user: { border: "border-border/50", bg: "bg-bg-tertiary/30", label: "User", labelColor: "bg-bg-tertiary text-text-secondary" },
+  chat: { border: "border-border/50", bg: "bg-bg-tertiary/30", label: "Chat", labelColor: "bg-bg-tertiary text-text-secondary" },
   to_user: { border: "border-accent/20", bg: "bg-accent/5", label: "Staff", labelColor: "bg-accent/15 text-accent" },
   command: { border: "border-accent/20", bg: "bg-accent/5", label: "Command", labelColor: "bg-accent/15 text-accent" },
   bot: { border: "border-border/30", bg: "bg-bg-tertiary/10", label: "Bot", labelColor: "bg-text-muted/15 text-text-muted" },

@@ -9,8 +9,8 @@ export const metadata: Metadata = {
 export default function TermsPage() {
   return (
     <>
-      <PublicPageHeading title="Terms of Service" />
       <main className="mx-auto max-w-3xl px-6 pb-16 pt-28">
+        <PublicPageHeading title="Terms of Service" />
         <p className="mb-10 text-sm text-text-muted">
           Last updated: February 25, 2026
         </p>

@@ -12,6 +12,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { getMapThumbnailUrls } from "@/lib/map-thumbnails";
 import { StatusBadge, type StatusVariant } from "@/components/status-badge";
 import { DiscordIcon } from "@/components/public/discord-icon";
+import { MapImg } from "@/app/(public)/matches/match-card";
 
 const SERVER_LABELS = ["Main Server", "Battle Server"] as const;
 const SERVER_NAMES = ["Royal Battalion", "RB Battle"] as const;
@@ -50,9 +51,11 @@ export function ServersSection() {
                 <span className="text-xs font-medium uppercase tracking-[0.2em] text-text-muted">
                   {label}
                 </span>
-                <StatusBadge
-                  variant={online ? "server-online" : "server-offline"}
-                />
+                {s !== null && (
+                  <StatusBadge
+                    variant={online ? "server-online" : "server-offline"}
+                  />
+                )}
               </div>
               <span className="font-display text-lg font-semibold tracking-wide text-text-primary">
                 {SERVER_NAMES[i]}
@@ -99,12 +102,7 @@ export function RecentMatchesSection() {
               className="facet-border group overflow-hidden rounded-sm bg-bg-card transition-colors hover:bg-bg-card-hover"
             >
               <div className="graded-media h-28">
-                <img
-                  src={getMapThumbnailUrls(m.layer)[0]}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
+                <MapImg urls={getMapThumbnailUrls(m.layer)} alt="" className="h-full w-full object-cover" />
               </div>
               <div className="flex items-center justify-between px-4 py-3">
                 <div>

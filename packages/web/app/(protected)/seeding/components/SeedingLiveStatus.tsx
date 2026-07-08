@@ -3,11 +3,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { getSeedingLiveStatus } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { StatusBadge } from "@/components/status-badge";
 import type { SeedingLiveStatus as LiveStatusData } from "shared";
 
-interface Props {
-  apiToken: string;
-}
+export type SeedingLiveStatusApi = {
+  getSeedingLiveStatus: typeof getSeedingLiveStatus;
+};
+
+const defaultApi: SeedingLiveStatusApi = { getSeedingLiveStatus };
 
 function isStale(updatedAt: string | null): boolean {
   if (!updatedAt) return true;
@@ -15,19 +18,25 @@ function isStale(updatedAt: string | null): boolean {
   return age > 120_000;
 }
 
-export function SeedingLiveStatus({ apiToken }: Props) {
+export function SeedingLiveStatus({
+  apiToken,
+  api = defaultApi,
+}: {
+  apiToken: string;
+  api?: SeedingLiveStatusApi;
+}) {
   const [status, setStatus] = useState<LiveStatusData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
-    const res = await getSeedingLiveStatus(apiToken);
+    const res = await api.getSeedingLiveStatus(apiToken);
     if (res.success && res.data) {
       setStatus(res.data);
       setError(null);
     } else {
       setError(res.error || "Failed to fetch live status");
     }
-  }, [apiToken]);
+  }, [apiToken, api]);
 
   useEffect(() => {
     fetch();
@@ -94,9 +103,7 @@ export function SeedingLiveStatus({ apiToken }: Props) {
         <div>
           <div className="mb-1 text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Session</div>
           {status.activeSessionId != null ? (
-            <span className="rounded-sm border border-success/30 bg-success/15 px-2 py-0.5 text-xs font-medium text-success">
-              Active #{status.activeSessionId}
-            </span>
+            <StatusBadge tone="success">Active #{status.activeSessionId}</StatusBadge>
           ) : (
             <span className="text-sm text-text-muted">No active session</span>
           )}

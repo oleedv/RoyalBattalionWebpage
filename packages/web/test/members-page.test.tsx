@@ -1,7 +1,7 @@
 import { test, expect, mock } from "bun:test";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { UserWithRolesAndComments, DiscordRole } from "shared";
-import { MembersView, type MembersApi } from "@/app/(protected)/members/page";
+import { MembersView, type MembersApi } from "@/app/(protected)/members/members-view";
 
 const roleA: DiscordRole = {
   id: "r1",

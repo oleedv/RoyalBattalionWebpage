@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { AuditLogEntry } from "shared";
-import { AuditLogsView, type AuditLogsApi } from "@/app/(protected)/audit-logs/page";
+import { AuditLogsView, type AuditLogsApi } from "@/app/(protected)/audit-logs/audit-logs-view";
 
 const rows: AuditLogEntry[] = [
   { id: "1", userId: "u1", userName: "Alice", action: "whitelist.add", resource: "whitelist", resourceId: "76561190000000000", detail: { name: "Bob", server: "main" }, createdAt: "2026-02-01T10:00:00.000Z" },

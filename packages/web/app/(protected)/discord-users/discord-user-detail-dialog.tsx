@@ -63,10 +63,12 @@ export default function DiscordUserDetailDialog({
 
   async function handleDeleteComment(commentId: string) {
     if (!token || !user) return;
-    const res = await api.deleteMemberComment(token, user.id, commentId);
-    if (res.success) {
-      onChanged();
-    }
+    try {
+      const res = await api.deleteMemberComment(token, user.id, commentId);
+      if (res.success) {
+        onChanged();
+      }
+    } catch { /* silent */ }
   }
 
   return (

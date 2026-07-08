@@ -1,34 +1,61 @@
+"use client";
+
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from "recharts";
+import { useChartTokens } from "@/lib/chart-tokens";
+
+export function toHourlyData(data: number[]): { hour: number; value: number }[] {
+  return data.map((value, hour) => ({ hour, value }));
+}
+
 export function HourlyChart({ data }: { data: number[] }) {
-  const max = Math.max(...data, 1);
-  const barWidth = 100 / 24;
+  const t = useChartTokens();
+  const axisTick = { fontSize: 10, fill: t.axis } as const;
+  const chartData = toHourlyData(data);
+
   return (
     <div className="rounded-sm border border-border bg-bg-card p-5">
       <div className="mb-3 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
         Time of Day
       </div>
-      <svg viewBox="0 0 100 40" className="w-full" preserveAspectRatio="none">
-        {data.map((count, hour) => {
-          const height = (count / max) * 35;
-          return (
-            <rect
-              key={hour}
-              x={hour * barWidth + barWidth * 0.15}
-              y={40 - height}
-              width={barWidth * 0.7}
-              height={height}
-              className="fill-accent/70"
-              rx="0.5"
-            />
-          );
-        })}
-      </svg>
-      <div className="mt-1 flex justify-between text-[9px] text-text-muted">
-        <span>00:00</span>
-        <span>06:00</span>
-        <span>12:00</span>
-        <span>18:00</span>
-        <span>23:00</span>
-      </div>
+      <ResponsiveContainer width="100%" height={100}>
+        <BarChart data={chartData} margin={{ top: 0, right: 0, left: -28, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={t.grid} vertical={false} />
+          <XAxis
+            dataKey="hour"
+            tick={axisTick}
+            ticks={[0, 6, 12, 18, 23]}
+            tickFormatter={(v) => `${String(v).padStart(2, "0")}:00`}
+            tickLine={false}
+            axisLine={false}
+          />
+          <YAxis
+            tick={axisTick}
+            width={28}
+            tickLine={false}
+            axisLine={false}
+            allowDecimals={false}
+          />
+          <Tooltip
+            contentStyle={{
+              background: t.tooltip.bg,
+              border: `1px solid ${t.tooltip.border}`,
+              borderRadius: 4,
+              fontSize: 12,
+              color: t.tooltip.text,
+            }}
+            labelStyle={{ color: t.axis }}
+          />
+          <Bar dataKey="value" fill={t.accent} isAnimationActive={false} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }

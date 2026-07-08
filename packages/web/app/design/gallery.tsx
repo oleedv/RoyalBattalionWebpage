@@ -29,6 +29,7 @@ import { Sparkline, MultiSparkline, AreaSparkline } from "@/components/sparkline
 import { ConnectionStatus, ServerScope } from "@/components/connection-status";
 import { TerminalPane, type TerminalLine } from "@/components/terminal-pane";
 import { AccessDeniedCard } from "@/components/access-denied-card";
+import { DownloadButton } from "@/components/download-button";
 import { SQUAD_COMMANDS, isDestructiveCommand } from "shared";
 import { ConfigCard } from "@/components/config-card";
 import { CapacityBar } from "@/components/capacity-bar";
@@ -255,6 +256,19 @@ export function DesignGallery() {
           message="You do not have access to the RCON console."
           cta={{ href: "/live-server", label: "Open Live Server Monitor" }}
         />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold">Tickets composites</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge variant="ticket-open" />
+          <StatusBadge variant="ticket-closing" />
+          <StatusBadge variant="ticket-closed" />
+          <StatusBadge variant="ticket-accepted" />
+          <StatusBadge variant="ticket-denied" />
+          <StatusBadge variant="ticket-legacy" />
+          <DownloadButton text="Ticket #1 [open]" filename="ticket-1.txt" label="Export .txt" />
+        </div>
       </section>
     </div>
   );

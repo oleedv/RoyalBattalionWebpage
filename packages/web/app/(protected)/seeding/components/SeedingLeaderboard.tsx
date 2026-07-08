@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
 import {
   getSeedTrackerLeaderboard,
   getSeedTrackerPlayer,
@@ -10,10 +11,22 @@ import {
 import type {
   SeedTrackerLeaderboardEntry,
   SeedTrackerPlayerDetail,
+  SeedTrackerSession,
   SeedTrackerStats,
 } from "shared";
 import { HourlyChart } from "./HourlyChart";
 import { WeekdayChart } from "./WeekdayChart";
+import { DataTable } from "@/components/data-table-v2";
+import { SearchInput } from "@/components/search-input-v2";
+import { StatusBadge } from "@/components/status-badge";
+import { StatCard } from "@/components/stat-card";
+import { EmptyState } from "@/components/empty-state";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function formatDuration(seconds: number): string {
   if (!seconds) return "--";
@@ -32,14 +45,42 @@ function formatDate(value: string | null | undefined): string {
   if (!value) return "--";
   const d = new Date(value);
   if (isNaN(d.getTime())) return String(value);
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
-interface Props {
+// ---------------------------------------------------------------------------
+// DI seam
+// ---------------------------------------------------------------------------
+
+export type SeedingLeaderboardApi = {
+  getSeedTrackerLeaderboard: typeof getSeedTrackerLeaderboard;
+  getSeedTrackerStats: typeof getSeedTrackerStats;
+  getSeedTrackerPlayer: typeof getSeedTrackerPlayer;
+  searchSeedTracker: typeof searchSeedTracker;
+};
+
+export const defaultApi: SeedingLeaderboardApi = {
+  getSeedTrackerLeaderboard,
+  getSeedTrackerStats,
+  getSeedTrackerPlayer,
+  searchSeedTracker,
+};
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function SeedingLeaderboard({
+  apiToken,
+  api = defaultApi,
+}: {
   apiToken: string;
-}
-
-export function SeedingLeaderboard({ apiToken }: Props) {
+  api?: SeedingLeaderboardApi;
+}) {
   const [tab, setTab] = useState<"leaderboard" | "search">("leaderboard");
   const [days, setDays] = useState(30);
   const [leaderboard, setLeaderboard] = useState<SeedTrackerLeaderboardEntry[]>([]);
@@ -51,53 +92,190 @@ export function SeedingLeaderboard({ apiToken }: Props) {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // Clear search results when leaving search tab (matches original behaviour)
+  useEffect(() => {
+    if (tab !== "search") {
+      setSearchResults([]);
+    }
+  }, [tab]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [lbRes, statsRes] = await Promise.all([
-      getSeedTrackerLeaderboard(apiToken, days),
-      getSeedTrackerStats(apiToken),
+      api.getSeedTrackerLeaderboard(apiToken, days),
+      api.getSeedTrackerStats(apiToken),
     ]);
     if (lbRes.success && lbRes.data) setLeaderboard(lbRes.data);
     if (statsRes.success && statsRes.data) setStats(statsRes.data);
     setLoading(false);
-  }, [apiToken, days]);
+  }, [apiToken, days, api]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Debounced search
-  useEffect(() => {
-    if (tab !== "search" || !searchQuery.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    const timer = setTimeout(async () => {
-      const res = await searchSeedTracker(apiToken, searchQuery.trim());
-      if (res.success && res.data) setSearchResults(res.data);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [apiToken, searchQuery, tab]);
-
   const selectPlayer = useCallback(
     async (steamId: string) => {
       setSelectedSteamId(steamId);
       setDetailLoading(true);
-      const res = await getSeedTrackerPlayer(apiToken, steamId);
+      const res = await api.getSeedTrackerPlayer(apiToken, steamId);
       if (res.success && res.data) setPlayerDetail(res.data);
       setDetailLoading(false);
     },
-    [apiToken]
+    [apiToken, api],
   );
 
-  // Player Detail view
+  // SearchInput's built-in debounce fires this after 300ms of typing inactivity
+  const handleSearch = useCallback(
+    async (query: string) => {
+      if (!query.trim()) {
+        setSearchResults([]);
+        return;
+      }
+      const res = await api.searchSeedTracker(apiToken, query.trim());
+      if (res.success && res.data) setSearchResults(res.data);
+    },
+    [apiToken, api],
+  );
+
+  // ---------------------------------------------------------------------------
+  // Shared 6-column ColumnDef (leaderboard + search tables)
+  // ---------------------------------------------------------------------------
+
+  const sharedColumns = useMemo<ColumnDef<SeedTrackerLeaderboardEntry, unknown>[]>(
+    () => [
+      {
+        id: "rank",
+        header: "#",
+        enableSorting: false,
+        cell: ({ row, table }) => {
+          const { pageIndex, pageSize } = table.getState().pagination;
+          return (
+            <span className="tabular-nums text-text-muted">
+              {pageIndex * pageSize + row.index + 1}
+            </span>
+          );
+        },
+      },
+      {
+        id: "player",
+        header: "Player",
+        accessorFn: (e) => e.name,
+        cell: ({ row }) => (
+          <span className="flex items-center gap-2">
+            <span className="font-medium text-text-primary">{row.original.name}</span>
+            {row.original.isActive && (
+              <span
+                className="inline-block h-2 w-2 rounded-full bg-success"
+                title="Currently seeding"
+              />
+            )}
+          </span>
+        ),
+      },
+      {
+        id: "seedDays",
+        header: "Seed Days",
+        accessorFn: (e) => e.seedDays,
+        cell: ({ row }) => row.original.seedDays,
+      },
+      {
+        id: "duration",
+        header: "Duration",
+        accessorFn: (e) => e.totalDuration,
+        cell: ({ row }) => formatDuration(row.original.totalDuration),
+      },
+      {
+        id: "avgQuality",
+        header: "Avg Quality",
+        accessorFn: (e) => e.avgQuality,
+        cell: ({ row }) => formatQuality(row.original.avgQuality),
+      },
+      {
+        id: "lastSeed",
+        header: "Last Seed",
+        accessorFn: (e) => e.lastSeedDate ?? undefined,
+        sortUndefined: "last",
+        cell: ({ row }) => (
+          <span className="text-text-muted">{formatDate(row.original.lastSeedDate)}</span>
+        ),
+      },
+    ],
+    [],
+  );
+
+  // ---------------------------------------------------------------------------
+  // Session ColumnDef (detail view)
+  // ---------------------------------------------------------------------------
+
+  const sessionColumns = useMemo<ColumnDef<SeedTrackerSession, unknown>[]>(
+    () => [
+      {
+        id: "date",
+        header: "Date",
+        accessorFn: (s) => s.seedDate,
+        cell: ({ row }) => (
+          <span className="flex items-center gap-2 text-text-muted">
+            {formatDate(row.original.seedDate)}
+            {row.original.status === "active" && (
+              <StatusBadge tone="success" className="py-0 text-[10px]">
+                LIVE
+              </StatusBadge>
+            )}
+          </span>
+        ),
+      },
+      {
+        id: "duration",
+        header: "Duration",
+        accessorFn: (s) => s.durationSeconds ?? undefined,
+        sortUndefined: "last",
+        cell: ({ row }) =>
+          row.original.status === "active"
+            ? "In progress"
+            : formatDuration(row.original.durationSeconds ?? 0),
+      },
+      {
+        id: "joinPop",
+        header: "Join Pop",
+        accessorFn: (s) => s.joinPopulation,
+        cell: ({ row }) => row.original.joinPopulation,
+      },
+      {
+        id: "peakPop",
+        header: "Peak Pop",
+        accessorFn: (s) => s.peakPopulation,
+        cell: ({ row }) => row.original.peakPopulation,
+      },
+      {
+        id: "threshold",
+        header: "Threshold",
+        accessorFn: (s) => Number(s.thresholdReached),
+        cell: ({ row }) =>
+          row.original.thresholdReached ? (
+            <span className="text-success">Yes</span>
+          ) : (
+            <span className="text-text-muted">No</span>
+          ),
+      },
+      {
+        id: "quality",
+        header: "Quality",
+        accessorFn: (s) => s.qualityScore ?? undefined,
+        sortUndefined: "last",
+        cell: ({ row }) => formatQuality(row.original.qualityScore),
+      },
+    ],
+    [],
+  );
+
+  // ---------------------------------------------------------------------------
+  // Detail view (page takeover — preserve this early-return pattern)
+  // ---------------------------------------------------------------------------
+
   if (selectedSteamId) {
     return (
       <div>
-        <div className="mb-8">
-          <h1 className="font-display text-3xl font-bold tracking-wide">Seeding</h1>
-        </div>
-
         <button
           onClick={() => {
             setSelectedSteamId(null);
@@ -105,7 +283,13 @@ export function SeedingLeaderboard({ apiToken }: Props) {
           }}
           className="mb-6 flex items-center gap-1.5 text-sm text-text-muted transition-colors hover:text-accent"
         >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <svg
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            viewBox="0 0 24 24"
+          >
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
           Back to list
@@ -129,52 +313,33 @@ export function SeedingLeaderboard({ apiToken }: Props) {
                 </a>
               </div>
               {playerDetail.whitelistStatus?.hasWhitelist ? (
-                <span className="rounded-sm border border-success/30 bg-success/15 px-2 py-1 text-xs font-medium text-success">
+                <StatusBadge tone="success">
                   Whitelisted ({playerDetail.whitelistStatus.role})
                   {playerDetail.whitelistStatus.expiresAt &&
-                    ` - expires ${new Date(playerDetail.whitelistStatus.expiresAt).toLocaleDateString()}`}
-                </span>
+                    ` - expires ${new Date(
+                      playerDetail.whitelistStatus.expiresAt,
+                    ).toLocaleDateString()}`}
+                </StatusBadge>
               ) : (
-                <span className="rounded-sm border border-text-muted/30 bg-text-muted/15 px-2 py-1 text-xs font-medium text-text-secondary">
-                  No Whitelist
-                </span>
+                <StatusBadge tone="neutral">No Whitelist</StatusBadge>
               )}
             </div>
 
             {/* Stat cards */}
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              <div className="rounded-sm border border-border bg-bg-card p-5">
-                <div className="text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                  Seed Days (30d / 90d / All)
-                </div>
-                <div className="mt-2 text-2xl font-bold text-text-primary">
-                  {playerDetail.seedDays30} / {playerDetail.seedDays90} / {playerDetail.seedDaysAll}
-                </div>
-              </div>
-              <div className="rounded-sm border border-border bg-bg-card p-5">
-                <div className="text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                  Total Duration (30d)
-                </div>
-                <div className="mt-2 text-2xl font-bold text-text-primary">
-                  {formatDuration(playerDetail.totalDuration30)}
-                </div>
-              </div>
-              <div className="rounded-sm border border-border bg-bg-card p-5">
-                <div className="text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                  Avg Quality
-                </div>
-                <div className="mt-2 text-2xl font-bold text-text-primary">
-                  {formatQuality(playerDetail.avgQuality)}
-                </div>
-              </div>
-              <div className="rounded-sm border border-border bg-bg-card p-5">
-                <div className="text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                  Current Streak
-                </div>
-                <div className="mt-2 text-2xl font-bold text-text-primary">
-                  {playerDetail.streak} day{playerDetail.streak !== 1 ? "s" : ""}
-                </div>
-              </div>
+              <StatCard
+                label="Seed Days (30d / 90d / All)"
+                value={`${playerDetail.seedDays30} / ${playerDetail.seedDays90} / ${playerDetail.seedDaysAll}`}
+              />
+              <StatCard
+                label="Total Duration (30d)"
+                value={formatDuration(playerDetail.totalDuration30)}
+              />
+              <StatCard label="Avg Quality" value={formatQuality(playerDetail.avgQuality)} />
+              <StatCard
+                label="Current Streak"
+                value={`${playerDetail.streak} day${playerDetail.streak !== 1 ? "s" : ""}`}
+              />
             </div>
 
             {/* Charts */}
@@ -185,69 +350,18 @@ export function SeedingLeaderboard({ apiToken }: Props) {
 
             {/* Recent Sessions */}
             <div className="rounded-sm border border-border bg-bg-card p-5">
-              <div className="mb-3 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-[0.15em] text-text-muted">
                 Recent Sessions
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left">
-                      <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                        Date
-                      </th>
-                      <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                        Duration
-                      </th>
-                      <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                        Join Pop
-                      </th>
-                      <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                        Peak Pop
-                      </th>
-                      <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                        Threshold
-                      </th>
-                      <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                        Quality
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {playerDetail.recentSessions.map((s) => (
-                      <tr key={s.id} className="border-b border-border/50">
-                        <td className="px-3 py-2.5 text-text-muted">
-                          <span className="flex items-center gap-2">
-                            {formatDate(s.seedDate)}
-                            {s.status === "active" && (
-                              <span className="rounded-sm bg-success/15 px-1.5 py-0.5 text-[10px] font-medium text-success">
-                                LIVE
-                              </span>
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5">{s.status === "active" ? "In progress" : formatDuration(s.durationSeconds ?? 0)}</td>
-                        <td className="px-3 py-2.5">{s.joinPopulation}</td>
-                        <td className="px-3 py-2.5">{s.peakPopulation}</td>
-                        <td className="px-3 py-2.5">
-                          {s.thresholdReached ? (
-                            <span className="text-success">Yes</span>
-                          ) : (
-                            <span className="text-text-muted">No</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2.5">{formatQuality(s.qualityScore)}</td>
-                      </tr>
-                    ))}
-                    {playerDetail.recentSessions.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-3 py-6 text-center text-text-muted">
-                          No sessions recorded.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                data={playerDetail.recentSessions}
+                columns={sessionColumns}
+                getRowId={(s) => String(s.id)}
+                pageSize={10}
+                emptyState={
+                  <EmptyState variant="hint" message="No sessions recorded." />
+                }
+              />
             </div>
           </div>
         )}
@@ -255,235 +369,107 @@ export function SeedingLeaderboard({ apiToken }: Props) {
     );
   }
 
-  // Main list view
+  // ---------------------------------------------------------------------------
+  // List view
+  // ---------------------------------------------------------------------------
+
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="font-display text-3xl font-bold tracking-wide">Seeding</h1>
-      </div>
-
-      {/* Stats cards */}
+      {/* Stats overview */}
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
-        <div className="rounded-sm border border-border bg-bg-card p-5">
-          <div className="text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-            Total Seeders
-          </div>
-          <div className="mt-2 text-2xl font-bold text-text-primary">
-            {stats?.totalSeeders ?? "--"}
-          </div>
-        </div>
-        <div className="rounded-sm border border-border bg-bg-card p-5">
-          <div className="text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-            Total Seed Hours
-          </div>
-          <div className="mt-2 text-2xl font-bold text-text-primary">
-            {stats?.totalSeedHours != null ? `${Math.round(stats.totalSeedHours)}h` : "--"}
-          </div>
-        </div>
-        <div className="rounded-sm border border-border bg-bg-card p-5">
-          <div className="text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-            Avg Quality
-          </div>
-          <div className="mt-2 text-2xl font-bold text-text-primary">
-            {stats?.avgQuality != null ? `${Math.round(stats.avgQuality * 100)}%` : "--"}
-          </div>
-        </div>
-        <div className="rounded-sm border border-border bg-bg-card p-5">
-          <div className="text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-            Active (7d)
-          </div>
-          <div className="mt-2 text-2xl font-bold text-text-primary">
-            {stats?.activeSeeders7d ?? "--"}
-          </div>
-        </div>
-        <div className="rounded-sm border border-success/30 bg-success/5 p-5">
-          <div className="text-xs font-semibold tracking-[0.15em] uppercase text-success/70">
-            Seeding Now
-          </div>
-          <div className="mt-2 text-2xl font-bold text-success">
-            {stats?.currentlySeedingCount ?? "--"}
-          </div>
-        </div>
+        <StatCard label="Total Seeders" value={stats?.totalSeeders ?? "--"} />
+        <StatCard
+          label="Total Seed Hours"
+          value={
+            stats?.totalSeedHours != null ? `${Math.round(stats.totalSeedHours)}h` : "--"
+          }
+        />
+        <StatCard
+          label="Avg Quality"
+          value={
+            stats?.avgQuality != null ? `${Math.round(stats.avgQuality * 100)}%` : "--"
+          }
+        />
+        <StatCard label="Active (7d)" value={stats?.activeSeeders7d ?? "--"} />
+        <StatCard
+          label="Seeding Now"
+          value={
+            <span className="text-success">{stats?.currentlySeedingCount ?? "--"}</span>
+          }
+          className="border-success/30 bg-success/5"
+        />
       </div>
 
-      {/* Tab bar */}
-      <div className="mb-6 flex gap-1 rounded-sm border border-border bg-bg-tertiary/50 p-1">
-        <button
-          onClick={() => setTab("leaderboard")}
-          className={`flex-1 rounded-sm px-3 py-2 text-sm font-medium tracking-wide transition-colors ${
-            tab === "leaderboard"
-              ? "bg-bg-card text-accent"
-              : "text-text-muted hover:text-text-secondary"
-          }`}
-        >
-          Leaderboard
-        </button>
-        <button
-          onClick={() => setTab("search")}
-          className={`flex-1 rounded-sm px-3 py-2 text-sm font-medium tracking-wide transition-colors ${
-            tab === "search"
-              ? "bg-bg-card text-accent"
-              : "text-text-muted hover:text-text-secondary"
-          }`}
-        >
-          Search
-        </button>
-      </div>
+      {/* Tab bar — onClick-per-trigger is the proven happy-dom fallback for Base UI Tabs */}
+      <Tabs value={tab} className="mb-4">
+        <TabsList variant="line">
+          <TabsTrigger value="leaderboard" onClick={() => setTab("leaderboard")}>
+            Leaderboard
+          </TabsTrigger>
+          <TabsTrigger value="search" onClick={() => setTab("search")}>
+            Search
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-      {/* Leaderboard tab */}
+      {/* Leaderboard content */}
       {tab === "leaderboard" && (
         <div>
-          {/* Date range selector */}
-          <div className="mb-4 flex gap-2">
-            {[30, 60, 90].map((d) => (
-              <button
-                key={d}
-                onClick={() => setDays(d)}
-                className={`rounded-sm px-3 py-1.5 text-xs font-medium tracking-wide transition-colors ${
-                  days === d
-                    ? "bg-accent text-bg-primary"
-                    : "border border-border text-text-muted hover:text-text-secondary"
-                }`}
-              >
-                {d}d
-              </button>
-            ))}
+          <div className="mb-4">
+            <ToggleGroup
+              value={[String(days)]}
+              onValueChange={(next) => {
+                const d = next[0];
+                if (d) setDays(Number(d));
+              }}
+              size="sm"
+              variant="outline"
+            >
+              {[30, 60, 90].map((d) => (
+                <ToggleGroupItem key={d} value={String(d)}>
+                  {d}d
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
           </div>
 
-          {loading ? (
-            <div className="py-8 text-center text-text-secondary">Loading leaderboard...</div>
-          ) : (
-            <div className="overflow-x-auto rounded-sm border border-border bg-bg-card">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left">
-                    <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                      #
-                    </th>
-                    <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                      Player
-                    </th>
-                    <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                      Seed Days
-                    </th>
-                    <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                      Duration
-                    </th>
-                    <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                      Avg Quality
-                    </th>
-                    <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                      Last Seed
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leaderboard.map((entry, i) => (
-                    <tr
-                      key={entry.steamId}
-                      onClick={() => selectPlayer(entry.steamId)}
-                      className="cursor-pointer border-b border-border/50 transition-colors hover:bg-bg-tertiary"
-                    >
-                      <td className="px-3 py-2.5 text-text-muted">{i + 1}</td>
-                      <td className="px-3 py-2.5 font-medium text-text-primary">
-                        <span className="flex items-center gap-2">
-                          {entry.name}
-                          {entry.isActive && (
-                            <span className="inline-block h-2 w-2 rounded-full bg-success" title="Currently seeding" />
-                          )}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5">{entry.seedDays}</td>
-                      <td className="px-3 py-2.5">{formatDuration(entry.totalDuration)}</td>
-                      <td className="px-3 py-2.5">{formatQuality(entry.avgQuality)}</td>
-                      <td className="px-3 py-2.5 text-text-muted">{formatDate(entry.lastSeedDate)}</td>
-                    </tr>
-                  ))}
-                  {leaderboard.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-3 py-6 text-center text-text-muted">
-                        No seeding data found for this period.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <DataTable
+            data={leaderboard}
+            columns={sharedColumns}
+            getRowId={(e) => e.steamId}
+            onRowClick={(e) => selectPlayer(e.steamId)}
+            loading={loading}
+            emptyState={
+              <EmptyState message="No seeding data found for this period." />
+            }
+          />
         </div>
       )}
 
-      {/* Search tab */}
+      {/* Search content */}
       {tab === "search" && (
         <div>
-          <input
-            type="text"
-            placeholder="Search by player name..."
+          <SearchInput
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="mb-4 w-full rounded-sm border border-border bg-bg-card px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-accent focus:outline-none"
+            onChange={(v) => setSearchQuery(v)}
+            onSearch={handleSearch}
+            debounceMs={300}
+            placeholder="Search by player name..."
+            className="mb-4"
           />
 
-          {searchQuery.trim() && searchResults.length > 0 && (
-            <div className="overflow-x-auto rounded-sm border border-border bg-bg-card">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left">
-                    <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                      #
-                    </th>
-                    <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                      Player
-                    </th>
-                    <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                      Seed Days
-                    </th>
-                    <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                      Duration
-                    </th>
-                    <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                      Avg Quality
-                    </th>
-                    <th className="px-3 py-2 text-xs font-semibold tracking-[0.15em] uppercase text-text-muted">
-                      Last Seed
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {searchResults.map((entry, i) => (
-                    <tr
-                      key={entry.steamId}
-                      onClick={() => selectPlayer(entry.steamId)}
-                      className="cursor-pointer border-b border-border/50 transition-colors hover:bg-bg-tertiary"
-                    >
-                      <td className="px-3 py-2.5 text-text-muted">{i + 1}</td>
-                      <td className="px-3 py-2.5 font-medium text-text-primary">
-                        <span className="flex items-center gap-2">
-                          {entry.name}
-                          {entry.isActive && (
-                            <span className="inline-block h-2 w-2 rounded-full bg-success" title="Currently seeding" />
-                          )}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5">{entry.seedDays}</td>
-                      <td className="px-3 py-2.5">{formatDuration(entry.totalDuration)}</td>
-                      <td className="px-3 py-2.5">{formatQuality(entry.avgQuality)}</td>
-                      <td className="px-3 py-2.5 text-text-muted">{formatDate(entry.lastSeedDate)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {searchQuery.trim() && searchResults.length === 0 && (
-            <div className="py-8 text-center text-text-muted">No results found.</div>
-          )}
-
-          {!searchQuery.trim() && (
-            <div className="py-8 text-center text-text-muted">
+          {searchQuery.trim() ? (
+            <DataTable
+              data={searchResults}
+              columns={sharedColumns}
+              getRowId={(e) => e.steamId}
+              onRowClick={(e) => selectPlayer(e.steamId)}
+              emptyState={<EmptyState message="No results found." />}
+            />
+          ) : (
+            <p className="py-8 text-center text-sm text-text-muted">
               Type a player name to search.
-            </div>
+            </p>
           )}
         </div>
       )}

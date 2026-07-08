@@ -66,7 +66,7 @@ test("hasPendingChanges: different length is true", () => {
 });
 
 test("hasPendingChanges: same set (any order) is false", () => {
-  expect(hasPendingChanges(["a", "b"] as Permission[], ["b", "a"] as Permission[])).toBe(false);
+  expect(hasPendingChanges(["a", "b"] as unknown as Permission[], ["b", "a"] as unknown as Permission[])).toBe(false);
 });
 
 test("hasPendingChanges: same length different members is true", () => {

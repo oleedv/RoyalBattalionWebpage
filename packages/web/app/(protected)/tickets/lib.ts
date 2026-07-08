@@ -118,7 +118,7 @@ export const TIER_LABELS: Record<string, string> = {
   whitelist: "Whitelist",
 };
 
-/** Tier -> token text color (tokenized: blue-400 -> team-one, emerald-400 -> success). */
+/** Tier -> token text color (design-token mapped, both themes). */
 export const TIER_COLORS: Record<string, string> = {
   normal: "text-text-secondary",
   community_officer: "text-accent",

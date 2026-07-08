@@ -14,7 +14,6 @@ const PROTECTED_PATHS = [
   "/discord-bot",
   "/live-server",
   "/audit-logs",
-  "/lobby-monitor",
 ];
 
 export function middleware(request: NextRequest) {
@@ -56,6 +55,5 @@ export const config = {
     "/discord-bot/:path*",
     "/live-server/:path*",
     "/audit-logs/:path*",
-    "/lobby-monitor/:path*",
   ],
 };

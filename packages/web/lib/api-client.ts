@@ -1052,64 +1052,6 @@ export function createLobby(
   );
 }
 
-// Lobby Monitoring (proxied through API)
-export interface LobbyStats {
-  stats: {
-    callsThisMinute: number;
-    callsThisHour: number;
-    callsToday: number;
-    totalCalls: number;
-    totalErrors: number;
-    rateLimitHits: number;
-    errorRate: number;
-    avgLatencyMs: number;
-  };
-  recentCalls: {
-    timestamp: number;
-    endpoint: string;
-    callerIp: string;
-    serverRequested: string;
-    status: number;
-    latencyMs: number;
-    error?: string;
-  }[];
-}
-
-export interface LobbyHealth {
-  steam: { connected: boolean };
-  eos: { tokenValid: boolean; tokenTTLSeconds: number };
-  discovery: {
-    serverCount: number;
-    lastRefresh: string | null;
-  };
-  service: { uptime: number; buildId: string };
-}
-
-export function getLobbyStats(
-  token: string
-): Promise<ApiResponse<LobbyStats>> {
-  return request<LobbyStats>("/lobby/stats", {
-    headers: authHeaders(token),
-  });
-}
-
-export function getLobbyHealth(
-  token: string
-): Promise<ApiResponse<LobbyHealth>> {
-  return request<LobbyHealth>("/lobby/health", {
-    headers: authHeaders(token),
-  });
-}
-
-export function reconnectLobbyServiceSteam(
-  token: string
-): Promise<ApiResponse<void>> {
-  return request<void>("/lobby/steam/reconnect", {
-    method: "POST",
-    headers: authHeaders(token),
-  });
-}
-
 // Playtime
 export function getPlaytime(
   token: string,

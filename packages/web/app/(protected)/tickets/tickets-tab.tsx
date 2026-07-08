@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -57,6 +57,7 @@ export default function TicketsTab({
   const [ticketDetails, setTicketDetails] = useState<Record<number, Ticket>>({});
   const [legacyDetails, setLegacyDetails] = useState<Record<number, LegacyTicket>>({});
   const [nameMap, setNameMap] = useState<Record<string, string>>({});
+  const nameMapRef = useRef<Record<string, string>>({});
   const [loaded, setLoaded] = useState(false);
 
   const [search, setSearch] = useState("");
@@ -66,10 +67,16 @@ export default function TicketsTab({
   const resolveNames = useCallback(
     async (ids: string[]) => {
       if (!token) return;
-      const unknown = ids.filter((id) => id);
+      const unknown = ids.filter((id) => id && !nameMapRef.current[id]);
       if (unknown.length === 0) return;
       const res = await api.resolveDiscordNames(token, [...new Set(unknown)]);
-      if (res.success && res.data) setNameMap((prev) => ({ ...prev, ...res.data }));
+      if (res.success && res.data) {
+        setNameMap((prev) => {
+          const next = { ...prev, ...res.data };
+          nameMapRef.current = next;
+          return next;
+        });
+      }
     },
     [token, api],
   );

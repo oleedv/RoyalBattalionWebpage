@@ -4,7 +4,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { DownloadButton } from "@/components/download-button";
 
 test("clicking downloads a text/plain blob with the given filename", () => {
-  const createURL = mock(() => "blob:mock-url");
+  const createURL = mock((_blob: Blob) => "blob:mock-url");
   const revokeURL = mock(() => {});
   const origCreate = URL.createObjectURL;
   const origRevoke = URL.revokeObjectURL;
@@ -22,7 +22,7 @@ test("clicking downloads a text/plain blob with the given filename", () => {
     fireEvent.click(screen.getByRole("button", { name: /download/i }));
 
     expect(createURL).toHaveBeenCalledTimes(1);
-    const blob = createURL.mock.calls[0][0] as Blob;
+    const blob = createURL.mock.calls[0][0];
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toBe("text/plain");
     expect(captured).not.toBeNull();

@@ -1,6 +1,6 @@
 // packages/web/test/prospects-tab.test.tsx
 import { test, expect } from "bun:test";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { Prospect } from "shared";
 import ProspectsTab, { type ProspectsApi } from "@/app/(protected)/tickets/prospects-tab";
 
@@ -31,5 +31,5 @@ test("status filter narrows the list", async () => {
   await screen.findByText("Bravo");
   const selects = screen.getAllByRole("combobox");
   fireEvent.change(selects[0], { target: { value: "accepted" } });
-  expect(screen.queryByText("Bravo")).toBeNull();
+  await waitFor(() => expect(screen.queryByText("Bravo")).toBeNull());
 });

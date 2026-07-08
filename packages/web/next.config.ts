@@ -11,6 +11,12 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: rootPkg.version,
   },
+  async redirects() {
+    return [
+      // /seeding-tracker was the old route; the page moved to /seeding.
+      { source: "/seeding-tracker", destination: "/seeding", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

@@ -60,3 +60,15 @@ test("read-only (canManage=false): clicking a checkbox does not toggle and no Al
   const group = screen.getByText("Whitelist").closest('[data-group="whitelist"]')!;
   expect(within(group as HTMLElement).queryByText("All")).toBeNull();
 });
+
+test("clicking a permission's description toggles it (whole-card click)", () => {
+  const { onToggle } = setup({ canManage: true });
+  fireEvent.click(screen.getByText("Add, edit, and remove whitelist entries"));
+  expect(onToggle).toHaveBeenCalledWith("manage:whitelist");
+});
+
+test("clicking the checkbox toggles exactly once (no double-fire)", () => {
+  const { onToggle } = setup({ canManage: true });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Manage Whitelist" }));
+  expect(onToggle).toHaveBeenCalledTimes(1);
+});

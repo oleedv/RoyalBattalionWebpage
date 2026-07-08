@@ -25,14 +25,18 @@ function PermCard({
       className={`flex items-start gap-2.5 rounded-sm border px-3 py-2.5 text-xs transition-colors ${
         active ? "border-accent/30 bg-accent/10" : "border-border bg-bg-tertiary"
       } ${canManage ? "cursor-pointer hover:border-accent/40" : "cursor-default"}`}
+      onClick={() => { if (canManage) onToggle(entry.perm); }}
     >
-      <Checkbox
-        aria-label={entry.label}
-        checked={active}
-        onCheckedChange={() => onToggle(entry.perm)}
-        disabled={!canManage}
-        className="mt-0.5"
-      />
+      {/* Wrapper stops the checkbox click (and Base UI's internal hidden-input re-dispatch) from
+          also bubbling up to the card div's onClick, preventing a double-fire. */}
+      <span className="mt-0.5" onClick={(e) => e.stopPropagation()}>
+        <Checkbox
+          aria-label={entry.label}
+          checked={active}
+          onCheckedChange={() => onToggle(entry.perm)}
+          disabled={!canManage}
+        />
+      </span>
       <div className="min-w-0 flex-1">
         <div className={`font-medium tracking-wide ${active ? "text-accent" : "text-text-secondary"}`}>
           {entry.label}
@@ -104,8 +108,8 @@ export function PermissionMatrix({
             </div>
 
             {/* Sub-groups */}
-            {group.subGroups?.map((sg, i) => (
-              <div key={i} className="mx-2 mb-2 border-t border-border/40 pt-2">
+            {group.subGroups?.map((sg) => (
+              <div key={sg.label} className="mx-2 mb-2 border-t border-border/40 pt-2">
                 <div className="mb-1.5 flex items-center gap-2 px-1">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted/60">
                     {sg.label}

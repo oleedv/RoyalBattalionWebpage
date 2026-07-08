@@ -161,6 +161,7 @@ export function DataTable<TData>({
     getExpandedRowModel: getExpandedRowModel(),
     getPaginationRowModel: serverPagination ? undefined : getPaginationRowModel(),
     initialState: { pagination: { pageSize } },
+    autoResetPageIndex: false,
   });
 
   const selectedRows = table.getSelectedRowModel().rows.map((r) => r.original);

@@ -49,8 +49,8 @@ export function DiscordUsersView({
   const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserWithRolesAndComments | null>(null);
 
-  const canManage = permissions.includes("manage:members");
   const isDeveloper = permissions.includes("developer");
+  const canManage = isDeveloper || permissions.includes("manage:members");
 
   useEffect(() => {
     async function init() {

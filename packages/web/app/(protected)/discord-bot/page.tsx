@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { usePermissions } from "@/lib/permission-context";
 import { Skeleton, SkeletonCard, SkeletonStatGrid } from "@/components/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/page-header";
+import { AccessDeniedCard } from "@/components/access-denied-card";
 import OverviewTab from "./components/OverviewTab";
 import TicketsTab from "./components/TicketsTab";
 import ProspectsTab from "./components/ProspectsTab";
@@ -48,34 +51,32 @@ export default function DiscordBotPage() {
 
   const canView = hasPermission("view:discord-bot") || hasPermission("manage:discord-bot");
   if (!canView) {
-    return <div className="text-danger">Insufficient permissions.</div>;
+    return (
+      <div className="flex justify-center py-12">
+        <AccessDeniedCard message="You need Discord Bot access to view this page." />
+      </div>
+    );
   }
 
   const canManage = hasPermission("manage:discord-bot");
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="font-display text-3xl font-bold tracking-wide">
-          Discord Bot
-        </h1>
-      </div>
+      <PageHeader title="Discord Bot" />
 
-      <div className="mb-6 flex flex-wrap gap-1 rounded-sm border border-border bg-bg-tertiary/50 p-1">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex-1 rounded-sm px-3 py-2 text-sm font-medium tracking-wide transition-colors ${
-              tab === t.key
-                ? "bg-bg-card text-accent"
-                : "text-text-muted hover:text-text-secondary"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={tab} className="mb-6">
+        <TabsList variant="line">
+          {TABS.map((t) => (
+            <TabsTrigger
+              key={t.key}
+              value={t.key}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {tab === "overview" && <OverviewTab apiToken={apiToken} />}
       {tab === "tickets" && <TicketsTab apiToken={apiToken} />}

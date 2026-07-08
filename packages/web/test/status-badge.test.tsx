@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { render, screen } from "@testing-library/react";
-import { StatusBadge, matchResultVariant } from "@/components/status-badge";
+import { StatusBadge, matchResultVariant, ticketStatusVariant } from "@/components/status-badge";
 
 test("renders label and tone class", () => {
   render(<StatusBadge tone="success">Online</StatusBadge>);
@@ -60,4 +60,19 @@ test("whitelist variants render their tones and accept label overrides", () => {
   expect(screen.getByText("3d left").className).toContain("text-warning");
   expect(screen.getByText("Permanent").className).toContain("text-text-secondary");
   expect(container.querySelectorAll("[data-slot=pulse-dot]").length).toBe(0);
+});
+
+test("ticket-closing variant renders warning tone", () => {
+  render(<StatusBadge variant="ticket-closing" />);
+  const el = screen.getByText("Closing");
+  expect(el.className).toContain("text-warning");
+});
+
+test("ticketStatusVariant maps ticket and prospect statuses", () => {
+  expect(ticketStatusVariant("open")).toBe("ticket-open");
+  expect(ticketStatusVariant("closing")).toBe("ticket-closing");
+  expect(ticketStatusVariant("closed")).toBe("ticket-closed");
+  expect(ticketStatusVariant("accepted")).toBe("ticket-accepted");
+  expect(ticketStatusVariant("denied")).toBe("ticket-denied");
+  expect(ticketStatusVariant("whatever")).toBe("ticket-closed");
 });

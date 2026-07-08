@@ -23,6 +23,7 @@ const VARIANTS = {
   "ticket-accepted": { tone: "success", label: "Accepted" },
   "ticket-denied": { tone: "danger", label: "Denied" },
   "ticket-legacy": { tone: "warning", label: "Legacy" },
+  "ticket-closing": { tone: "warning", label: "Closing" },
   "wl-expired": { tone: "danger", label: "Expired" },
   "wl-expiring": { tone: "warning", label: "Expiring" },
   "wl-permanent": { tone: "neutral", label: "Permanent" },
@@ -78,4 +79,20 @@ export function matchResultVariant(result: string): StatusVariant {
   if (r === "win") return "match-win";
   if (r === "loss") return "match-loss";
   return "match-draw";
+}
+
+/** Map a ticket/prospect status string to its StatusBadge variant. */
+export function ticketStatusVariant(status: string): StatusVariant {
+  switch (status) {
+    case "open":
+      return "ticket-open";
+    case "closing":
+      return "ticket-closing";
+    case "accepted":
+      return "ticket-accepted";
+    case "denied":
+      return "ticket-denied";
+    default:
+      return "ticket-closed";
+  }
 }

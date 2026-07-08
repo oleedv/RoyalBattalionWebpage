@@ -10,30 +10,16 @@ import {
   SkeletonRegion,
   SkeletonStatCard,
 } from "@/components/skeleton";
+import { StatCard } from "@/components/stat-card";
+import { StatusBadge } from "@/components/status-badge";
+import { EmptyState } from "@/components/empty-state";
 import type { DiscordBotOverview, SeedingSession, BotStatus } from "shared";
 
-function StatCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number;
-  color?: string;
-}) {
-  return (
-    <div className="facet-border rounded-sm bg-bg-card p-4">
-      <div className="text-xs font-medium tracking-[0.15em] text-text-muted uppercase">
-        {label}
-      </div>
-      <div
-        className={`mt-1 font-display text-2xl font-bold ${color || "text-text-primary"}`}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
+export type OverviewApi = {
+  getDiscordBotOverview: typeof getDiscordBotOverview;
+};
+
+const defaultApi: OverviewApi = { getDiscordBotOverview };
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
@@ -64,28 +50,30 @@ function ConnectionDot({
 }
 
 function BotStatusBanner({ status }: { status: BotStatus }) {
-  const heartbeatAge = status.lastHeartbeat ? Date.now() - new Date(status.lastHeartbeat).getTime() : Infinity;
+  const heartbeatAge = status.lastHeartbeat
+    ? Date.now() - new Date(status.lastHeartbeat).getTime()
+    : Infinity;
   const isStale = heartbeatAge > 3 * 60 * 1000;
   const effectiveStatus = isStale ? "offline" : status.status;
 
-  const statusColors: Record<string, string> = {
-    online: "bg-success/15 text-success border-success/30",
-    offline: "bg-danger/15 text-danger border-danger/30",
-    starting: "bg-accent/15 text-accent border-accent/30",
-  };
+  function statusBadge() {
+    if (effectiveStatus === "online") {
+      return <StatusBadge variant="server-online">Online</StatusBadge>;
+    }
+    if (effectiveStatus === "starting") {
+      return <StatusBadge tone="accent">Starting</StatusBadge>;
+    }
+    return (
+      <StatusBadge variant="server-offline">
+        {isStale ? "Offline (stale)" : "Offline"}
+      </StatusBadge>
+    );
+  }
 
   return (
     <div className="facet-border rounded-sm bg-bg-card p-4">
       <div className="flex flex-wrap items-center gap-4">
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold uppercase ${statusColors[effectiveStatus] || statusColors.offline}`}
-        >
-          <span
-            className={`h-2 w-2 rounded-full ${effectiveStatus === "online" ? "bg-success" : effectiveStatus === "starting" ? "bg-accent" : "bg-danger"}`}
-          />
-          {effectiveStatus}
-          {isStale && effectiveStatus === "offline" && " (stale)"}
-        </span>
+        {statusBadge()}
 
         <div className="flex items-center gap-4 text-xs text-text-secondary">
           <span>Uptime: {formatUptime(status.uptimeSeconds)}</span>
@@ -103,49 +91,49 @@ function BotStatusBanner({ status }: { status: BotStatus }) {
   );
 }
 
-function SessionBadge({ status }: { status: SeedingSession["status"] }) {
-  const colors: Record<string, string> = {
-    active: "bg-success/15 text-success border-success/30",
-    completed: "bg-accent/15 text-accent border-accent/30",
-    reset: "bg-text-muted/15 text-text-secondary border-text-muted/30",
-    expired: "bg-danger/15 text-danger border-danger/30",
-  };
-  return (
-    <span
-      className={`rounded-sm border px-2 py-0.5 text-xs font-medium ${colors[status] || colors.reset}`}
-    >
-      {status}
-    </span>
-  );
-}
+const SESSION_TONE: Record<
+  SeedingSession["status"],
+  "success" | "accent" | "neutral" | "danger"
+> = {
+  active: "success",
+  completed: "accent",
+  reset: "neutral",
+  expired: "danger",
+};
 
-export default function OverviewTab({ apiToken }: { apiToken: string }) {
+export default function OverviewTab({
+  apiToken,
+  api = defaultApi,
+}: {
+  apiToken: string;
+  api?: OverviewApi;
+}) {
   const [data, setData] = useState<DiscordBotOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getDiscordBotOverview(apiToken).then((res) => {
+    api.getDiscordBotOverview(apiToken).then((res) => {
       if (res.success && res.data) setData(res.data);
       else setError(res.error || "Failed to load overview");
       setLoading(false);
     });
-  }, [apiToken]);
+  }, [apiToken, api]);
 
   const refreshOverview = useCallback(async () => {
     try {
-      const res = await getDiscordBotOverview(apiToken);
+      const res = await api.getDiscordBotOverview(apiToken);
       if (res.success && res.data) setData(res.data);
     } catch {
       /* silent */
     }
-  }, [apiToken]);
+  }, [apiToken, api]);
 
   useAutoRefresh(refreshOverview, 20_000, !!apiToken);
 
   if (loading && !data)
     return (
-      <SkeletonRegion className="space-y-8" label="Loading overview…">
+      <SkeletonRegion className="space-y-8" label="Loading overview...">
         {/* Bot status banner */}
         <SkeletonCard pad="p-4">
           <div className="flex flex-wrap items-center gap-4">
@@ -185,6 +173,7 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
         </div>
       </SkeletonRegion>
     );
+
   if (error) return <div className="text-danger">{error}</div>;
   if (!data) return null;
 
@@ -203,19 +192,21 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
           <StatCard
             label="Community Officer"
             value={data.tickets.openByTier.community_officer}
-            color="text-accent"
+            accent
           />
           <StatCard
             label="Admin Officer"
             value={data.tickets.openByTier.admin_officer}
-            color="text-danger"
           />
         </div>
-        {data.tickets.recentlyClosed.length > 0 && (
-          <div className="mt-4">
-            <h3 className="mb-2 text-xs font-medium tracking-[0.1em] text-text-muted uppercase">
-              Recently Closed
-            </h3>
+
+        <div className="mt-4">
+          <h3 className="mb-2 text-xs font-medium tracking-[0.1em] text-text-muted uppercase">
+            Recently Closed
+          </h3>
+          {data.tickets.recentlyClosed.length === 0 ? (
+            <EmptyState variant="hint" message="No recently closed tickets" />
+          ) : (
             <div className="facet-border overflow-hidden rounded-sm bg-bg-card">
               <table className="w-full text-sm">
                 <thead>
@@ -241,16 +232,24 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
                       className="border-b border-border/30 last:border-0"
                     >
                       <td className="px-4 py-2 text-text-primary">#{t.id}</td>
-                      <td className="px-4 py-2 capitalize text-text-secondary">{t.tier.replace(/_/g, " ")}</td>
-                      <td className="max-w-xs truncate px-4 py-2 text-text-secondary">{t.firstMessage || "-"}</td>
-                      <td className="px-4 py-2 text-text-muted">{t.closedAt ? new Date(t.closedAt).toLocaleDateString() : "-"}</td>
+                      <td className="px-4 py-2 capitalize text-text-secondary">
+                        {t.tier.replace(/_/g, " ")}
+                      </td>
+                      <td className="max-w-xs truncate px-4 py-2 text-text-secondary">
+                        {t.firstMessage || "-"}
+                      </td>
+                      <td className="px-4 py-2 text-text-muted">
+                        {t.closedAt
+                          ? new Date(t.closedAt).toLocaleDateString()
+                          : "-"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </section>
 
       {/* Prospects */}
@@ -259,27 +258,18 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
           Prospect Pipeline
         </h2>
         <div className="grid gap-3 sm:grid-cols-3">
-          <StatCard
-            label="Open"
-            value={data.prospects.open}
-            color="text-accent"
-          />
-          <StatCard
-            label="Accepted"
-            value={data.prospects.accepted}
-            color="text-success"
-          />
-          <StatCard
-            label="Denied"
-            value={data.prospects.denied}
-            color="text-danger"
-          />
+          <StatCard label="Open" value={data.prospects.open} accent />
+          <StatCard label="Accepted" value={data.prospects.accepted} />
+          <StatCard label="Denied" value={data.prospects.denied} />
         </div>
-        {data.prospects.recentActivity.length > 0 && (
-          <div className="mt-4">
-            <h3 className="mb-2 text-xs font-medium tracking-[0.1em] text-text-muted uppercase">
-              Recent Applications
-            </h3>
+
+        <div className="mt-4">
+          <h3 className="mb-2 text-xs font-medium tracking-[0.1em] text-text-muted uppercase">
+            Recent Applications
+          </h3>
+          {data.prospects.recentActivity.length === 0 ? (
+            <EmptyState variant="hint" message="No recent applications" />
+          ) : (
             <div className="facet-border overflow-hidden rounded-sm bg-bg-card">
               <table className="w-full text-sm">
                 <thead>
@@ -296,37 +286,39 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.prospects.recentActivity.map((p) => {
-                    const statusColors: Record<string, string> = {
-                      open: "text-accent",
-                      accepted: "text-success",
-                      denied: "text-danger",
-                      closed: "text-text-muted",
-                    };
-                    return (
-                      <tr
-                        key={p.id}
-                        className="border-b border-border/30 last:border-0"
-                      >
-                        <td className="px-4 py-2 text-text-primary">
-                          {p.alias}
-                        </td>
-                        <td
-                          className={`px-4 py-2 capitalize ${statusColors[p.status] || "text-text-secondary"}`}
+                  {data.prospects.recentActivity.map((p) => (
+                    <tr
+                      key={p.id}
+                      className="border-b border-border/30 last:border-0"
+                    >
+                      <td className="px-4 py-2 text-text-primary">
+                        {p.alias}
+                      </td>
+                      <td className="px-4 py-2">
+                        <StatusBadge
+                          tone={
+                            p.status === "accepted"
+                              ? "success"
+                              : p.status === "denied"
+                                ? "danger"
+                                : p.status === "open"
+                                  ? "accent"
+                                  : "neutral"
+                          }
                         >
                           {p.status}
-                        </td>
-                        <td className="px-4 py-2 text-text-muted">
-                          {new Date(p.createdAt).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                        </StatusBadge>
+                      </td>
+                      <td className="px-4 py-2 text-text-muted">
+                        {new Date(p.createdAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </section>
 
       {/* Seeding */}
@@ -338,24 +330,23 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
           <div className="flex items-center gap-3">
             {data.seeding.config && (
               <>
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-medium ${
-                    data.seeding.config.enabled
-                      ? "border-success/30 bg-success/15 text-success"
-                      : "border-text-muted/30 bg-text-muted/15 text-text-secondary"
-                  }`}
+                <StatusBadge
+                  tone={data.seeding.config.enabled ? "success" : "neutral"}
                 >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${data.seeding.config.enabled ? "bg-success" : "bg-text-muted"}`}
-                  />
                   {data.seeding.config.enabled ? "Enabled" : "Disabled"}
-                </span>
+                </StatusBadge>
                 <span className="text-xs text-text-muted">
                   Threshold: {data.seeding.config.seedThreshold} players
                 </span>
               </>
             )}
-            {data.seeding.activeSession && <SessionBadge status="active" />}
+            {data.seeding.activeSession && (
+              <StatusBadge
+                tone={SESSION_TONE[data.seeding.activeSession.status]}
+              >
+                {data.seeding.activeSession.status}
+              </StatusBadge>
+            )}
           </div>
           <Link
             href="/seeding"

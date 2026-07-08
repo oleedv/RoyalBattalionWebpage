@@ -263,9 +263,10 @@ test("renders group labels and permission entry labels", () => {
   expect(screen.getByText("Whitelist Tier")).toBeDefined();
 });
 
-test("clicking a permission card calls onToggle with its perm", () => {
+test("clicking a permission checkbox calls onToggle with its perm", () => {
   const { onToggle } = setup();
-  fireEvent.click(screen.getByText("Manage Whitelist"));
+  // Click the checkbox by its aria-label (the proven happy-dom pattern from data-table-v2).
+  fireEvent.click(screen.getByRole("checkbox", { name: "Manage Whitelist" }));
   expect(onToggle).toHaveBeenCalledWith("manage:whitelist");
 });
 
@@ -285,9 +286,9 @@ test("group None button (all selected) calls onSelectGroup with select=false", (
   expect(onSelectGroup.mock.calls[0][1]).toBe(false);
 });
 
-test("read-only (canManage=false): clicking a card does not toggle and no All/None button", () => {
+test("read-only (canManage=false): clicking a checkbox does not toggle and no All/None button", () => {
   const { onToggle } = setup({ canManage: false });
-  fireEvent.click(screen.getByText("Manage Whitelist"));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Manage Whitelist" }));
   expect(onToggle).not.toHaveBeenCalled();
   const group = screen.getByText("Whitelist").closest('[data-group="whitelist"]')!;
   expect(within(group as HTMLElement).queryByText("All")).toBeNull();
@@ -333,6 +334,7 @@ function PermCard({
       } ${canManage ? "cursor-pointer hover:border-accent/40" : "cursor-default"}`}
     >
       <Checkbox
+        aria-label={entry.label}
         checked={active}
         onCheckedChange={() => onToggle(entry.perm)}
         disabled={!canManage}
@@ -438,7 +440,10 @@ export function PermissionMatrix({
 }
 ```
 
-Note: the `<label>`-wraps-`Checkbox` pattern forwards card clicks to the Checkbox; when `disabled`, `onCheckedChange` does not fire (satisfies the read-only test). Keep the group `All/None` as a compact plain button (micro-control) — the `<Button>` composite's forced uppercase is undesired here.
+Notes:
+- Each `Checkbox` gets `aria-label={entry.label}` — this is both an a11y name and the test's click target (`getByRole("checkbox", { name: entry.label })`), mirroring the happy-dom-proven pattern in `data-table-v2.tsx` (Base UI Checkbox DOES respond to synthetic `fireEvent.click` when clicked by role, unlike Switch). Entry labels are unique across the whole matrix, so the names are unambiguous.
+- The `<label>`-wraps-`Checkbox` gives real-browser whole-card click; when `disabled`, `onCheckedChange` does not fire (satisfies the read-only test).
+- Keep the group `All/None` as a compact plain button (micro-control) — the `<Button>` composite's forced uppercase is undesired here.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -720,10 +725,15 @@ test("expanded shows the matrix and the two switches", () => {
   expect(screen.getByRole("switch", { name: "Member role" })).toBeDefined();
 });
 
-test("clicking the whitelist switch calls onToggleWl", () => {
+test("toggling the whitelist switch (keyboard) calls onToggleWl", () => {
   const props = baseProps({ isExpanded: true });
   render(<RoleCard {...(props as any)} />);
-  fireEvent.click(screen.getByRole("switch", { name: "Grants whitelist" }));
+  // Base UI Switch renders span[role=switch]; happy-dom synthetic clicks don't reach
+  // its pointer handlers, so toggle via the keyboard path (Space).
+  const sw = screen.getByRole("switch", { name: "Grants whitelist" });
+  sw.focus();
+  fireEvent.keyDown(sw, { key: " " });
+  fireEvent.keyUp(sw, { key: " " });
   expect(props.onToggleWl).toHaveBeenCalled();
 });
 
@@ -771,21 +781,23 @@ Implement per the behavior spec above. Carry the header/meta JSX and class strin
 - the inline delete Confirm/Cancel (current 770–792) with an **Unregister** `<Button variant="ghost" size="sm">` trigger that calls `onDeleteOpenChange(true)` (wrap the header-right cluster in `onClick={(e) => e.stopPropagation()}` exactly as current line 769 does), plus the controlled `<AlertDialog>` block;
 - the permission-groups `.map(renderGroup)` (current 903–905) with `<PermissionMatrix .../>`.
 
-Switch usage example:
+Switch usage example (use a `<div>` wrapper, NOT `<label>` — matches the established Switch pattern so the `aria-label` stays the sole accessible name; `onCheckedChange` ignores its args and just calls the handler):
 
 ```tsx
-<label className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide">
+<div className="inline-flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide">
   <Switch
     aria-label="Grants whitelist"
     checked={role.grantsWhitelist}
-    onCheckedChange={onToggleWl}
+    onCheckedChange={() => onToggleWl()}
     disabled={togglingWl}
   />
   <span className={role.grantsWhitelist ? "text-success" : "text-text-muted"}>
     {role.grantsWhitelist ? "Grants Whitelist" : "No Whitelist"}
   </span>
-</label>
+</div>
 ```
+
+The member Switch mirrors this with `aria-label="Member role"`, `checked={role.isMemberRole}`, `onCheckedChange={() => onToggleMember()}`, `disabled={togglingMember}`, and text `Member Role`/`Not Member` colored `text-accent`/`text-text-muted`.
 
 AlertDialog block:
 

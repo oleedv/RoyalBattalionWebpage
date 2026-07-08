@@ -344,15 +344,10 @@ export function MembersView({
       {
         id: "steamId",
         header: "Steam ID",
-        accessorFn: (u) => u.steamId ?? "",
-        sortingFn: (a, b) => {
-          const aId = a.original.steamId;
-          const bId = b.original.steamId;
-          if (!aId && !bId) return 0;
-          if (!aId) return 1;
-          if (!bId) return -1;
-          return aId.localeCompare(bId);
-        },
+        accessorFn: (u) => u.steamId ?? undefined,
+        sortUndefined: "last",
+        sortingFn: (a, b) =>
+          (a.original.steamId ?? "").localeCompare(b.original.steamId ?? ""),
         cell: ({ row }) =>
           row.original.steamId ? (
             <CopyableId value={row.original.steamId} />
@@ -397,15 +392,10 @@ export function MembersView({
       {
         id: "country",
         header: "Country",
-        accessorFn: (u) => u.country ?? "",
-        sortingFn: (a, b) => {
-          const ac = a.original.country;
-          const bc = b.original.country;
-          if (!ac && !bc) return 0;
-          if (!ac) return 1;
-          if (!bc) return -1;
-          return ac.localeCompare(bc);
-        },
+        accessorFn: (u) => u.country ?? undefined,
+        sortUndefined: "last",
+        sortingFn: (a, b) =>
+          (a.original.country ?? "").localeCompare(b.original.country ?? ""),
         cell: ({ row }) =>
           row.original.country ? (
             <span className="text-text-secondary">{row.original.country}</span>

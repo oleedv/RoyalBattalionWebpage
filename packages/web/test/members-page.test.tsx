@@ -93,8 +93,8 @@ test("typing in search narrows the list", async () => {
   const searchInput = screen.getByPlaceholderText(/search/i);
   fireEvent.change(searchInput, { target: { value: "alice" } });
 
+  await waitFor(() => expect(screen.queryByText("Bob")).toBeNull());
   expect(screen.getByText("Alice")).toBeDefined();
-  expect(screen.queryByText("Bob")).toBeNull();
 });
 
 test("clicking a row opens the member detail dialog", async () => {

@@ -373,6 +373,7 @@ export function AuditLogsView({
         getRowId={(l) => l.id}
         serverPagination={{ page, totalPages, onPageChange: setPage }}
         loading={loading && logs.length === 0}
+        rowClassName={() => "group"}
         renderDetail={(log) => (
           <AuditDetail {...toAuditDetail(log.detail)} changes={[]} />
         )}

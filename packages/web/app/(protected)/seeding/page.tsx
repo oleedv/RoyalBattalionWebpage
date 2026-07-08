@@ -1,6 +1,8 @@
 "use client";
 
 import { usePermissions } from "@/lib/permission-context";
+import { PageHeader } from "@/components/page-header";
+import { AccessDeniedCard } from "@/components/access-denied-card";
 import { SeedingLeaderboard } from "./components/SeedingLeaderboard";
 import { SeedingLiveStatus } from "./components/SeedingLiveStatus";
 import { SeedingAdmin } from "./components/SeedingAdmin";
@@ -8,20 +10,22 @@ import { SeedingAdmin } from "./components/SeedingAdmin";
 export default function SeedingPage() {
   const { apiToken, hasPermission } = usePermissions();
 
-  if (!apiToken) return <div className="text-text-secondary">Loading...</div>;
+  if (!apiToken) return null;
 
   const canView = hasPermission("view:seeding-tracker");
   const canManage = hasPermission("manage:discord-bot");
 
   if (!canView && !canManage) {
-    return <div className="text-danger">Insufficient permissions.</div>;
+    return (
+      <div className="flex justify-center py-12">
+        <AccessDeniedCard message="You need seeding access to view this page." />
+      </div>
+    );
   }
 
   return (
     <div className="space-y-10">
-      <div>
-        <h1 className="font-display text-3xl font-bold tracking-wide">Seeding</h1>
-      </div>
+      <PageHeader title="Seeding" />
 
       {canView && (
         <section className="space-y-6">

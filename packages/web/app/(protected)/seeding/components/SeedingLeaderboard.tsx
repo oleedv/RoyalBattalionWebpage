@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   getSeedTrackerLeaderboard,
@@ -92,13 +92,6 @@ export function SeedingLeaderboard({
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // Clear search results when leaving search tab (matches original behaviour)
-  useEffect(() => {
-    if (tab !== "search") {
-      setSearchResults([]);
-    }
-  }, [tab]);
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     const [lbRes, statsRes] = await Promise.all([
@@ -137,6 +130,22 @@ export function SeedingLeaderboard({
     },
     [apiToken, api],
   );
+
+  // Keep a ref so the tab-change effect can read the current query without
+  // including it in deps (avoids re-running the effect on every keystroke).
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
+
+  // Clear search results when leaving search tab; re-run search when returning
+  // with an existing query (restores original behaviour where tab re-entry
+  // re-triggered the debounced fetch).
+  useEffect(() => {
+    if (tab !== "search") {
+      setSearchResults([]);
+    } else if (searchQueryRef.current.trim()) {
+      handleSearch(searchQueryRef.current);
+    }
+  }, [tab, handleSearch]);
 
   // ---------------------------------------------------------------------------
   // Shared 6-column ColumnDef (leaderboard + search tables)

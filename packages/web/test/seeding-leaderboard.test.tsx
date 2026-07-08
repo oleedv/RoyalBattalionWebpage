@@ -169,3 +169,35 @@ test("(5) empty leaderboard renders EmptyState", async () => {
     await screen.findByText("No seeding data found for this period."),
   ).toBeDefined();
 });
+
+// ---------------------------------------------------------------------------
+// 6. Search results repopulate when returning to the search tab
+// ---------------------------------------------------------------------------
+
+test("(6) search results repopulate when returning to search tab without retyping", async () => {
+  const api = makeApi();
+  render(<SeedingLeaderboard apiToken="t" api={api} />);
+  await screen.findByText("PlayerAlpha");
+
+  // Switch to Search tab
+  fireEvent.click(screen.getByRole("tab", { name: /search/i }));
+
+  // Type a query so results appear
+  const searchInput = await screen.findByPlaceholderText(/search/i);
+  fireEvent.change(searchInput, { target: { value: "Alpha" } });
+
+  // Wait for debounce to fire and results to render
+  await waitFor(() => expect(api.searchSeedTracker).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText("PlayerAlpha")).toBeDefined();
+
+  // Switch away to Leaderboard tab (this clears searchResults)
+  fireEvent.click(screen.getByRole("tab", { name: /leaderboard/i }));
+
+  // Switch back to Search tab — should re-fetch without retyping
+  fireEvent.click(screen.getByRole("tab", { name: /search/i }));
+
+  // searchSeedTracker must be called a second time (re-entry re-fetch)
+  await waitFor(() => expect(api.searchSeedTracker).toHaveBeenCalledTimes(2));
+  // Results must be visible again without any additional typing
+  expect(await screen.findByText("PlayerAlpha")).toBeDefined();
+});

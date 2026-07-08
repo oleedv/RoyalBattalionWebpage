@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import type { UserProfile, LinkedWhitelistEntry, LiveStatus } from "shared";
 import { formatDate } from "@/lib/format";
 import { usePermissions } from "@/lib/permission-context";
 import { Skeleton, SkeletonRegion } from "@/components/skeleton";
+import { CopyableId } from "@/components/copyable-id";
+import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 
 function InfoField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -34,25 +36,15 @@ function StatusBadges({ profile }: { profile: UserProfile }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       {profile.liveStatus?.online && (
-        <span className="rounded-sm bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">
+        <StatusBadge tone="success" pulse>
           Online now
-        </span>
+        </StatusBadge>
       )}
-      {u?.disabled && (
-        <span className="rounded-sm bg-danger/10 px-1.5 py-0.5 text-[10px] font-medium text-danger">
-          Disabled
-        </span>
-      )}
+      {u?.disabled && <StatusBadge tone="danger">Disabled</StatusBadge>}
       {u && !u.hasLoggedIn && !u.disabled && (
-        <span className="rounded-sm bg-text-muted/10 px-1.5 py-0.5 text-[10px] text-text-muted">
-          Discord only
-        </span>
+        <StatusBadge tone="neutral">Discord only</StatusBadge>
       )}
-      {!u && (
-        <span className="rounded-sm bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning">
-          Not linked to a Discord user
-        </span>
-      )}
+      {!u && <StatusBadge tone="warning">Not linked to a Discord user</StatusBadge>}
     </div>
   );
 }
@@ -83,28 +75,19 @@ function LiveStatusSection({
       {actions && (
         <div className="col-span-2 flex gap-2 sm:col-span-4">
           {actions.onWarn && (
-            <button
-              onClick={actions.onWarn}
-              className="rounded-sm border border-warning/40 bg-warning/10 px-3 py-1 text-xs text-warning transition-colors hover:bg-warning/20"
-            >
+            <Button variant="outline" size="sm" onClick={actions.onWarn}>
               Warn
-            </button>
+            </Button>
           )}
           {actions.onSwitchTeam && (
-            <button
-              onClick={actions.onSwitchTeam}
-              className="rounded-sm border border-border px-3 py-1 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary"
-            >
+            <Button variant="outline" size="sm" onClick={actions.onSwitchTeam}>
               Switch team
-            </button>
+            </Button>
           )}
           {actions.onKick && (
-            <button
-              onClick={actions.onKick}
-              className="rounded-sm border border-danger/40 bg-danger/10 px-3 py-1 text-xs text-danger transition-colors hover:bg-danger/20"
-            >
+            <Button variant="destructive" size="sm" onClick={actions.onKick}>
               Kick
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -177,6 +160,7 @@ export function UserProfileContent({
       {/* Header */}
       <div className="flex items-start gap-4 border-b border-border/40 px-6 py-5">
         <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           {u?.avatarUrl ? (
             <img src={u.avatarUrl} alt="" className="h-12 w-12 rounded-full" />
           ) : (
@@ -227,14 +211,14 @@ export function UserProfileContent({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <InfoField label="Steam ID">
             {profile.steamId ? (
-              <code className="text-accent">{profile.steamId}</code>
+              <CopyableId value={profile.steamId} />
             ) : (
               <span className="text-text-muted">--</span>
             )}
           </InfoField>
           <InfoField label="EOS ID">
             {profile.eosId ? (
-              <code className="text-xs text-accent">{profile.eosId}</code>
+              <CopyableId value={profile.eosId} />
             ) : (
               <span className="text-text-muted">--</span>
             )}
@@ -242,7 +226,7 @@ export function UserProfileContent({
           {u && (
             <>
               <InfoField label="Discord ID">
-                <code className="text-xs text-text-secondary">{u.discordId}</code>
+                <CopyableId value={u.discordId} />
               </InfoField>
               <InfoField label="Country">
                 <span className={u.country ? "text-text-secondary" : "text-text-muted"}>
@@ -267,12 +251,9 @@ export function UserProfileContent({
         </div>
         {!u && profile.steamId && canManage && onLinkToUser && (
           <div className="mt-4">
-            <button
-              onClick={onLinkToUser}
-              className="rounded-sm border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs text-accent transition-colors hover:bg-accent/20"
-            >
+            <Button variant="outline" size="sm" onClick={onLinkToUser}>
               Link this Steam ID to a user…
-            </button>
+            </Button>
           </div>
         )}
       </Section>

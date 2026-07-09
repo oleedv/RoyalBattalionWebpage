@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import Link from "next/link";
+import { ChevronDown, ExternalLink, User, Users } from "lucide-react";
 import {
   getProspects,
   getProspect,
@@ -13,25 +15,26 @@ import {
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { Skeleton, SkeletonList } from "@/components/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SearchInput } from "@/components/search-input-v2";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { DownloadButton } from "@/components/download-button";
+import { StatusBadge, ticketStatusVariant } from "@/components/status-badge";
+import { CopyableId } from "@/components/copyable-id";
+import { cn } from "@/lib/utils";
 import type { Prospect } from "shared";
 import type { MentorGroup } from "shared";
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleString();
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    open: "bg-accent/15 text-accent border-accent/30",
-    closed: "bg-text-muted/15 text-text-secondary border-text-muted/30",
-    accepted: "bg-success/15 text-success border-success/30",
-    denied: "bg-danger/15 text-danger border-danger/30",
-  };
-  return (
-    <span className={`rounded-sm border px-2 py-0.5 text-xs font-medium ${colors[status] || colors.closed}`}>
-      {status}
-    </span>
-  );
 }
 
 function extractUrls(arr: unknown[]): string[] {
@@ -129,7 +132,37 @@ function exportProspectText(prospect: Prospect) {
   return lines.join("\n");
 }
 
-export default function ProspectsTab({ apiToken, canManage }: { apiToken: string; canManage: boolean }) {
+export type ProspectsApi = {
+  getProspects: typeof getProspects;
+  getProspect: typeof getProspect;
+  resolveDiscordNames: typeof resolveDiscordNames;
+  pauseProspect: typeof pauseProspect;
+  unpauseProspect: typeof unpauseProspect;
+  extendProspect: typeof extendProspect;
+  getMentorGroups: typeof getMentorGroups;
+  reassignMentor: typeof reassignMentor;
+};
+
+const defaultApi: ProspectsApi = {
+  getProspects,
+  getProspect,
+  resolveDiscordNames,
+  pauseProspect,
+  unpauseProspect,
+  extendProspect,
+  getMentorGroups,
+  reassignMentor,
+};
+
+export default function ProspectsTab({
+  apiToken,
+  canManage,
+  api = defaultApi,
+}: {
+  apiToken: string;
+  canManage: boolean;
+  api?: ProspectsApi;
+}) {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +171,7 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [details, setDetails] = useState<Record<number, Prospect>>({});
   const [nameMap, setNameMap] = useState<Record<string, string>>({});
+  const nameMapRef = useRef<Record<string, string>>({});
   const [actionLoading, setActionLoading] = useState(false);
   const [extendDays, setExtendDays] = useState<Record<number, number>>({});
   const [viewMode, setViewMode] = useState<"list" | "mentor">("list");
@@ -146,12 +180,21 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
   const [reassigning, setReassigning] = useState<number | null>(null);
   const [selectedMentor, setSelectedMentor] = useState<string>("");
 
-  async function resolveNames(ids: string[]) {
-    const unknown = ids.filter((id) => id && !nameMap[id]);
-    if (unknown.length === 0) return;
-    const res = await resolveDiscordNames(apiToken, [...new Set(unknown)]);
-    if (res.success && res.data) setNameMap((prev) => ({ ...prev, ...res.data }));
-  }
+  const resolveNames = useCallback(
+    async (ids: string[]) => {
+      const unknown = ids.filter((id) => id && !nameMapRef.current[id]);
+      if (unknown.length === 0) return;
+      const res = await api.resolveDiscordNames(apiToken, [...new Set(unknown)]);
+      if (res.success && res.data && Object.keys(res.data).length > 0) {
+        setNameMap((prev) => {
+          const next = { ...prev, ...res.data };
+          nameMapRef.current = next;
+          return next;
+        });
+      }
+    },
+    [apiToken, api],
+  );
 
   function displayName(id: string | null): string {
     if (!id) return "--";
@@ -159,7 +202,7 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
   }
 
   useEffect(() => {
-    getProspects(apiToken).then((res) => {
+    api.getProspects(apiToken).then((res) => {
       if (res.success && res.data) {
         setProspects(res.data);
         const ids = res.data.flatMap((p) => [p.userId, p.closedBy, p.mentorId].filter(Boolean) as string[]);
@@ -167,29 +210,29 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
       } else setError(res.error || "Failed to load prospects");
       setLoading(false);
     });
-  }, [apiToken]);
+  }, [apiToken, api, resolveNames]);
 
   const refreshProspects = useCallback(async () => {
     try {
-      const res = await getProspects(apiToken);
+      const res = await api.getProspects(apiToken);
       if (res.success && res.data) {
         setProspects(res.data);
         const ids = res.data.flatMap((p) => [p.userId, p.closedBy, p.mentorId].filter(Boolean) as string[]);
         resolveNames(ids);
       }
     } catch { /* silent */ }
-  }, [apiToken]);
+  }, [apiToken, api, resolveNames]);
 
   const refreshMentorGroups = useCallback(async () => {
     try {
-      const res = await getMentorGroups(apiToken);
+      const res = await api.getMentorGroups(apiToken);
       if (res.success && res.data) {
         setMentorGroups(res.data);
         const ids = res.data.flatMap((g) => [g.mentorId, ...g.prospects.map((p) => p.userId)].filter(Boolean) as string[]);
         resolveNames(ids);
       }
     } catch { /* silent */ }
-  }, [apiToken]);
+  }, [apiToken, api, resolveNames]);
 
   useEffect(() => {
     if (viewMode === "mentor") {
@@ -204,7 +247,7 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
     if (expandedId === id) { setExpandedId(null); return; }
     setExpandedId(id);
     if (!details[id]) {
-      const res = await getProspect(apiToken, id);
+      const res = await api.getProspect(apiToken, id);
       if (res.success && res.data) {
         setDetails((prev) => ({ ...prev, [id]: res.data! }));
         const ids = [
@@ -218,10 +261,10 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
 
   async function handlePause(id: number) {
     setActionLoading(true);
-    const res = await pauseProspect(apiToken, id);
+    const res = await api.pauseProspect(apiToken, id);
     if (res.success) {
       // Refresh detail
-      const detailRes = await getProspect(apiToken, id);
+      const detailRes = await api.getProspect(apiToken, id);
       if (detailRes.success && detailRes.data) {
         setDetails((prev) => ({ ...prev, [id]: detailRes.data! }));
         // Update list item
@@ -233,9 +276,9 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
 
   async function handleUnpause(id: number) {
     setActionLoading(true);
-    const res = await unpauseProspect(apiToken, id);
+    const res = await api.unpauseProspect(apiToken, id);
     if (res.success) {
-      const detailRes = await getProspect(apiToken, id);
+      const detailRes = await api.getProspect(apiToken, id);
       if (detailRes.success && detailRes.data) {
         setDetails((prev) => ({ ...prev, [id]: detailRes.data! }));
         setProspects((prev) => prev.map((p) => p.id === id ? { ...p, pausedAt: null } : p));
@@ -247,9 +290,9 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
   async function handleExtend(id: number) {
     const days = extendDays[id] || 7;
     setActionLoading(true);
-    const res = await extendProspect(apiToken, id, days);
+    const res = await api.extendProspect(apiToken, id, days);
     if (res.success) {
-      const detailRes = await getProspect(apiToken, id);
+      const detailRes = await api.getProspect(apiToken, id);
       if (detailRes.success && detailRes.data) {
         setDetails((prev) => ({ ...prev, [id]: detailRes.data! }));
       }
@@ -257,20 +300,9 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
     setActionLoading(false);
   }
 
-  function handleDownload(prospect: Prospect) {
-    const text = exportProspectText(prospect);
-    const blob = new Blob([text], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `prospect-${prospect.alias}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   async function handleReassign(prospectId: number, newMentorId: string) {
     setActionLoading(true);
-    const res = await reassignMentor(apiToken, prospectId, newMentorId);
+    const res = await api.reassignMentor(apiToken, prospectId, newMentorId);
     if (res.success) {
       setReassigning(null);
       setSelectedMentor("");
@@ -314,45 +346,36 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
   return (
     <div>
       <div className="mb-6 flex flex-wrap gap-3">
-        <div className="flex rounded-sm border border-border">
-          <button
-            onClick={() => setViewMode("list")}
-            className={`px-3 py-2 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-accent/15 text-accent" : "text-text-muted hover:text-text-secondary"}`}
-          >
-            List View
-          </button>
-          <button
-            onClick={() => setViewMode("mentor")}
-            className={`border-l border-border px-3 py-2 text-xs font-medium transition-colors ${viewMode === "mentor" ? "bg-accent/15 text-accent" : "text-text-muted hover:text-text-secondary"}`}
-          >
-            Mentor View
-          </button>
-        </div>
+        <Tabs value={viewMode}>
+          <TabsList variant="default">
+            <TabsTrigger value="list" onClick={() => setViewMode("list")}>
+              List View
+            </TabsTrigger>
+            <TabsTrigger value="mentor" onClick={() => setViewMode("mentor")}>
+              Mentor View
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         {viewMode === "list" && (
           <>
-            <div className="relative flex-1">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted">
-                <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
-              </svg>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by alias, nationality, steam ID, UUID..."
-                className="w-full rounded-sm border border-border bg-bg-tertiary/50 py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
-              />
-            </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
-            >
-              <option value="all">All Status</option>
-              <option value="open">Open</option>
-              <option value="closed">Closed</option>
-              <option value="accepted">Accepted</option>
-              <option value="denied">Denied</option>
-            </select>
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search by alias, nationality, steam ID, UUID..."
+              className="min-w-64 flex-1"
+            />
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter((v as string) ?? "all")}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="open">Open</SelectItem>
+                <SelectItem value="closed">Closed</SelectItem>
+                <SelectItem value="accepted">Accepted</SelectItem>
+                <SelectItem value="denied">Denied</SelectItem>
+              </SelectContent>
+            </Select>
           </>
         )}
       </div>
@@ -368,10 +391,11 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
               mentorGroups.map((group) => (
                 <div key={group.mentorId || "unclaimed"} className="facet-border rounded-sm bg-bg-card">
                   <div className="flex items-center gap-3 border-b border-border/50 px-5 py-3">
-                    <div className={`flex h-8 w-8 items-center justify-center rounded-sm border ${group.mentorId ? "border-accent/30 bg-accent/10" : "border-warning/30 bg-warning/10"}`}>
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`h-4 w-4 ${group.mentorId ? "text-accent" : "text-warning"}`}>
-                        <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
-                      </svg>
+                    <div className={cn(
+                      "flex h-8 w-8 items-center justify-center rounded-sm border",
+                      group.mentorId ? "border-accent/30 bg-accent/10" : "border-warning/30 bg-warning/10",
+                    )}>
+                      <Users className={cn("size-4", group.mentorId ? "text-accent" : "text-warning")} />
                     </div>
                     <div>
                       <span className="font-display text-sm font-semibold tracking-wide text-text-primary">
@@ -387,9 +411,7 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-text-primary">{p.alias}</span>
-                              {p.pausedAt && (
-                                <span className="rounded-sm border border-warning/30 bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning">Paused</span>
-                              )}
+                              {p.pausedAt && <StatusBadge tone="warning">Paused</StatusBadge>}
                             </div>
                             <div className="flex items-center gap-2 text-xs text-text-muted">
                               <span>{p.nationality}</span>
@@ -403,80 +425,86 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                         <div className="flex items-center gap-2">
                           {canManage && (
                             <>
-                              <button
+                              <Button
+                                variant="outline"
+                                size="sm"
                                 onClick={() => p.pausedAt ? handleUnpause(p.id) : handlePause(p.id)}
                                 disabled={actionLoading}
-                                className="rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary disabled:opacity-50"
                               >
                                 {p.pausedAt ? "Unpause" : "Pause"}
-                              </button>
+                              </Button>
                               <div className="flex items-center gap-1">
-                                <input
+                                <Input
                                   type="number"
                                   min={1}
                                   max={30}
                                   value={extendDays[p.id] || 7}
                                   onChange={(e) => setExtendDays((prev) => ({ ...prev, [p.id]: Number(e.target.value) }))}
-                                  className="w-12 rounded-sm border border-border bg-bg-tertiary/50 px-1.5 py-1 text-xs text-text-primary focus:border-accent/50 focus:outline-none"
+                                  className="h-7 w-14 px-1.5 text-xs"
                                 />
-                                <button
+                                <Button
+                                  variant="outline"
+                                  size="sm"
                                   onClick={() => handleExtend(p.id)}
                                   disabled={actionLoading}
-                                  className="rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary disabled:opacity-50"
                                 >
                                   Extend
-                                </button>
+                                </Button>
                               </div>
                             </>
                           )}
-                          <a
+                          <Link
                             href={`/prospect/${p.uuid}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex h-7 w-7 items-center justify-center rounded-sm text-text-muted transition-colors hover:bg-bg-tertiary hover:text-accent"
+                            className="flex size-7 items-center justify-center rounded-sm text-text-muted transition-colors hover:bg-bg-tertiary hover:text-accent"
                             title="Open detail"
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-                              <path fillRule="evenodd" d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h5a.75.75 0 010 1.5h-5zm7.25-.75a.75.75 0 01.75-.75h3.5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0V6.31l-5.47 5.47a.75.75 0 01-1.06-1.06l5.47-5.47H12.25a.75.75 0 01-.75-.75z" clipRule="evenodd" />
-                            </svg>
-                          </a>
+                            <ExternalLink className="size-3.5" />
+                          </Link>
                           {canManage && (
                             reassigning === p.id ? (
                               <div className="flex items-center gap-1">
-                                <select
-                                  value={selectedMentor}
-                                  onChange={(e) => setSelectedMentor(e.target.value)}
-                                  className="rounded-sm border border-border bg-bg-tertiary/50 px-2 py-1 text-xs text-text-primary focus:border-accent/50 focus:outline-none"
+                                <Select
+                                  value={selectedMentor || null}
+                                  onValueChange={(v) => setSelectedMentor((v as string) ?? "")}
                                 >
-                                  <option value="">Select mentor...</option>
-                                  {allMentorIds
-                                    .filter((id) => id !== p.mentorId)
-                                    .map((id) => (
-                                      <option key={id} value={id}>{displayName(id)}</option>
-                                    ))}
-                                </select>
-                                <button
+                                  <SelectTrigger size="sm" className="w-40">
+                                    <SelectValue placeholder="Select mentor..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {allMentorIds
+                                      .filter((id) => id !== p.mentorId)
+                                      .map((id) => (
+                                        <SelectItem key={id} value={id}>{displayName(id)}</SelectItem>
+                                      ))}
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  variant="outlineGold"
+                                  size="sm"
                                   onClick={() => selectedMentor && handleReassign(p.id, selectedMentor)}
                                   disabled={!selectedMentor || actionLoading}
-                                  className="rounded-sm bg-accent/15 px-2 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/25 disabled:opacity-50"
                                 >
                                   Confirm
-                                </button>
-                                <button
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   onClick={() => { setReassigning(null); setSelectedMentor(""); }}
-                                  className="rounded-sm px-2 py-1 text-xs text-text-muted transition-colors hover:text-text-secondary"
                                 >
                                   Cancel
-                                </button>
+                                </Button>
                               </div>
                             ) : (
-                              <button
+                              <Button
+                                variant="outline"
+                                size="sm"
                                 onClick={() => { setReassigning(p.id); setSelectedMentor(""); }}
                                 disabled={actionLoading}
-                                className="rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary disabled:opacity-50"
                               >
                                 Reassign
-                              </button>
+                              </Button>
                             )
                           )}
                         </div>
@@ -508,21 +536,15 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
                         <div className="flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-bg-tertiary">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-text-muted">
-                            <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
-                          </svg>
+                          <User className="size-4 text-text-muted" />
                         </div>
                         <div>
                           <div className="mb-0.5 flex items-center gap-2">
                             <span className="font-display text-sm font-semibold tracking-wide text-text-primary">
                               {p.alias}
                             </span>
-                            <StatusBadge status={p.status} />
-                            {p.pausedAt && (
-                              <span className="rounded-sm border border-warning/30 bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning">
-                                Paused
-                              </span>
-                            )}
+                            <StatusBadge variant={ticketStatusVariant(p.status)} />
+                            {p.pausedAt && <StatusBadge tone="warning">Paused</StatusBadge>}
                           </div>
                           <div className="flex items-center gap-2 text-xs text-text-muted">
                             <span>{p.nationality}</span>
@@ -533,13 +555,10 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                           </div>
                         </div>
                       </div>
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                        className={`h-5 w-5 text-text-muted transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}>
-                        <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                      </svg>
+                      <ChevronDown className={cn("size-5 text-text-muted transition-transform duration-200", expanded && "rotate-180")} />
                     </div>
                   </button>
-                  <a
+                  <Link
                     href={`/prospect/${p.uuid}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -547,21 +566,14 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                     className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-text-muted transition-colors hover:bg-bg-tertiary hover:text-accent"
                     title="Open in new tab"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                      <path fillRule="evenodd" d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h5a.75.75 0 010 1.5h-5zm7.25-.75a.75.75 0 01.75-.75h3.5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0V6.31l-5.47 5.47a.75.75 0 01-1.06-1.06l5.47-5.47H12.25a.75.75 0 01-.75-.75z" clipRule="evenodd" />
-                    </svg>
-                  </a>
+                    <ExternalLink className="size-4" />
+                  </Link>
                 </div>
 
                 {expanded && detail && (
                   <div className="border-t border-border/50 px-5 pb-5 pt-4">
                     <div className="mb-4 flex justify-end">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDownload(detail); }}
-                        className="rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary"
-                      >
-                        Download
-                      </button>
+                      <DownloadButton text={exportProspectText(detail)} filename={`prospect-${detail.alias}.txt`} />
                     </div>
 
                     {/* Application info */}
@@ -600,7 +612,7 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                       </div>
                       <div>
                         <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Steam ID</span>
-                        <div className="text-sm"><code className="text-accent">{detail.steamId}</code></div>
+                        <div className="text-sm"><CopyableId value={detail.steamId} className="text-accent" /></div>
                       </div>
                       {detail.mentorId && (
                         <div>
@@ -628,9 +640,9 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                             const unsure = detail.votes.filter((v) => v.vote === "unsure").length;
                             return (
                               <>
-                                <span className="rounded-sm border border-success/30 bg-success/15 px-2 py-1 text-xs font-medium text-success">Yes: {yes}</span>
-                                <span className="rounded-sm border border-danger/30 bg-danger/15 px-2 py-1 text-xs font-medium text-danger">No: {no}</span>
-                                <span className="rounded-sm border border-accent/30 bg-accent/15 px-2 py-1 text-xs font-medium text-accent">Unsure: {unsure}</span>
+                                <StatusBadge tone="success">Yes: {yes}</StatusBadge>
+                                <StatusBadge tone="danger">No: {no}</StatusBadge>
+                                <StatusBadge tone="accent">Unsure: {unsure}</StatusBadge>
                               </>
                             );
                           })()}

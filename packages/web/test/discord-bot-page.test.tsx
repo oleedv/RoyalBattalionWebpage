@@ -10,9 +10,11 @@ mock.module("../app/(protected)/discord-bot/components/OverviewTab", () => ({
 mock.module("../app/(protected)/discord-bot/components/TicketsTab", () => ({
   default: () => <div data-testid="tickets-tab" />,
 }));
-mock.module("../app/(protected)/discord-bot/components/ProspectsTab", () => ({
-  default: () => <div data-testid="prospects-tab" />,
-}));
+// ProspectsTab is intentionally NOT stubbed here: it is never rendered by
+// these tests (the page defaults to the overview tab and only switches to
+// timeouts), and Bun's mock.module leaks process-wide with no restore, which
+// would clobber the real import in discord-bot-prospects-tab.test.tsx (that
+// file sorts after this one). Leaving it real keeps both suites isolated.
 mock.module("../app/(protected)/discord-bot/components/MessagesTab", () => ({
   default: () => <div data-testid="messages-tab" />,
 }));

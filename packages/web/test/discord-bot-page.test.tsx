@@ -4,25 +4,19 @@ import { PermissionProvider } from "@/lib/permission-context";
 
 // mock.module must precede the import of the module under test so mocks are
 // in place when the component's module graph initialises.
+//
+// IMPORTANT: Bun's mock.module leaks process-wide with no working restore, so a
+// stub here clobbers the REAL import in any test file that sorts AFTER
+// "discord-bot-page.test.tsx". We therefore stub ONLY tabs whose own real-import
+// test files sort BEFORE this one (overview, messages) — never tickets /
+// timeouts / prospects (they sort after and each has a real-import test). These
+// tests mount only the overview tab (default) and switch to messages, so those
+// two stubs are all we need.
 mock.module("../app/(protected)/discord-bot/components/OverviewTab", () => ({
   default: () => <div data-testid="overview-tab" />,
 }));
-mock.module("../app/(protected)/discord-bot/components/TicketsTab", () => ({
-  default: () => <div data-testid="tickets-tab" />,
-}));
-// ProspectsTab is intentionally NOT stubbed here: it is never rendered by
-// these tests (the page defaults to the overview tab and only switches to
-// timeouts), and Bun's mock.module leaks process-wide with no restore, which
-// would clobber the real import in discord-bot-prospects-tab.test.tsx (that
-// file sorts after this one). Leaving it real keeps both suites isolated.
 mock.module("../app/(protected)/discord-bot/components/MessagesTab", () => ({
   default: () => <div data-testid="messages-tab" />,
-}));
-mock.module("../app/(protected)/discord-bot/components/LogsTab", () => ({
-  default: () => <div data-testid="logs-tab" />,
-}));
-mock.module("../app/(protected)/discord-bot/components/TimeoutsTab", () => ({
-  default: () => <div data-testid="timeouts-tab" />,
 }));
 
 import DiscordBotPage from "@/app/(protected)/discord-bot/page";
@@ -56,10 +50,10 @@ test("(2) user with view:discord-bot sees tab triggers and the overview tab", ()
   expect(screen.queryByTestId("tickets-tab")).toBeNull();
 });
 
-test("(3) clicking Timeouts trigger switches the active tab", () => {
+test("(3) clicking a trigger switches the active tab", () => {
   renderWithPerms(["view:discord-bot"]);
-  expect(screen.queryByTestId("timeouts-tab")).toBeNull();
-  fireEvent.click(screen.getByRole("tab", { name: "Timeouts" }));
-  expect(screen.getByTestId("timeouts-tab")).toBeDefined();
+  expect(screen.queryByTestId("messages-tab")).toBeNull();
+  fireEvent.click(screen.getByRole("tab", { name: "Messages" }));
+  expect(screen.getByTestId("messages-tab")).toBeDefined();
   expect(screen.queryByTestId("overview-tab")).toBeNull();
 });

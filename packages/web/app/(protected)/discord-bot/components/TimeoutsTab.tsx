@@ -10,6 +10,28 @@ import {
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { Skeleton, SkeletonList } from "@/components/skeleton";
 import type { TicketTimeout } from "shared";
+import { SearchInput } from "@/components/search-input-v2";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { CopyableId } from "@/components/copyable-id";
+import { EmptyState } from "@/components/empty-state";
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleString();
@@ -38,12 +60,28 @@ const DURATION_PRESETS = [
   { label: "7 days", hours: 168 },
 ];
 
+export type TimeoutsApi = {
+  getTicketTimeouts: typeof getTicketTimeouts;
+  createTicketTimeout: typeof createTicketTimeout;
+  expireTicketTimeout: typeof expireTicketTimeout;
+  resolveDiscordNames: typeof resolveDiscordNames;
+};
+
+const defaultApi: TimeoutsApi = {
+  getTicketTimeouts,
+  createTicketTimeout,
+  expireTicketTimeout,
+  resolveDiscordNames,
+};
+
 export default function TimeoutsTab({
   apiToken,
   canManage,
+  api = defaultApi,
 }: {
   apiToken: string;
   canManage: boolean;
+  api?: TimeoutsApi;
 }) {
   const [timeouts, setTimeouts] = useState<TicketTimeout[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,11 +94,12 @@ export default function TimeoutsTab({
   const [formCustomHours, setFormCustomHours] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [expireId, setExpireId] = useState<number | null>(null);
 
   async function resolveNames(ids: string[]) {
     const unknown = ids.filter((id) => id && !nameMap[id]);
     if (unknown.length === 0) return;
-    const res = await resolveDiscordNames(apiToken, [...new Set(unknown)]);
+    const res = await api.resolveDiscordNames(apiToken, [...new Set(unknown)]);
     if (res.success && res.data) setNameMap((prev) => ({ ...prev, ...res.data }));
   }
 
@@ -69,7 +108,7 @@ export default function TimeoutsTab({
   }
 
   async function fetchTimeouts() {
-    const res = await getTicketTimeouts(apiToken);
+    const res = await api.getTicketTimeouts(apiToken);
     if (res.success && res.data) {
       setTimeouts(res.data);
       const ids = res.data.flatMap((t) => [t.userId, t.timedOutBy]);
@@ -86,7 +125,7 @@ export default function TimeoutsTab({
 
   const silentRefreshTimeouts = useCallback(async () => {
     try {
-      const res = await getTicketTimeouts(apiToken);
+      const res = await api.getTicketTimeouts(apiToken);
       if (res.success && res.data) {
         setTimeouts(res.data);
         const ids = res.data.flatMap((t) => [t.userId, t.timedOutBy]);
@@ -110,7 +149,7 @@ export default function TimeoutsTab({
     }
 
     setSubmitting(true);
-    const res = await createTicketTimeout(apiToken, {
+    const res = await api.createTicketTimeout(apiToken, {
       userId: formUserId.trim(),
       hours,
     });
@@ -128,8 +167,11 @@ export default function TimeoutsTab({
     }
   }
 
-  async function handleExpire(id: number) {
-    const res = await expireTicketTimeout(apiToken, id);
+  async function handleExpireConfirm() {
+    if (expireId === null) return;
+    const id = expireId;
+    setExpireId(null);
+    const res = await api.expireTicketTimeout(apiToken, id);
     if (res.success) {
       setTimeouts((prev) => prev.filter((t) => t.id !== id));
     }
@@ -157,37 +199,24 @@ export default function TimeoutsTab({
     );
   if (error) return <div className="text-danger">{error}</div>;
 
+  const expireTarget = expireId !== null ? timeouts.find((t) => t.id === expireId) : null;
+
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
-        <div className="relative flex-1">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
-          >
-            <path
-              fillRule="evenodd"
-              d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z"
-              clipRule="evenodd"
-            />
-          </svg>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by user ID or name..."
-            className="w-full rounded-sm border border-border bg-bg-tertiary/50 py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by user ID or name..."
+          className="flex-1"
+        />
         {canManage && (
-          <button
+          <Button
+            variant="outline"
             onClick={() => setShowForm(!showForm)}
-            className="rounded-sm border border-accent/30 bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/20"
           >
             {showForm ? "Cancel" : "Add Timeout"}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -201,54 +230,49 @@ export default function TimeoutsTab({
               <label className="mb-1 block text-xs font-medium text-text-muted">
                 Discord User ID
               </label>
-              <input
+              <Input
                 type="text"
                 value={formUserId}
                 onChange={(e) => setFormUserId(e.target.value)}
                 placeholder="e.g. 123456789012345678"
-                className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
               />
             </div>
             <div className="min-w-40">
               <label className="mb-1 block text-xs font-medium text-text-muted">
                 Duration
               </label>
-              <select
-                value={formPreset}
-                onChange={(e) => setFormPreset(e.target.value)}
-                className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
-              >
-                {DURATION_PRESETS.map((p) => (
-                  <option key={p.hours} value={String(p.hours)}>
-                    {p.label}
-                  </option>
-                ))}
-                <option value="custom">Custom...</option>
-              </select>
+              <Select value={formPreset} onValueChange={(v) => { if (v !== null) setFormPreset(v); }}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DURATION_PRESETS.map((p) => (
+                    <SelectItem key={p.hours} value={String(p.hours)}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom">Custom...</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {formPreset === "custom" && (
               <div className="min-w-28">
                 <label className="mb-1 block text-xs font-medium text-text-muted">
                   Hours
                 </label>
-                <input
+                <Input
                   type="number"
                   min="1"
                   max="8760"
                   value={formCustomHours}
                   onChange={(e) => setFormCustomHours(e.target.value)}
                   placeholder="Hours"
-                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
                 />
               </div>
             )}
-            <button
-              onClick={handleCreate}
-              disabled={submitting}
-              className="rounded-sm bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/80 disabled:opacity-50"
-            >
+            <Button onClick={handleCreate} disabled={submitting}>
               {submitting ? "Creating..." : "Create"}
-            </button>
+            </Button>
           </div>
           {formError && (
             <p className="mt-2 text-xs text-danger">{formError}</p>
@@ -258,11 +282,13 @@ export default function TimeoutsTab({
 
       <div className="space-y-3">
         {filtered.length === 0 ? (
-          <div className="facet-border rounded-sm bg-bg-card px-5 py-8 text-center text-text-muted">
-            {timeouts.length === 0
-              ? "No active timeouts"
-              : "No timeouts match your search"}
-          </div>
+          <EmptyState
+            message={
+              timeouts.length === 0
+                ? "No active timeouts"
+                : "No timeouts match your search"
+            }
+          />
         ) : (
           filtered.map((t) => (
             <div
@@ -289,6 +315,7 @@ export default function TimeoutsTab({
                     <span className="font-display text-sm font-semibold tracking-wide text-text-primary">
                       {displayName(t.userId)}
                     </span>
+                    <CopyableId value={t.userId} />
                     <span className="rounded-sm border border-danger/30 bg-danger/10 px-2 py-0.5 text-xs font-medium text-danger">
                       {relativeTime(t.expiresAt)}
                     </span>
@@ -303,17 +330,42 @@ export default function TimeoutsTab({
                 </div>
               </div>
               {canManage && (
-                <button
-                  onClick={() => handleExpire(t.id)}
-                  className="rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-card-hover hover:text-text-primary"
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setExpireId(t.id)}
                 >
                   Expire Now
-                </button>
+                </Button>
               )}
             </div>
           ))
         )}
       </div>
+
+      <AlertDialog
+        open={expireId !== null}
+        onOpenChange={(open) => {
+          if (!open) setExpireId(null);
+        }}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Expire this timeout?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {expireTarget
+                ? `This will immediately lift the ticket timeout for ${displayName(expireTarget.userId)}.`
+                : "This will immediately lift the ticket timeout."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep timeout</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={handleExpireConfirm}>
+              Expire now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

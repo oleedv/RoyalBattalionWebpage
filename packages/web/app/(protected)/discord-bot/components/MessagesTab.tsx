@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { getBotMessages } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { DataTable } from "@/components/data-table-v2";
+import { DataTable } from "@/components/data-table";
 import { StatusBadge } from "@/components/status-badge";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { SearchInput } from "@/components/search-input-v2";
+import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import type { ColumnDef } from "@tanstack/react-table";

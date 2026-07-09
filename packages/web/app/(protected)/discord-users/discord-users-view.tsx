@@ -9,8 +9,8 @@ import {
   deleteMemberComment,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { DataTable } from "@/components/data-table-v2";
-import { SearchInput } from "@/components/search-input-v2";
+import { DataTable } from "@/components/data-table";
+import { SearchInput } from "@/components/search-input";
 import { StatusBadge } from "@/components/status-badge";
 import { CopyableId } from "@/components/copyable-id";
 import { EmptyState } from "@/components/empty-state";

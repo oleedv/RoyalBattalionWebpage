@@ -16,7 +16,7 @@ import {
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { Skeleton, SkeletonList } from "@/components/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SearchInput } from "@/components/search-input-v2";
+import { SearchInput } from "@/components/search-input";
 import {
   Select,
   SelectContent,

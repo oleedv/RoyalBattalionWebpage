@@ -18,8 +18,8 @@ import type {
   WhitelistEntryWithComments,
 } from "shared";
 import { toastError } from "@/lib/toast";
-import { DataTable } from "@/components/data-table-v2";
-import { SearchInput } from "@/components/search-input-v2";
+import { DataTable } from "@/components/data-table";
+import { SearchInput } from "@/components/search-input";
 import { FilterBar, type ActiveFilter } from "@/components/filter-bar";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";

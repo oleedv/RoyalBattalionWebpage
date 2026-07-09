@@ -7,7 +7,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
 import { Skeleton, SkeletonList } from "@/components/skeleton";
 import { StatusBadge, ticketStatusVariant } from "@/components/status-badge";
-import { SearchInput } from "@/components/search-input-v2";
+import { SearchInput } from "@/components/search-input";
 import {
   Select,
   SelectContent,

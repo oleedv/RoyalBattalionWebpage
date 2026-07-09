@@ -13,9 +13,9 @@ import {
   resolveDiscordNames,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { DataTable } from "@/components/data-table-v2";
+import { DataTable } from "@/components/data-table";
 import { FilterBar, type ActiveFilter } from "@/components/filter-bar";
-import { SearchInput } from "@/components/search-input-v2";
+import { SearchInput } from "@/components/search-input";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge, ticketStatusVariant } from "@/components/status-badge";
 import { TIER_LABELS, TIER_COLORS, getVisibleTiers } from "./lib";

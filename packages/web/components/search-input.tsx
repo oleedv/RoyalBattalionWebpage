@@ -1,35 +1,75 @@
-interface SearchInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  className?: string;
-}
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 export function SearchInput({
+  onSearch,
   value,
   onChange,
   placeholder = "Search...",
+  debounceMs = 250,
   className,
-}: SearchInputProps) {
+}: {
+  /** Debounced callback, fires after debounceMs of typing inactivity. */
+  onSearch?: (value: string) => void;
+  /** Controlled value. When set, the parent owns the input state. */
+  value?: string;
+  /** Immediate per-keystroke callback for controlled usage. */
+  onChange?: (value: string) => void;
+  placeholder?: string;
+  debounceMs?: number;
+  className?: string;
+}) {
+  const [internal, setInternal] = useState("");
+  const isControlled = value !== undefined;
+  const shown = isControlled ? value : internal;
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef(onSearch);
+  latest.current = onSearch;
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  function handleChange(next: string) {
+    if (!isControlled) setInternal(next);
+    onChange?.(next);
+    if (timer.current) clearTimeout(timer.current);
+    if (latest.current) {
+      timer.current = setTimeout(() => latest.current?.(next), debounceMs);
+    }
+  }
+
+  function handleClear() {
+    if (timer.current) clearTimeout(timer.current);
+    if (!isControlled) setInternal("");
+    onChange?.("");
+    latest.current?.("");
+  }
+
   return (
-    <div className={`relative ${className || ""}`}>
-      <input
-        type="text"
+    <div className={cn("relative", className)}>
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-text-muted" />
+      <Input
+        value={shown}
+        onChange={(e) => handleChange(e.target.value)}
         placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`w-full rounded-sm border border-border bg-bg-tertiary px-4 py-2 pr-8 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none`}
+        className="pl-8 pr-8"
       />
-      {value && (
+      {shown && (
         <button
           type="button"
-          onClick={() => onChange("")}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted transition-colors hover:text-text-primary"
           aria-label="Clear search"
+          onClick={handleClear}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M4 4l8 8M12 4L4 12" />
-          </svg>
+          <X className="size-4" />
         </button>
       )}
     </div>

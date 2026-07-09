@@ -10,7 +10,7 @@ import {
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { Skeleton, SkeletonList } from "@/components/skeleton";
 import type { TicketTimeout } from "shared";
-import { SearchInput } from "@/components/search-input-v2";
+import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {

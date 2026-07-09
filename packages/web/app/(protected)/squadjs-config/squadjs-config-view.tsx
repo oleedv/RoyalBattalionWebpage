@@ -13,7 +13,7 @@ import { Skeleton, SkeletonCard, SkeletonRegion } from "@/components/skeleton";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { AccessDeniedCard } from "@/components/access-denied-card";
-import { SearchInput } from "@/components/search-input-v2";
+import { SearchInput } from "@/components/search-input";
 import { StatusBadge } from "@/components/status-badge";
 import { ConfigDiffDialog } from "@/components/config-diff-dialog";
 import { Button } from "@/components/ui/button";

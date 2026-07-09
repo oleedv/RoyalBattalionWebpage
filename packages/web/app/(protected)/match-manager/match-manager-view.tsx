@@ -9,7 +9,7 @@ import {
   resyncMatches,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { DataTable } from "@/components/data-table-v2";
+import { DataTable } from "@/components/data-table";
 import { Skeleton } from "@/components/skeleton";
 import { Input } from "@/components/ui/input";
 import {

@@ -16,8 +16,8 @@ import type {
 } from "shared";
 import { HourlyChart } from "./HourlyChart";
 import { WeekdayChart } from "./WeekdayChart";
-import { DataTable } from "@/components/data-table-v2";
-import { SearchInput } from "@/components/search-input-v2";
+import { DataTable } from "@/components/data-table";
+import { SearchInput } from "@/components/search-input";
 import { StatusBadge } from "@/components/status-badge";
 import { StatCard } from "@/components/stat-card";
 import { EmptyState } from "@/components/empty-state";

@@ -20,9 +20,9 @@ import {
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/empty-state";
-import { SearchInput } from "@/components/search-input-v2";
+import { SearchInput } from "@/components/search-input";
 import { FilterBar } from "@/components/filter-bar";
-import { DataTable } from "@/components/data-table-v2";
+import { DataTable } from "@/components/data-table";
 import { PageHeader } from "@/components/page-header";
 import { StatCard, StatGroup } from "@/components/stat-card";
 import { Sparkline, MultiSparkline, AreaSparkline } from "@/components/sparkline";

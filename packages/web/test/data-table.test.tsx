@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { DataTable } from "@/components/data-table-v2";
+import { DataTable } from "@/components/data-table";
 
 type Row = { id: string; name: string; steamId: string };
 

@@ -6,7 +6,7 @@ import { getAuditLogs } from "@/lib/api-client";
 import type { AdminGroup, AuditLogEntry, Clan } from "shared";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { formatDateTime, formatRelativeTime } from "@/lib/format";
-import { DataTable } from "@/components/data-table-v2";
+import { DataTable } from "@/components/data-table";
 import { FilterBar, type ActiveFilter } from "@/components/filter-bar";
 import { StatusBadge } from "@/components/status-badge";
 import { AuditDetail } from "@/components/audit-detail";

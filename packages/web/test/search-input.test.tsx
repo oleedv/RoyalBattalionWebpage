@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { SearchInput } from "@/components/search-input-v2";
+import { SearchInput } from "@/components/search-input";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

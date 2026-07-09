@@ -1,6 +1,19 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/*
+ * Base UI orientation variants. Base UI primitives (Tabs, ToggleGroup,
+ * Separator) emit `data-orientation="horizontal|vertical"`, but the shadcn
+ * component classes reference `data-horizontal:` / `data-vertical:` variants.
+ * Without these definitions Tailwind compiles them to `[data-horizontal]`
+ * (attribute presence), which never matches — so e.g. Tabs never became a
+ * column and the tab strip rendered beside its content. Map them to the real
+ * attribute so both the self (`data-horizontal:`) and group
+ * (`group-data-horizontal/tabs:`) forms resolve.
+ */
+@custom-variant data-horizontal (&[data-orientation="horizontal"]);
+@custom-variant data-vertical (&[data-orientation="vertical"]);
+
 @theme {
   --color-bg-primary: #08080a;
   --color-bg-secondary: #111114;

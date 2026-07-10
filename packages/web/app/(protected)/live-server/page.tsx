@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePermissions } from "@/lib/permission-context";
+import { formatRelativeAge } from "@/lib/format-relative-age";
 import { Modal } from "@/components/modal";
 import { SkeletonStatGrid } from "@/components/skeleton";
 
@@ -134,6 +135,7 @@ export default function LiveServerPage() {
   const [randomizeModalOpen, setRandomizeModalOpen] = useState(false);
   const [randomizeMode, setRandomizeMode] = useState<"all" | "squad">("all");
   const [balanceStatus, setBalanceStatus] = useState<BalanceStatus | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [balanceModalOpen, setBalanceModalOpen] = useState(false);
   const [balancePlan, setBalancePlan] = useState<BalancePlan | null>(null);
   const [balancePreviewLoading, setBalancePreviewLoading] = useState(false);
@@ -407,6 +409,12 @@ export default function LiveServerPage() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [demoteDropdownOpen]);
+
+  useEffect(() => {
+    if (!balanceStatus?.pending) return;
+    const id = setInterval(() => setNowMs(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, [balanceStatus?.pending]);
 
   function switchServer(key: string) {
     setActiveServer(key);
@@ -1127,7 +1135,10 @@ export default function LiveServerPage() {
               <div className="h-6 w-px bg-border/50" />
               {balanceStatus?.pending ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-warning">Balance queued</span>
+                  <span className="text-xs text-warning">
+                    {balanceStatus.requestedBy ? `Balance queued by ${balanceStatus.requestedBy}` : "Balance queued"}
+                    {balanceStatus.requestedAt ? ` · ${formatRelativeAge(balanceStatus.requestedAt, nowMs)}` : ""}
+                  </span>
                   <button
                     onClick={handleCancelBalance}
                     className="rounded-sm border border-danger/30 bg-danger/5 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/15"

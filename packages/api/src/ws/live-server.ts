@@ -491,12 +491,13 @@ async function handleAdminAction(
           ws.send(JSON.stringify({ type: "action_result", success: false, error: "manage:balance-teams permission required" }));
           return;
         }
-        const qbResult = await squadjsSocket.callMethod(serverKey, "queueBalance", ws.data.userName) as { success?: boolean; error?: string };
+        const actor = ws.data.displayName ?? ws.data.userName;
+        const qbResult = await squadjsSocket.callMethod(serverKey, "queueBalance", actor) as { success?: boolean; error?: string };
         if (qbResult?.success === false) {
           ws.send(JSON.stringify({ type: "action_result", success: false, error: qbResult.error || "Queue failed" }));
           return;
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.queuebalance", "LiveServer", serverKey, {});
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.queuebalance", "LiveServer", serverKey, { displayName: actor });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "queuebalance", data: qbResult }));
         break;
       }
@@ -506,12 +507,13 @@ async function handleAdminAction(
           ws.send(JSON.stringify({ type: "action_result", success: false, error: "manage:balance-teams permission required" }));
           return;
         }
-        const cbResult = await squadjsSocket.callMethod(serverKey, "cancelBalance") as { success?: boolean; error?: string };
+        const actor = ws.data.displayName ?? ws.data.userName;
+        const cbResult = await squadjsSocket.callMethod(serverKey, "cancelBalance", actor) as { success?: boolean; error?: string; originalRequester?: string };
         if (cbResult?.success === false) {
           ws.send(JSON.stringify({ type: "action_result", success: false, error: cbResult.error || "Cancel failed" }));
           return;
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.cancelbalance", "LiveServer", serverKey, {});
+        auditDirect(ws.data.userId, ws.data.userName, "rcon.cancelbalance", "LiveServer", serverKey, { displayName: actor, originalRequester: cbResult.originalRequester ?? null });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "cancelbalance", data: cbResult }));
         break;
       }

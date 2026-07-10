@@ -13,6 +13,7 @@ import type {
   UserWithRolesAndComments,
   MemberComment,
   Ticket,
+  TicketSearchResponse,
   Prospect,
   LegacyTicket,
   DiscordRole,
@@ -510,6 +511,33 @@ export function getTickets(
   token: string
 ): Promise<ApiResponse<Ticket[]>> {
   return request<Ticket[]>("/tickets", {
+    headers: authHeaders(token),
+  });
+}
+
+export interface TicketSearchParams {
+  q?: string;
+  status?: string;
+  type?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export function searchTickets(
+  token: string,
+  params: TicketSearchParams
+): Promise<ApiResponse<TicketSearchResponse>> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  if (params.status && params.status !== "all") qs.set("status", params.status);
+  if (params.type && params.type !== "all") qs.set("type", params.type);
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
+  qs.set("page", String(params.page ?? 0));
+  qs.set("pageSize", String(params.pageSize ?? 20));
+  return request<TicketSearchResponse>(`/tickets/search?${qs.toString()}`, {
     headers: authHeaders(token),
   });
 }

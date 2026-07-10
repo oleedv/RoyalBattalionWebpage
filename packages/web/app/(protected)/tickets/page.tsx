@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
-  getTickets,
+  searchTickets,
   getTicket,
-  getLegacyTickets,
   getLegacyTicket,
   getProspects,
   getProspect,
@@ -13,13 +12,17 @@ import {
 import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { Skeleton, SkeletonRegion, SkeletonList } from "@/components/skeleton";
-import type { Ticket, LegacyTicket, LegacyTicketMessage, Prospect, Permission } from "shared";
+import type {
+  Ticket,
+  LegacyTicket,
+  LegacyTicketMessage,
+  Prospect,
+  Permission,
+  UnifiedTicketRow,
+  TicketSearchSnippet,
+} from "shared";
 
 type Tab = "tickets" | "prospects";
-
-type UnifiedTicket =
-  | { kind: "current"; data: Ticket }
-  | { kind: "legacy"; data: LegacyTicket };
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleString();
@@ -200,6 +203,14 @@ function LegacyBadge() {
   return (
     <span className="rounded-sm border border-text-muted/30 bg-text-muted/10 px-2 py-0.5 text-xs font-medium text-text-muted">
       Legacy
+    </span>
+  );
+}
+
+function AnonBadge() {
+  return (
+    <span className="rounded-sm border border-blue-400/30 bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-400">
+      Anon
     </span>
   );
 }
@@ -609,130 +620,105 @@ function DetailSkeleton() {
   );
 }
 
-function TicketRow({ ticket, onExpand, expanded, detail, displayName }: {
-  ticket: Ticket;
-  onExpand: () => void;
-  expanded: boolean;
-  detail: Ticket | null;
-  displayName: (id: string | null) => string;
-}) {
+function HighlightedSnippet({ snippet }: { snippet: TicketSearchSnippet }) {
+  const { text, matchStart, matchLen } = snippet;
+  const end = matchStart + matchLen;
   return (
-    <div className="facet-border rounded-sm bg-bg-card transition-all">
-      <div className="flex items-center">
-        <button
-          onClick={onExpand}
-          className="flex-1 px-5 py-4 text-left transition-colors hover:bg-bg-card-hover"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-bg-tertiary">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-text-muted">
-                  <path fillRule="evenodd" d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V7.621a1.5 1.5 0 00-.44-1.06l-4.12-4.122A1.5 1.5 0 0011.378 2H4.5z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="font-display text-sm font-semibold tracking-wide text-text-primary">
-                    Ticket #{ticket.id}
-                  </span>
-                  <StatusBadge status={ticket.status} />
-                  <TierBadge tier={ticket.tier} />
-                </div>
-                <div className="flex items-center gap-2 text-xs text-text-muted">
-                  <span>{displayName(ticket.userId)}</span>
-                  <span className="h-1 w-1 rounded-full bg-text-muted" />
-                  <span>{new Date(ticket.createdAt).toLocaleDateString()}</span>
-                  {ticket.closedAt && (
-                    <>
-                      <span className="h-1 w-1 rounded-full bg-text-muted" />
-                      <span>Closed: {new Date(ticket.closedAt).toLocaleDateString()}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              className={`h-5 w-5 text-text-muted transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
-            >
-              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-            </svg>
-          </div>
-        </button>
-        <a
-          href={`/ticket/${ticket.uuid}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-text-muted transition-colors hover:bg-bg-tertiary hover:text-accent"
-          title="Open in new tab"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-            <path fillRule="evenodd" d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h5a.75.75 0 010 1.5h-5zm7.25-.75a.75.75 0 01.75-.75h3.5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0V6.31l-5.47 5.47a.75.75 0 01-1.06-1.06l5.47-5.47H12.25a.75.75 0 01-.75-.75z" clipRule="evenodd" />
-          </svg>
-        </a>
-      </div>
-      {expanded && detail && <TicketDetail ticket={detail} displayName={displayName} />}
-      {expanded && !detail && <DetailSkeleton />}
-    </div>
+    <>
+      {text.slice(0, matchStart)}
+      <mark className="rounded-[2px] bg-accent/25 px-0.5 text-text-primary">
+        {text.slice(matchStart, end)}
+      </mark>
+      {text.slice(end)}
+    </>
   );
 }
 
-function LegacyTicketRow({ ticket, onExpand, expanded, detail }: {
-  ticket: LegacyTicket;
-  onExpand: () => void;
+function RowPreview({ row }: { row: UnifiedTicketRow }) {
+  if (row.snippet) {
+    return (
+      <p className="mt-1.5 line-clamp-2 text-xs text-text-secondary">
+        <span className="mr-1.5 rounded-sm bg-bg-tertiary px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+          match
+        </span>
+        <HighlightedSnippet snippet={row.snippet} />
+      </p>
+    );
+  }
+  if (row.preview) {
+    return <p className="mt-1.5 line-clamp-2 text-xs text-text-muted">{row.preview}</p>;
+  }
+  return null;
+}
+
+const DOC_ICON = (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-text-muted">
+    <path fillRule="evenodd" d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V7.621a1.5 1.5 0 00-.44-1.06l-4.12-4.122A1.5 1.5 0 0011.378 2H4.5z" clipRule="evenodd" />
+  </svg>
+);
+
+function UnifiedRow({ row, expanded, onExpand, currentDetail, legacyDetail, displayName }: {
+  row: UnifiedTicketRow;
   expanded: boolean;
-  detail: LegacyTicket | null;
+  onExpand: () => void;
+  currentDetail: Ticket | null;
+  legacyDetail: LegacyTicket | null;
+  displayName: (id: string | null) => string;
 }) {
+  const isLegacy = row.kind === "legacy";
+  const title = isLegacy
+    ? (row.threadNumber ? `Thread #${row.threadNumber}` : `Ticket #${row.id}`)
+    : `Ticket #${row.id}`;
+  const who = isLegacy ? (row.userLabel || row.userId) : displayName(row.userId);
+  const href = isLegacy ? `/ticket/legacy/${row.uuid}` : `/ticket/${row.uuid}`;
+
   return (
     <div className="facet-border rounded-sm bg-bg-card transition-all">
       <div className="flex items-center">
         <button
           onClick={onExpand}
-          className="flex-1 px-5 py-4 text-left transition-colors hover:bg-bg-card-hover"
+          className="min-w-0 flex-1 px-5 py-4 text-left transition-colors hover:bg-bg-card-hover"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-bg-tertiary">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-text-muted">
-                  <path fillRule="evenodd" d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V7.621a1.5 1.5 0 00-.44-1.06l-4.12-4.122A1.5 1.5 0 0011.378 2H4.5z" clipRule="evenodd" />
-                </svg>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-4">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-sm border border-border bg-bg-tertiary">
+                {DOC_ICON}
               </div>
-              <div>
-                <div className="flex items-center gap-2 mb-0.5">
+              <div className="min-w-0">
+                <div className="mb-0.5 flex flex-wrap items-center gap-2">
                   <span className="font-display text-sm font-semibold tracking-wide text-text-primary">
-                    {ticket.threadNumber ? `Thread #${ticket.threadNumber}` : `Ticket #${ticket.id}`}
+                    {title}
                   </span>
-                  <StatusBadge status="closed" />
-                  <LegacyBadge />
+                  <StatusBadge status={row.status} />
+                  {isLegacy ? <LegacyBadge /> : row.tier && <TierBadge tier={row.tier} />}
+                  {row.anonymous && <AnonBadge />}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-text-muted">
-                  <span>{ticket.nickname || ticket.username}</span>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                  <span>{who}</span>
                   <span className="h-1 w-1 rounded-full bg-text-muted" />
-                  <span>{new Date(ticket.startedAt).toLocaleDateString()}</span>
-                  {ticket.closedAt && (
+                  <span>{new Date(row.createdAt).toLocaleDateString()}</span>
+                  {row.closedAt && (
                     <>
                       <span className="h-1 w-1 rounded-full bg-text-muted" />
-                      <span>Closed: {new Date(ticket.closedAt).toLocaleDateString()}</span>
+                      <span>Closed: {new Date(row.closedAt).toLocaleDateString()}</span>
                     </>
                   )}
                 </div>
+                <RowPreview row={row} />
               </div>
             </div>
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 20 20"
               fill="currentColor"
-              className={`h-5 w-5 text-text-muted transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+              className={`mt-1 h-5 w-5 shrink-0 text-text-muted transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
             >
               <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
             </svg>
           </div>
         </button>
         <a
-          href={`/ticket/legacy/${ticket.uuid}`}
+          href={href}
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
@@ -744,8 +730,11 @@ function LegacyTicketRow({ ticket, onExpand, expanded, detail }: {
           </svg>
         </a>
       </div>
-      {expanded && detail && <LegacyTicketDetail ticket={detail} />}
-      {expanded && !detail && <DetailSkeleton />}
+      {expanded && (
+        isLegacy
+          ? (legacyDetail ? <LegacyTicketDetail ticket={legacyDetail} /> : <DetailSkeleton />)
+          : (currentDetail ? <TicketDetail ticket={currentDetail} displayName={displayName} /> : <DetailSkeleton />)
+      )}
     </div>
   );
 }
@@ -849,13 +838,13 @@ function getVisibleTiers(permissions: Permission[]): string[] {
 }
 
 const PAGE_SIZE_KEY = "rb-tickets-page-size";
-const PAGE_SIZES = [10, 20, 50, 100, 500, 1000] as const;
+const PAGE_SIZES = [10, 20, 50, 100, 500] as const;
 
 function getStoredPageSize(): number {
-  if (typeof window === "undefined") return 10;
+  if (typeof window === "undefined") return 20;
   const stored = localStorage.getItem(PAGE_SIZE_KEY);
   const n = Number(stored);
-  return PAGE_SIZES.includes(n as any) ? n : 10;
+  return PAGE_SIZES.includes(n as (typeof PAGE_SIZES)[number]) ? n : 20;
 }
 
 export default function TicketsPage() {
@@ -863,33 +852,37 @@ export default function TicketsPage() {
   const visibleTiers = getVisibleTiers(permissions);
   const [tab, setTab] = useState<Tab>("tickets");
   const [error, setError] = useState<string | null>(null);
+
+  // Shared filter state
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [tierFilter, setTierFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [pageSize, setPageSize] = useState(getStoredPageSize);
   const [page, setPage] = useState(0);
+
+  // Tickets (server-driven)
+  const [rows, setRows] = useState<UnifiedTicketRow[]>([]);
+  const [total, setTotal] = useState(0);
   const [ticketsLoaded, setTicketsLoaded] = useState(false);
-  const [prospectsLoaded, setProspectsLoaded] = useState(false);
-
-  // Tickets state
-  const [tickets, setTicketsState] = useState<Ticket[]>([]);
-  const [expandedTicket, setExpandedTicket] = useState<number | null>(null);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [ticketDetails, setTicketDetails] = useState<Record<number, Ticket>>({});
-
-  // Legacy tickets state
-  const [legacyTickets, setLegacyTickets] = useState<LegacyTicket[]>([]);
-  const [expandedLegacy, setExpandedLegacy] = useState<number | null>(null);
   const [legacyDetails, setLegacyDetails] = useState<Record<number, LegacyTicket>>({});
+  const reqSeq = useRef(0);
 
-  // Prospects state
+  // Prospects (client-side)
   const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [prospectsLoaded, setProspectsLoaded] = useState(false);
   const [expandedProspect, setExpandedProspect] = useState<number | null>(null);
   const [prospectDetails, setProspectDetails] = useState<Record<number, Prospect>>({});
 
   // Discord ID -> display name map
   const [nameMap, setNameMap] = useState<Record<string, string>>({});
 
-  async function resolveNames(ids: string[]) {
+  const resolveNames = useCallback(async (ids: string[]) => {
     if (!apiToken) return;
     const unknown = ids.filter((id) => id && !nameMap[id]);
     if (unknown.length === 0) return;
@@ -897,63 +890,58 @@ export default function TicketsPage() {
     if (res.success && res.data) {
       setNameMap((prev) => ({ ...prev, ...res.data }));
     }
-  }
+  }, [apiToken, nameMap]);
 
   function displayName(id: string | null): string {
     if (!id) return "--";
     return nameMap[id] || id;
   }
 
-  const refreshData = useCallback(async () => {
+  // Debounce the search box.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Reset to first page whenever the query/filters change.
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, statusFilter, tierFilter, dateFrom, dateTo, tab]);
+
+  const loadTickets = useCallback(async (silent = false) => {
     if (!apiToken) return;
-    try {
-      if (tab === "tickets") {
-        const [ticketRes, legacyRes] = await Promise.all([
-          getTickets(apiToken),
-          getLegacyTickets(apiToken),
-        ]);
-        if (ticketRes.success && ticketRes.data) {
-          setTicketsState(ticketRes.data);
-          const ids = ticketRes.data.flatMap((t) => [t.userId, t.closedBy].filter(Boolean) as string[]);
-          resolveNames(ids);
-        }
-        if (legacyRes.success && legacyRes.data) {
-          setLegacyTickets(legacyRes.data);
-        }
-      } else {
-        const res = await getProspects(apiToken);
-        if (res.success && res.data) {
-          setProspects(res.data);
-          const ids = res.data.flatMap((p) => [p.userId, p.closedBy, p.mentorId].filter(Boolean) as string[]);
-          resolveNames(ids);
-        }
-      }
-    } catch { /* silent */ }
-  }, [apiToken, tab]);
+    const seq = ++reqSeq.current;
+    if (!silent) setTicketsLoading(true);
+    const res = await searchTickets(apiToken, {
+      q: debouncedSearch || undefined,
+      status: statusFilter,
+      type: tierFilter,
+      from: dateFrom || undefined,
+      to: dateTo || undefined,
+      page,
+      pageSize,
+    });
+    if (seq !== reqSeq.current) return; // a newer request superseded this one
+    if (res.success && res.data) {
+      setRows(res.data.items);
+      setTotal(res.data.total);
+      const ids = res.data.items.filter((r) => r.kind === "current").map((r) => r.userId);
+      resolveNames(ids);
+    } else {
+      setError(res.error || "Failed to load tickets");
+    }
+    setTicketsLoaded(true);
+    setTicketsLoading(false);
+  }, [apiToken, debouncedSearch, statusFilter, tierFilter, dateFrom, dateTo, page, pageSize, resolveNames]);
 
-  useAutoRefresh(refreshData, 20_000, !!apiToken);
+  // Fetch tickets whenever the query changes.
+  useEffect(() => {
+    if (tab === "tickets") loadTickets();
+  }, [tab, loadTickets]);
 
+  // Load prospects once when the tab is first opened.
   useEffect(() => {
     if (!apiToken) return;
-
-    if (tab === "tickets" && tickets.length === 0 && legacyTickets.length === 0) {
-      Promise.all([
-        getTickets(apiToken),
-        getLegacyTickets(apiToken),
-      ]).then(([ticketRes, legacyRes]) => {
-        if (ticketRes.success && ticketRes.data) {
-          setTicketsState(ticketRes.data);
-          const ids = ticketRes.data.flatMap((t) => [t.userId, t.closedBy].filter(Boolean) as string[]);
-          resolveNames(ids);
-        } else {
-          setError(ticketRes.error || "Failed to load tickets");
-        }
-        if (legacyRes.success && legacyRes.data) {
-          setLegacyTickets(legacyRes.data);
-        }
-        setTicketsLoaded(true);
-      });
-    }
     if (tab === "prospects" && prospects.length === 0) {
       getProspects(apiToken).then((res) => {
         if (res.success && res.data) {
@@ -964,36 +952,46 @@ export default function TicketsPage() {
         setProspectsLoaded(true);
       });
     }
-  }, [apiToken, tab]);
+  }, [apiToken, tab, prospects.length, resolveNames]);
 
-  async function handleExpandTicket(id: number) {
-    setExpandedLegacy(null);
-    if (expandedTicket === id) {
-      setExpandedTicket(null);
-      return;
-    }
-    setExpandedTicket(id);
-    if (!ticketDetails[id] && apiToken) {
-      const res = await getTicket(apiToken, id);
+  const refreshData = useCallback(async () => {
+    if (!apiToken) return;
+    if (tab === "tickets") {
+      await loadTickets(true);
+    } else {
+      const res = await getProspects(apiToken);
       if (res.success && res.data) {
-        setTicketDetails((prev) => ({ ...prev, [id]: res.data! }));
-        const ids = (res.data.events || []).map((e) => e.actorId).filter(Boolean);
+        setProspects(res.data);
+        const ids = res.data.flatMap((p) => [p.userId, p.closedBy, p.mentorId].filter(Boolean) as string[]);
         resolveNames(ids);
       }
     }
-  }
+  }, [apiToken, tab, loadTickets, resolveNames]);
 
-  async function handleExpandLegacy(id: number) {
-    setExpandedTicket(null);
-    if (expandedLegacy === id) {
-      setExpandedLegacy(null);
+  useAutoRefresh(refreshData, 20_000, !!apiToken);
+
+  async function handleExpandTicket(row: UnifiedTicketRow) {
+    const key = `${row.kind}-${row.id}`;
+    if (expandedKey === key) {
+      setExpandedKey(null);
       return;
     }
-    setExpandedLegacy(id);
-    if (!legacyDetails[id] && apiToken) {
-      const res = await getLegacyTicket(apiToken, id);
-      if (res.success && res.data) {
-        setLegacyDetails((prev) => ({ ...prev, [id]: res.data! }));
+    setExpandedKey(key);
+    if (row.kind === "current") {
+      if (!ticketDetails[row.id] && apiToken) {
+        const res = await getTicket(apiToken, row.id);
+        if (res.success && res.data) {
+          setTicketDetails((prev) => ({ ...prev, [row.id]: res.data! }));
+          const ids = (res.data.events || []).map((e) => e.actorId).filter(Boolean);
+          resolveNames(ids);
+        }
+      }
+    } else {
+      if (!legacyDetails[row.id] && apiToken) {
+        const res = await getLegacyTicket(apiToken, row.id);
+        if (res.success && res.data) {
+          setLegacyDetails((prev) => ({ ...prev, [row.id]: res.data! }));
+        }
       }
     }
   }
@@ -1017,52 +1015,6 @@ export default function TicketsPage() {
     }
   }
 
-  const filteredUnifiedTickets = useMemo(() => {
-    const q = search.toLowerCase();
-
-    const currentFiltered: UnifiedTicket[] = tickets
-      .filter((t) => {
-        if (statusFilter !== "all" && t.status !== statusFilter) return false;
-        if (tierFilter !== "all" && tierFilter !== "legacy" && t.tier !== tierFilter) return false;
-        if (tierFilter === "legacy") return false;
-        if (!visibleTiers.length || !visibleTiers.includes(t.tier)) return false;
-        if (!q) return true;
-        return (
-          String(t.id).includes(q) ||
-          t.userId.toLowerCase().includes(q) ||
-          t.uuid.toLowerCase().includes(q) ||
-          t.status.toLowerCase().includes(q) ||
-          (nameMap[t.userId] || "").toLowerCase().includes(q)
-        );
-      })
-      .map((data): UnifiedTicket => ({ kind: "current", data }));
-
-    const legacyFiltered: UnifiedTicket[] = legacyTickets
-      .filter((t) => {
-        if (statusFilter !== "all" && statusFilter !== "closed") return false;
-        if (tierFilter !== "all" && tierFilter !== "legacy") return false;
-        if (!q) return true;
-        return (
-          String(t.id).includes(q) ||
-          (t.threadNumber ? String(t.threadNumber).includes(q) : false) ||
-          t.username.toLowerCase().includes(q) ||
-          (t.nickname || "").toLowerCase().includes(q) ||
-          t.userId.toLowerCase().includes(q) ||
-          t.uuid.toLowerCase().includes(q)
-        );
-      })
-      .map((data): UnifiedTicket => ({ kind: "legacy", data }));
-
-    const unified = [...currentFiltered, ...legacyFiltered];
-    unified.sort((a, b) => {
-      const dateA = a.kind === "current" ? a.data.createdAt : a.data.startedAt;
-      const dateB = b.kind === "current" ? b.data.createdAt : b.data.startedAt;
-      return new Date(dateB).getTime() - new Date(dateA).getTime();
-    });
-
-    return unified;
-  }, [tickets, legacyTickets, search, statusFilter, tierFilter, visibleTiers, nameMap]);
-
   const filteredProspects = useMemo(() => {
     const q = search.toLowerCase();
     return prospects.filter((p) => {
@@ -1079,17 +1031,15 @@ export default function TicketsPage() {
     });
   }, [prospects, search, statusFilter]);
 
-  // Reset page when filters change
-  useEffect(() => { setPage(0); }, [search, statusFilter, tierFilter, tab]);
-
-  const activeList = tab === "tickets" ? filteredUnifiedTickets : filteredProspects;
-  const totalPages = Math.max(1, Math.ceil(activeList.length / pageSize));
+  const activeTotal = tab === "tickets" ? total : filteredProspects.length;
+  const totalPages = Math.max(1, Math.ceil(activeTotal / pageSize));
   const safePage = Math.min(page, totalPages - 1);
 
-  const paginatedTickets = useMemo(
-    () => filteredUnifiedTickets.slice(safePage * pageSize, (safePage + 1) * pageSize),
-    [filteredUnifiedTickets, safePage, pageSize],
-  );
+  // Clamp the current page if the result set shrank (tickets are server-paged).
+  useEffect(() => {
+    if (tab === "tickets" && page > totalPages - 1) setPage(totalPages - 1);
+  }, [tab, page, totalPages]);
+
   const paginatedProspects = useMemo(
     () => filteredProspects.slice(safePage * pageSize, (safePage + 1) * pageSize),
     [filteredProspects, safePage, pageSize],
@@ -1105,8 +1055,18 @@ export default function TicketsPage() {
     ? ["all", "open", "closing", "closed"]
     : ["all", "open", "closed", "accepted", "denied"];
 
+  const filtersActive =
+    !!debouncedSearch || statusFilter !== "all" || tierFilter !== "all" || !!dateFrom || !!dateTo;
+
   const initialLoading =
     !apiToken || (tab === "tickets" ? !ticketsLoaded : !prospectsLoaded);
+
+  // Range label for the pagination footer.
+  const rangeStart = activeTotal === 0 ? 0 : safePage * pageSize + 1;
+  const rangeEnd =
+    tab === "tickets"
+      ? safePage * pageSize + rows.length
+      : Math.min((safePage + 1) * pageSize, activeTotal);
 
   if (error) {
     return <div className="text-danger">{error}</div>;
@@ -1145,8 +1105,8 @@ export default function TicketsPage() {
       </div>
 
       {/* Search & Filter */}
-      <div className="mb-6 flex gap-3">
-        <div className="relative flex-1">
+      <div className="mb-3 flex flex-wrap gap-3">
+        <div className="relative min-w-[240px] flex-1">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted">
             <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
           </svg>
@@ -1154,7 +1114,7 @@ export default function TicketsPage() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={tab === "tickets" ? "Search by ID, user, UUID, username..." : "Search by alias, nationality, steam ID, UUID..."}
+            placeholder={tab === "tickets" ? "Search id, user, UUID, or message text…" : "Search by alias, nationality, steam ID, UUID..."}
             className="w-full rounded-sm border border-border bg-bg-tertiary/50 py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
           />
         </div>
@@ -1184,36 +1144,58 @@ export default function TicketsPage() {
         )}
       </div>
 
+      {/* Date range (tickets only) */}
+      {tab === "tickets" && (
+        <div className="mb-6 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+          <span className="uppercase tracking-[0.1em]">Date range</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="rounded-sm border border-border bg-bg-tertiary/50 px-2 py-1.5 text-xs text-text-primary focus:border-accent/50 focus:outline-none"
+          />
+          <span>–</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="rounded-sm border border-border bg-bg-tertiary/50 px-2 py-1.5 text-xs text-text-primary focus:border-accent/50 focus:outline-none"
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              onClick={() => { setDateFrom(""); setDateTo(""); }}
+              className="rounded-sm border border-border px-2 py-1 text-text-secondary transition-colors hover:bg-bg-card-hover"
+            >
+              Clear
+            </button>
+          )}
+          {ticketsLoading && ticketsLoaded && (
+            <span className="ml-auto animate-pulse text-text-muted">Searching…</span>
+          )}
+        </div>
+      )}
+
       {/* Content */}
       {tab === "tickets" && (
         <div className="space-y-3">
           {initialLoading ? (
             <SkeletonList rows={6} avatar />
-          ) : filteredUnifiedTickets.length === 0 ? (
+          ) : rows.length === 0 ? (
             <div className="facet-border rounded-sm bg-bg-card px-5 py-8 text-center text-text-muted">
-              {tickets.length === 0 && legacyTickets.length === 0 ? "No tickets found" : "No tickets match your search"}
+              {filtersActive ? "No tickets match your search" : "No tickets found"}
             </div>
           ) : (
-            paginatedTickets.map((item) =>
-              item.kind === "current" ? (
-                <TicketRow
-                  key={`current-${item.data.id}`}
-                  ticket={item.data}
-                  expanded={expandedTicket === item.data.id}
-                  detail={ticketDetails[item.data.id] || null}
-                  onExpand={() => handleExpandTicket(item.data.id)}
-                  displayName={displayName}
-                />
-              ) : (
-                <LegacyTicketRow
-                  key={`legacy-${item.data.id}`}
-                  ticket={item.data}
-                  expanded={expandedLegacy === item.data.id}
-                  detail={legacyDetails[item.data.id] || null}
-                  onExpand={() => handleExpandLegacy(item.data.id)}
-                />
-              )
-            )
+            rows.map((row) => (
+              <UnifiedRow
+                key={`${row.kind}-${row.id}`}
+                row={row}
+                expanded={expandedKey === `${row.kind}-${row.id}`}
+                currentDetail={row.kind === "current" ? ticketDetails[row.id] || null : null}
+                legacyDetail={row.kind === "legacy" ? legacyDetails[row.id] || null : null}
+                onExpand={() => handleExpandTicket(row)}
+                displayName={displayName}
+              />
+            ))
           )}
         </div>
       )}
@@ -1242,11 +1224,11 @@ export default function TicketsPage() {
       )}
 
       {/* Pagination */}
-      {activeList.length > 0 && (
+      {activeTotal > 0 && (
         <div className="mt-6 flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs text-text-muted">
             <span>
-              {safePage * pageSize + 1}--{Math.min((safePage + 1) * pageSize, activeList.length)} of {activeList.length}
+              {rangeStart}–{rangeEnd} of {activeTotal.toLocaleString()}
             </span>
             <select
               value={pageSize}

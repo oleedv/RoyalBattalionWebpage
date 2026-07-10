@@ -6,6 +6,7 @@ import { authMiddleware } from "../middleware/auth";
 import { requirePermission, getAllowedTicketTiers } from "../middleware/permissions";
 import { rateLimit } from "../middleware/rate-limit";
 import { success, fail } from "../lib/crud-helpers";
+import { searchTickets } from "../lib/ticket-search";
 
 const TICKETS_CAP = 500;
 
@@ -109,6 +110,37 @@ tickets.get("/", rateLimit(30), requirePermission("view:tickets", "manage:ticket
   }));
 
   return success(c, result);
+});
+
+// GET /search - unified, paginated search across current + legacy tickets
+tickets.get("/search", rateLimit(60), requirePermission("view:tickets", "manage:tickets", "view:tickets:normal", "view:tickets:community_officer", "view:tickets:admin_officer", "view:tickets:comp_team", "view:tickets:whitelist"), async (c) => {
+  const userPermissions = c.get("permissions") as Permission[];
+  const allowedTiers = getAllowedTicketTiers(userPermissions);
+
+  const q = c.req.query("q");
+  const status = c.req.query("status");
+  const type = c.req.query("type");
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+  const page = Number(c.req.query("page") ?? 0);
+  const pageSize = Number(c.req.query("pageSize") ?? 0);
+
+  try {
+    const result = await searchTickets(getSecretaryDb(), {
+      q,
+      status,
+      type,
+      from,
+      to,
+      page: Number.isFinite(page) ? page : 0,
+      pageSize: Number.isFinite(pageSize) ? pageSize : 0,
+      allowedTiers,
+    });
+    return success(c, result);
+  } catch (err) {
+    console.error("[tickets/search] query failed", err);
+    return fail(c, "Search failed", 500);
+  }
 });
 
 // GET /:id - get ticket with events and messages

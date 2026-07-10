@@ -125,6 +125,43 @@ export interface TicketTimeout {
   createdAt: string;
 }
 
+export interface TicketSearchSnippet {
+  /** Excerpt of a message body around the first keyword match. */
+  text: string;
+  /** Offset of the match within `text`. */
+  matchStart: number;
+  /** Length of the matched keyword. */
+  matchLen: number;
+}
+
+/** One row in the unified (current + legacy) ticket search result. */
+export interface UnifiedTicketRow {
+  kind: "current" | "legacy";
+  id: number;
+  uuid: string;
+  tier: string | null;
+  status: string;
+  userId: string;
+  /** Legacy display name (nickname/username); null for current tickets (resolved client-side). */
+  userLabel: string | null;
+  createdAt: string;
+  closedAt: string | null;
+  threadNumber: number | null;
+  anonymous: boolean;
+  /** Opening reason (current) or first user message (legacy), truncated. */
+  preview: string | null;
+  /** Set when the keyword matched a message body. */
+  snippet: TicketSearchSnippet | null;
+  matchedIn: "meta" | "body";
+}
+
+export interface TicketSearchResponse {
+  items: UnifiedTicketRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface LegacyTicket {
   id: number;
   uuid: string;

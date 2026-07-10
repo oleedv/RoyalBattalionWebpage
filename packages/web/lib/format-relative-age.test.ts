@@ -22,3 +22,11 @@ test("exact hour omits minutes", () => {
 test("invalid input => empty string", () => {
   expect(formatRelativeAge("not-a-date", base)).toBe("");
 });
+
+test("exactly 60 seconds => 1m ago", () => {
+  expect(formatRelativeAge("2026-07-10T11:59:00.000Z", base)).toBe("1m ago");
+});
+
+test("exactly 60 minutes => 1h ago", () => {
+  expect(formatRelativeAge("2026-07-10T11:00:00.000Z", base)).toBe("1h ago");
+});

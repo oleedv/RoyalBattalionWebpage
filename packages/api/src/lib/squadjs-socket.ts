@@ -1,4 +1,5 @@
 import { io, Socket } from "socket.io-client";
+import { auditDirect } from "./audit";
 import { env } from "./env";
 import { logger } from "./logger";
 
@@ -602,11 +603,24 @@ class SquadJSSocketManager {
         break;
       }
       case "BALANCE_QUEUE_EVENT": {
-        const bqe = data as { action: string; requestedBy?: string; [key: string]: unknown };
+        const bqe = data as { action: string; requestedBy?: string; cancelledBy?: string; team1Count?: number; team2Count?: number; playersMoved?: number; error?: string; [key: string]: unknown };
         if (bqe.action === "queued") {
           state.balanceStatus = { pending: true, requestedBy: bqe.requestedBy, requestedAt: new Date().toISOString() };
         } else if (bqe.action === "cancelled" || bqe.action === "executed" || bqe.action === "failed") {
           state.balanceStatus = null;
+        }
+        if (bqe.action === "executed") {
+          auditDirect("system", "SquadJS", "rcon.balanceexecuted", "LiveServer", key, {
+            originalRequester: bqe.requestedBy ?? null,
+            team1Count: bqe.team1Count ?? null,
+            team2Count: bqe.team2Count ?? null,
+            playersMoved: bqe.playersMoved ?? null,
+          });
+        } else if (bqe.action === "failed") {
+          auditDirect("system", "SquadJS", "rcon.balancefailed", "LiveServer", key, {
+            originalRequester: bqe.requestedBy ?? null,
+            error: bqe.error ?? null,
+          });
         }
         break;
       }

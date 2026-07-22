@@ -34,7 +34,7 @@ seeding.get(
   async (c) => {
     try {
       const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
-        SELECT id, enabled, channel_id, role_ids, seed_threshold, reset_threshold,
+        SELECT id, enabled, channel_id, role_ids, seed_threshold,
                daily_time, timezone, announcer_server_id, tracker_server_id, tracker_enabled,
                required_seed_days, rolling_window_days, whitelist_duration_days, max_extension_days,
                progression_channel_id, leaderboard_channel_id, appreciation_channel_id, min_progression_days
@@ -58,7 +58,6 @@ seeding.get(
         channelId: r.channel_id,
         roleIds,
         seedThreshold: Number(r.seed_threshold),
-        resetThreshold: Number(r.reset_threshold),
         dailyTime: r.daily_time,
         timezone: r.timezone,
         announcerServerId: r.announcer_server_id != null ? Number(r.announcer_server_id) : null,
@@ -96,7 +95,6 @@ seeding.patch(
       if (body.enabled !== undefined) sets.push(Prisma.sql`enabled = ${body.enabled ? 1 : 0}`);
       if (body.roleIds !== undefined) sets.push(Prisma.sql`role_ids = ${roleIdsJson}`);
       if (body.seedThreshold !== undefined) sets.push(Prisma.sql`seed_threshold = ${body.seedThreshold}`);
-      if (body.resetThreshold !== undefined) sets.push(Prisma.sql`reset_threshold = ${body.resetThreshold}`);
       if (body.dailyTime !== undefined) sets.push(Prisma.sql`daily_time = ${body.dailyTime}`);
       if (body.timezone !== undefined) sets.push(Prisma.sql`timezone = ${body.timezone}`);
       if (body.announcerServerId !== undefined) sets.push(Prisma.sql`announcer_server_id = ${body.announcerServerId}`);

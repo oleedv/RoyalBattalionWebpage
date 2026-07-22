@@ -236,19 +236,6 @@ export function SeedingAdmin({ apiToken }: Props) {
                 />
               </div>
 
-              {/* Reset Threshold */}
-              <div>
-                <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Reset Threshold</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={editConfig.resetThreshold}
-                  onChange={(e) => setEditConfig({ ...editConfig, resetThreshold: Number(e.target.value) })}
-                  className="w-full rounded-sm border border-border bg-bg-tertiary/50 px-3 py-2 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
-                />
-              </div>
-
               {/* Daily Time */}
               <div>
                 <label className="mb-1 block text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Daily Time</label>

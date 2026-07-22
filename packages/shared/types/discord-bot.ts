@@ -11,7 +11,6 @@ export interface SeedingConfig {
   channelId: string | null;
   roleIds: string[];
   seedThreshold: number;
-  resetThreshold: number;
   dailyTime: string | null;
   timezone: string | null;
   announcerServerId: number | null;

@@ -21,6 +21,7 @@ export const PERMISSIONS = [
   "view:tickets:whitelist",
   "view:audit-logs",
   "view:seeding-tracker",
+  "view:api-docs",
   "manage:clan-move",
   "manage:randomize",
   "manage:balance-teams",

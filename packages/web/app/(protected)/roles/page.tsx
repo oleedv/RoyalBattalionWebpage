@@ -250,6 +250,18 @@ const PERMISSION_GROUPS: PermGroup[] = [
       },
     ],
   },
+  {
+    id: "api-docs",
+    label: "API Docs",
+    description: "Interactive OpenAPI / Swagger documentation",
+    entries: [
+      {
+        perm: "view:api-docs",
+        label: "View API Docs",
+        description: "Access the Swagger UI at /api-docs",
+      },
+    ],
+  },
 ];
 
 // Compile-time coverage: ensure every assignable permission is in a group

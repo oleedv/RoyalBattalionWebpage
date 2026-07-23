@@ -9,7 +9,7 @@ const SwaggerUI = dynamic(() => import("swagger-ui-react"), { ssr: false });
 export default function ApiDocsPage() {
   const { hasPermission } = usePermissions();
 
-  if (!hasPermission("developer")) {
+  if (!hasPermission("view:api-docs")) {
     return <div className="text-danger">Insufficient permissions.</div>;
   }
 

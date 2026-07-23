@@ -130,7 +130,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "API Docs",
         href: "/api-docs",
         icon: FileCode2,
-        requiredPermissions: ["developer"],
+        requiredPermissions: ["view:api-docs"],
       },
     ],
   },

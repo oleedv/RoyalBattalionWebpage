@@ -72,7 +72,7 @@ The permissions model is deliberately flat:
 - `DiscordRole` rows own sets of permissions via `RolePermission`. Roles are synced from Discord; permission assignment is editable in the Roles admin page.
 - A `User` inherits the union of permissions from their `UserRole` links. `authMiddleware` loads them on every request; `requirePermission("manage:whitelist")` gates each route.
 
-The 26 permissions currently in use:
+The 28 permissions currently in use:
 
 ```
 view:whitelist            manage:whitelist
@@ -84,8 +84,9 @@ view:live-server          manage:live-server
 manage:whitelist-sync     view:discord-bot          manage:discord-bot
 view:tickets:normal       view:tickets:community_officer
 view:tickets:admin_officer view:tickets:comp_team    view:tickets:whitelist
-view:audit-logs           view:seeding-tracker
+view:audit-logs           view:seeding-tracker       view:api-docs
 manage:clan-move          manage:randomize
+manage:balance-teams      manage:rcon-console
 developer
 ```
 

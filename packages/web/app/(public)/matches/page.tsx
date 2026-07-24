@@ -98,16 +98,42 @@ function MapImg({ urls, alt, className }: { urls: string[]; alt: string; classNa
 }
 
 function PlayerTable({ players, teamColor }: { players: MatchPlayer[]; teamColor: string }) {
-  const squads: { name: string; players: MatchPlayer[] }[] = [];
+  // Group by squad display name; order groups by squadId (null/Unassigned last).
+  // Prefer API pre-sort (SL first, kills); re-sort within group for older JSON.
   const squadMap = new Map<string, MatchPlayer[]>();
+  const squadMeta = new Map<string, number | null>();
 
   for (const p of players) {
     if (!squadMap.has(p.squad)) {
       squadMap.set(p.squad, []);
-      squads.push({ name: p.squad, players: squadMap.get(p.squad)! });
+      squadMeta.set(p.squad, p.squadId ?? null);
     }
     squadMap.get(p.squad)!.push(p);
+    const existing = squadMeta.get(p.squad);
+    if ((existing == null || existing === undefined) && p.squadId != null) {
+      squadMeta.set(p.squad, p.squadId);
+    }
   }
+
+  const squads = [...squadMap.entries()]
+    .map(([name, members]) => ({
+      name,
+      players: [...members].sort((a, b) => {
+        if (a.isSquadLeader !== b.isSquadLeader) return a.isSquadLeader ? -1 : 1;
+        if (a.kills !== b.kills) return b.kills - a.kills;
+        return a.name.localeCompare(b.name);
+      }),
+      squadId: squadMeta.get(name) ?? null,
+    }))
+    .sort((a, b) => {
+      const aUn = a.name === "Unassigned" || a.squadId == null;
+      const bUn = b.name === "Unassigned" || b.squadId == null;
+      if (aUn !== bUn) return aUn ? 1 : -1;
+      if (a.squadId != null && b.squadId != null && a.squadId !== b.squadId) {
+        return a.squadId - b.squadId;
+      }
+      return a.name.localeCompare(b.name);
+    });
 
   return (
     <div className="overflow-x-auto">

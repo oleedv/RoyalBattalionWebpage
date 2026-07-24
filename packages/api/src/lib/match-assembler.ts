@@ -1,4 +1,15 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { logger } from "./logger";
+import {
+  buildSquadLookupFromNamedRows,
+  compareMatchPlayers,
+  findOversizedSquads,
+  lookupLastCombatSquad,
+  mergeCreationLookup,
+  noteLastCombatSquad,
+  resolveScoreboardSquad,
+  squadKey,
+} from "./match-squad-utils";
 
 // --- Raw SQL row interfaces ---
 
@@ -55,9 +66,12 @@ interface DeathRow extends RowDataPacket {
   attacker: string | null;
   attackerEosID: string | null;
   attackerName: string | null;
+  attackerSquadID: number | null;
   victim: string | null;
   victimEosID: string | null;
   victimName: string | null;
+  victimSquadID: number | null;
+  time: Date | null;
 }
 
 interface ReviveRow extends RowDataPacket {
@@ -65,6 +79,8 @@ interface ReviveRow extends RowDataPacket {
   reviverEosID: string | null;
   reviverName: string | null;
   reviverTeamID: number;
+  reviverSquadID: number | null;
+  time: Date | null;
 }
 
 interface PeakRow extends RowDataPacket {
@@ -96,6 +112,7 @@ export interface MatchPlayerJson {
   name: string;
   steamId: string;
   squad: string;
+  squadId?: number | null;
   role: string;
   kills: number;
   deaths: number;
@@ -290,11 +307,13 @@ export async function assembleMatchDetail(
     spawns = spawnRows as SpawnRow[];
   }
 
-  // 4. Deaths (always needed for K/D/TK stats)
+  // 4. Deaths (always needed for K/D/TK stats + last combat squad fallback)
   const [deathRows] = await pool.query(
     `SELECT ce.attacker_team_id AS attackerTeamID,
             ce.victim_team_id AS victimTeamID,
-            ce.teamkill, ce.weapon, ce.damage,
+            ce.teamkill, ce.weapon, ce.damage, ce.time,
+            ce.attacker_squad_id AS attackerSquadID,
+            ce.victim_squad_id AS victimSquadID,
             ap.steam_id AS attacker, ap.eos_id AS attackerEosID, ap.name AS attackerName,
             vp.steam_id AS victim, vp.eos_id AS victimEosID, vp.name AS victimName
      FROM squadjs_combat_events ce
@@ -308,7 +327,9 @@ export async function assembleMatchDetail(
   // 5. Revives (always needed)
   const [reviveRows] = await pool.query(
     `SELECT rp.steam_id AS reviver, rp.eos_id AS reviverEosID, rp.name AS reviverName,
-            ce.reviver_team_id AS reviverTeamID
+            ce.reviver_team_id AS reviverTeamID,
+            ce.reviver_squad_id AS reviverSquadID,
+            ce.time
      FROM squadjs_combat_events ce
      LEFT JOIN squadjs_players rp ON ce.reviver_id = rp.id
      WHERE ce.match_id = ? AND ce.event_type = 'revive'`,
@@ -495,6 +516,7 @@ export async function assembleMatchDetail(
     steamId: string;
     teamId: number;
     squad: string;
+    squadId: number | null;
     role: string;
     kills: number;
     deaths: number;
@@ -504,73 +526,88 @@ export async function assembleMatchDetail(
   }
 
   const playerMap = new Map<string, PlayerStats>();
+  // Secondary index: eosID / alternate steam keys → primary map key (for combat stats)
+  const identityToKey = new Map<string, string>();
+
+  function createPlayer(steamId: string, name: string, teamId: number): PlayerStats {
+    const p: PlayerStats = {
+      name,
+      steamId,
+      teamId,
+      squad: "",
+      squadId: null,
+      role: "Rifleman",
+      kills: 0,
+      deaths: 0,
+      revives: 0,
+      teamkills: 0,
+      isSquadLeader: false,
+    };
+    playerMap.set(steamId, p);
+    identityToKey.set(steamId, steamId);
+    return p;
+  }
 
   function getOrCreate(steamId: string, name: string, teamId: number): PlayerStats {
     let p = playerMap.get(steamId);
     if (!p) {
-      p = {
-        name,
-        steamId,
-        teamId,
-        squad: "",
-        role: "Rifleman",
-        kills: 0,
-        deaths: 0,
-        revives: 0,
-        teamkills: 0,
-        isSquadLeader: false,
-      };
-      playerMap.set(steamId, p);
+      p = createPlayer(steamId, name, teamId);
     }
     if (teamId && !p.teamId) p.teamId = teamId;
     return p;
   }
 
-  // Process deaths for kills/deaths/TKs (always runs)
-  for (const d of deaths) {
-    const attackerSteam = d.attacker || d.attackerEosID;
-    const victimSteam = d.victim || d.victimEosID;
-
-    if (attackerSteam) {
-      const attacker = getOrCreate(attackerSteam, d.attackerName, d.attackerTeamID);
-      attacker.kills++;
-      if (d.teamkill) attacker.teamkills++;
-    }
-
-    if (victimSteam) {
-      const victim = getOrCreate(victimSteam, d.victimName, d.victimTeamID);
-      victim.deaths++;
-    }
-  }
-
-  // Process revives (always runs)
-  for (const r of revives) {
-    const reviverSteam = r.reviver || r.reviverEosID;
-    if (reviverSteam) {
-      const reviver = getOrCreate(reviverSteam, r.reviverName, r.reviverTeamID);
-      reviver.revives++;
-    }
-  }
-
-  // Populate team/squad/role from scoreboard or legacy sources
-  if (hasScoreboard) {
-    // Fix for known data gap: scoreboard snapshots sometimes write squad_name/team_name
-    // only for squad leaders (the RCON squad map lookup fails for non-SL rows at
-    // ROUND_ENDED). Build a (teamId, squadId) -> {squadName, teamName} index from
-    // SL rows so we can fill in the blanks for members.
-    const sqKey = (t: number | null, s: number | null) => `${t ?? "?"}-${s ?? "?"}`;
-    const squadLookup = new Map<string, { squadName: string; teamName: string | null }>();
-    for (const sb of scoreboard) {
-      if (sb.squadId && sb.squadName) {
-        const key = sqKey(sb.teamId, sb.squadId);
-        if (!squadLookup.has(key)) {
-          squadLookup.set(key, { squadName: sb.squadName, teamName: sb.teamName });
-        }
+  /** Only update stats for players already on the roster (scoreboard path). */
+  function getExisting(...ids: Array<string | null | undefined>): PlayerStats | undefined {
+    for (const id of ids) {
+      if (!id) continue;
+      const key = identityToKey.get(id) ?? (playerMap.has(id) ? id : undefined);
+      if (key) {
+        const p = playerMap.get(key);
+        if (p) return p;
       }
     }
+    return undefined;
+  }
 
-    // Secondary fallback: squadjs_squad_creations (match-scoped creation records).
-    // Only used for (team, squad_id) combos still missing after SL lookup.
+  // Last non-null combat squad id per identity (for scoreboard rows missing squad_id)
+  const lastCombatSquad = new Map<string, { squadId: number; timeMs: number }>();
+  for (const d of deaths) {
+    noteLastCombatSquad(
+      lastCombatSquad,
+      [d.attacker, d.attackerEosID],
+      d.attackerSquadID,
+      d.time
+    );
+    noteLastCombatSquad(
+      lastCombatSquad,
+      [d.victim, d.victimEosID],
+      d.victimSquadID,
+      d.time
+    );
+  }
+  for (const r of revives) {
+    noteLastCombatSquad(
+      lastCombatSquad,
+      [r.reviver, r.reviverEosID],
+      r.reviverSquadID,
+      r.time
+    );
+  }
+
+  // Populate roster + squad/role from scoreboard or legacy sources
+  if (hasScoreboard) {
+    // Scoreboard-only roster: only players connected at ROUND_ENDED.
+    const squadLookup = buildSquadLookupFromNamedRows(
+      scoreboard.map((sb) => ({
+        teamId: sb.teamId,
+        squadId: sb.squadId,
+        squadName: sb.squadName,
+        teamName: sb.teamName,
+      }))
+    );
+
+    // Secondary fallback: squadjs_squad_creations for (team, squad_id) still missing names.
     const [sqCreationRows] = await pool.query(
       `SELECT squad_id AS squadId, squad_name AS squadName, team_name AS teamName, time
        FROM squadjs_squad_creations
@@ -589,34 +626,117 @@ export async function assembleMatchDetail(
     }
     // Collapse creations to the most recent squad_name per (team, squad_id)
     // (squad ids get reused when an SL disbands and another is created).
-    const latestCreation = new Map<string, { squadName: string; teamName: string }>();
+    const latestCreation: Array<{
+      teamId: number;
+      squadId: number;
+      squadName: string;
+      teamName: string;
+    }> = [];
+    const creationSeen = new Map<string, { teamId: number; squadId: number; squadName: string; teamName: string }>();
     for (const row of sqCreationRows as SqCreationRow[]) {
       const tid = row.teamName ? factionToTeamId.get(row.teamName) : undefined;
       if (!tid || !row.squadId || !row.squadName) continue;
-      latestCreation.set(sqKey(tid, row.squadId), {
+      creationSeen.set(squadKey(tid, row.squadId), {
+        teamId: tid,
+        squadId: row.squadId,
         squadName: row.squadName,
         teamName: row.teamName!,
       });
     }
-    // Scoreboard SL data remains authoritative; fall back to creation data only
-    // for (team, squad_id) combos the scoreboard didn't capture.
-    for (const [key, val] of latestCreation) {
-      if (!squadLookup.has(key)) squadLookup.set(key, val);
-    }
+    for (const val of creationSeen.values()) latestCreation.push(val);
+    mergeCreationLookup(squadLookup, latestCreation);
 
     for (const sb of scoreboard) {
       const steamId = sb.steamID || steamByEos.get(sb.eosID) || sb.eosID;
       const name = sb.playerName || nameByEos.get(sb.eosID) || "Unknown";
-      const p = getOrCreate(steamId, name, sb.teamId);
+      if (playerMap.has(steamId)) {
+        // Dedup scoreboard rows (unique match_id+player_id normally); keep first
+        continue;
+      }
+      const p = createPlayer(steamId, name, sb.teamId ?? 0);
+      if (sb.eosID) identityToKey.set(sb.eosID, steamId);
+      if (sb.steamID) identityToKey.set(sb.steamID, steamId);
 
-      // Scoreboard data is authoritative -- overwrite any prior values
-      p.teamId = sb.teamId;
-      const filled = squadLookup.get(sqKey(sb.teamId, sb.squadId));
-      p.squad = sb.squadName || filled?.squadName || "";
+      const combatSquadId = lookupLastCombatSquad(lastCombatSquad, [
+        steamId,
+        sb.steamID,
+        sb.eosID,
+      ]);
+      const resolved = resolveScoreboardSquad(
+        sb.teamId,
+        sb.squadId,
+        sb.squadName,
+        squadLookup,
+        combatSquadId
+      );
+      p.teamId = sb.teamId ?? 0;
+      p.squad = resolved.squadName;
+      p.squadId = resolved.squadId;
       p.isSquadLeader = !!sb.isLeader;
       p.role = parseScoreboardRole(sb.role);
     }
+
+    // Full-match stats only for final roster players
+    for (const d of deaths) {
+      const attacker = getExisting(d.attacker, d.attackerEosID);
+      if (attacker) {
+        attacker.kills++;
+        if (d.teamkill) attacker.teamkills++;
+      }
+      const victim = getExisting(d.victim, d.victimEosID);
+      if (victim) victim.deaths++;
+    }
+    for (const r of revives) {
+      const reviver = getExisting(r.reviver, r.reviverEosID);
+      if (reviver) reviver.revives++;
+    }
+
+    for (const oversized of findOversizedSquads(playerMap.values(), 9)) {
+      logger.warn("match-assembler", "Scoreboard squad exceeds 9 players (soft check)", {
+        matchId,
+        teamId: oversized.teamId,
+        squadId: oversized.squadId,
+        count: oversized.count,
+      });
+    }
   } else {
+    // Legacy: deaths/revives create the roster
+    for (const d of deaths) {
+      const attackerSteam = d.attacker || d.attackerEosID;
+      const victimSteam = d.victim || d.victimEosID;
+
+      if (attackerSteam) {
+        const attacker = getOrCreate(
+          attackerSteam,
+          d.attackerName || "Unknown",
+          d.attackerTeamID
+        );
+        attacker.kills++;
+        if (d.teamkill) attacker.teamkills++;
+      }
+
+      if (victimSteam) {
+        const victim = getOrCreate(
+          victimSteam,
+          d.victimName || "Unknown",
+          d.victimTeamID
+        );
+        victim.deaths++;
+      }
+    }
+
+    for (const r of revives) {
+      const reviverSteam = r.reviver || r.reviverEosID;
+      if (reviverSteam) {
+        const reviver = getOrCreate(
+          reviverSteam,
+          r.reviverName || "Unknown",
+          r.reviverTeamID
+        );
+        reviver.revives++;
+      }
+    }
+
     // Legacy: use spawns for roles
     for (const s of spawns) {
       const steamId = steamByEos.get(s.eosID) || s.eosID;
@@ -650,34 +770,36 @@ export async function assembleMatchDetail(
       p.squad = sq.squadName;
       p.isSquadLeader = true;
     }
+
+    // Resolve remaining teamId=0 players from deaths data
+    for (const [, p] of playerMap) {
+      if (p.teamId !== 0) continue;
+
+      const asAttacker = deaths.find((d) => d.attacker === p.steamId);
+      if (asAttacker?.attackerTeamID) {
+        p.teamId = asAttacker.attackerTeamID;
+        continue;
+      }
+
+      const asVictim = deaths.find((d) => d.victim === p.steamId);
+      if (asVictim?.victimTeamID) {
+        p.teamId = asVictim.victimTeamID;
+      }
+    }
   }
 
-  // Resolve remaining teamId=0 players from deaths data (always runs)
-  for (const [steamId, p] of playerMap) {
-    if (p.teamId !== 0) continue;
-
-    const asAttacker = deaths.find((d) => d.attacker === steamId);
-    if (asAttacker?.attackerTeamID) {
-      p.teamId = asAttacker.attackerTeamID;
-      continue;
-    }
-
-    const asVictim = deaths.find((d) => d.victim === steamId);
-    if (asVictim?.victimTeamID) {
-      p.teamId = asVictim.victimTeamID;
-      continue;
-    }
-  }
-
-  // Split players into teams
+  // Split players into teams (scoreboard path: squadId order, SL first, kills)
   const allPlayers = Array.from(playerMap.values());
+  const sortFn = hasScoreboard
+    ? compareMatchPlayers
+    : (a: PlayerStats, b: PlayerStats) => b.kills - a.kills;
   const team1Players: MatchPlayerJson[] = allPlayers
     .filter((p) => p.teamId === 1)
-    .sort((a, b) => b.kills - a.kills)
+    .sort(sortFn)
     .map(toPlayerJson);
   const team2Players: MatchPlayerJson[] = allPlayers
     .filter((p) => p.teamId === 2)
-    .sort((a, b) => b.kills - a.kills)
+    .sort(sortFn)
     .map(toPlayerJson);
 
   // Skip matches with no players
@@ -730,6 +852,7 @@ function toPlayerJson(p: {
   name: string;
   steamId: string;
   squad: string;
+  squadId?: number | null;
   role: string;
   kills: number;
   deaths: number;
@@ -741,6 +864,7 @@ function toPlayerJson(p: {
     name: p.name,
     steamId: p.steamId,
     squad: p.squad || "Unassigned",
+    squadId: p.squadId ?? null,
     role: p.role,
     kills: p.kills,
     deaths: p.deaths,

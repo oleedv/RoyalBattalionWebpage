@@ -8,6 +8,8 @@ export interface MatchPlayer {
   name: string;
   steamId: string;
   squad: string;
+  /** End-of-match RCON squad id when known; null for Unassigned. Optional for pre-resync JSON. */
+  squadId?: number | null;
   role: string;
   kills: number;
   deaths: number;

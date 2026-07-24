@@ -2,6 +2,7 @@ import type { Pool, RowDataPacket } from "mysql2/promise";
 import { logger } from "./logger";
 import {
   buildSquadLookupFromNamedRows,
+  coalesceSquadNamesById,
   compareMatchPlayers,
   findOversizedSquads,
   lookupLastCombatSquad,
@@ -44,6 +45,7 @@ interface FactionRow extends RowDataPacket {
 }
 
 interface SquadDetailRow extends RowDataPacket {
+  squadId: number | null;
   squadName: string;
   teamName: string;
   playerEOSID: string;
@@ -286,10 +288,12 @@ export async function assembleMatchDetail(
     factions = (squadRows as FactionRow[]).map((r) => r.teamName);
 
     const [sqDetailRows] = await pool.query(
-      `SELECT sc.squad_name AS squadName, sc.team_name AS teamName, p.eos_id AS playerEOSID
+      `SELECT sc.squad_id AS squadId, sc.squad_name AS squadName,
+              sc.team_name AS teamName, p.eos_id AS playerEOSID
        FROM squadjs_squad_creations sc
        JOIN squadjs_players p ON sc.player_id = p.id
-       WHERE sc.match_id = ?`,
+       WHERE sc.match_id = ?
+       ORDER BY sc.time ASC`,
       [matchId]
     );
     squadDetailRows = sqDetailRows as SquadDetailRow[];
@@ -691,6 +695,8 @@ export async function assembleMatchDetail(
       if (reviver) reviver.revives++;
     }
 
+    coalesceSquadNamesById(playerMap.values());
+
     for (const oversized of findOversizedSquads(playerMap.values(), 9)) {
       logger.warn("match-assembler", "Scoreboard squad exceeds 9 players (soft check)", {
         matchId,
@@ -752,7 +758,29 @@ export async function assembleMatchDetail(
       p.isSquadLeader = p.role === "Squad Leader" || p.role === "SL Crewman";
     }
 
-    // Legacy: use squad creations for squad names
+    // Legacy: squad creations name the creator (SL) and seed (team, squadId) lookup.
+    // Non-SL members usually never appear in creations — fill them from last combat squad_id.
+    const creationLookup = new Map<
+      string,
+      { squadName: string; teamName: string | null; squadId: number }
+    >();
+    // Latest creation wins per (team, squadId) when squad numbers are reused mid-match.
+    for (const sq of squadDetailRows) {
+      let teamId = 0;
+      for (const [tid, faction] of teamFactions.entries()) {
+        if (faction === sq.teamName) {
+          teamId = tid;
+          break;
+        }
+      }
+      if (!teamId || !sq.squadId || !sq.squadName) continue;
+      creationLookup.set(squadKey(teamId, sq.squadId), {
+        squadName: sq.squadName,
+        teamName: sq.teamName,
+        squadId: sq.squadId,
+      });
+    }
+
     for (const sq of squadDetailRows) {
       const eosID = sq.playerEOSID;
       const steamId = steamByEos.get(eosID) || eosID;
@@ -767,7 +795,10 @@ export async function assembleMatchDetail(
       }
 
       const p = getOrCreate(steamId, name, teamId);
-      p.squad = sq.squadName;
+      if (eosID) identityToKey.set(eosID, steamId);
+      identityToKey.set(steamId, steamId);
+      p.squad = sq.squadName || p.squad;
+      if (sq.squadId) p.squadId = sq.squadId;
       p.isSquadLeader = true;
     }
 
@@ -786,13 +817,37 @@ export async function assembleMatchDetail(
         p.teamId = asVictim.victimTeamID;
       }
     }
+
+    // Fill non-SL / unassigned players from last combat squad_id + creation names.
+    // Without a scoreboard snapshot this is the only way members land in squads.
+    const legacyLookup = new Map<string, { squadName: string; teamName: string | null }>();
+    for (const [key, v] of creationLookup) {
+      legacyLookup.set(key, { squadName: v.squadName, teamName: v.teamName });
+    }
+
+    for (const p of playerMap.values()) {
+      const combatSquadId = lookupLastCombatSquad(lastCombatSquad, [p.steamId]);
+      const resolved = resolveScoreboardSquad(
+        p.teamId || null,
+        p.squadId,
+        p.squad || null,
+        legacyLookup,
+        combatSquadId
+      );
+      if (resolved.squadName) {
+        p.squad = resolved.squadName;
+        p.squadId = resolved.squadId;
+      } else if (p.squad && p.squadId == null && combatSquadId != null) {
+        p.squadId = combatSquadId;
+      }
+    }
+
+    coalesceSquadNamesById(playerMap.values());
   }
 
-  // Split players into teams (scoreboard path: squadId order, SL first, kills)
+  // Split players into teams: squadId order, SL first, kills (scoreboard + legacy fill)
   const allPlayers = Array.from(playerMap.values());
-  const sortFn = hasScoreboard
-    ? compareMatchPlayers
-    : (a: PlayerStats, b: PlayerStats) => b.kills - a.kills;
+  const sortFn = compareMatchPlayers;
   const team1Players: MatchPlayerJson[] = allPlayers
     .filter((p) => p.teamId === 1)
     .sort(sortFn)

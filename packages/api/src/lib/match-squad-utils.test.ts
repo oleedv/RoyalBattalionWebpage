@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildSquadLookupFromNamedRows,
+  coalesceSquadNamesById,
   compareMatchPlayers,
   findOversizedSquads,
   lookupLastCombatSquad,
@@ -55,6 +56,13 @@ describe("resolveScoreboardSquad", () => {
     });
   });
 
+  test("attaches combat id when name present but squad_id null", () => {
+    expect(resolveScoreboardSquad(1, null, "Alpha", lookup, 1)).toEqual({
+      squadName: "Alpha",
+      squadId: 1,
+    });
+  });
+
   test("fills name from lookup when squad_id present", () => {
     expect(resolveScoreboardSquad(1, 1, null, lookup, null)).toEqual({
       squadName: "Alpha",
@@ -81,6 +89,19 @@ describe("resolveScoreboardSquad", () => {
       squadName: "Squad 7",
       squadId: 7,
     });
+  });
+});
+
+describe("coalesceSquadNamesById", () => {
+  test("propagates real name over synthetic Squad N for same id", () => {
+    const players = [
+      { teamId: 1, squadId: 1, squad: "Alpha" },
+      { teamId: 1, squadId: 1, squad: "Squad 1" },
+      { teamId: 1, squadId: 2, squad: "Squad 2" },
+      { teamId: 2, squadId: 1, squad: "Bravo" },
+    ];
+    coalesceSquadNamesById(players);
+    expect(players.map((p) => p.squad)).toEqual(["Alpha", "Alpha", "Squad 2", "Bravo"]);
   });
 });
 

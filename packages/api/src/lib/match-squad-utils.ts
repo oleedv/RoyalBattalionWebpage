@@ -58,30 +58,63 @@ export function resolveScoreboardSquad(
   lookup: Map<string, SquadLookupEntry>,
   lastCombatSquadId: number | null | undefined
 ): ResolvedSquad {
+  const combatId =
+    lastCombatSquadId != null && lastCombatSquadId !== 0 ? lastCombatSquadId : null;
+  // Prefer explicit id; otherwise attach last combat id so a named SL and their
+  // members (who only have combat ids) still share a squadId for grouping.
+  const effectiveId =
+    squadId != null && squadId !== 0 ? squadId : combatId;
+
   if (squadName) {
-    return { squadName, squadId: squadId ?? null };
+    return { squadName, squadId: effectiveId };
   }
 
-  if (squadId != null && squadId !== 0) {
-    const filled = lookup.get(squadKey(teamId, squadId));
+  if (effectiveId != null) {
+    const filled = lookup.get(squadKey(teamId, effectiveId));
     if (filled?.squadName) {
-      return { squadName: filled.squadName, squadId };
+      return { squadName: filled.squadName, squadId: effectiveId };
     }
-    // Keep numeric identity even if name unknown — UI can show empty → Unassigned via toPlayerJson
-    // Prefer a synthetic name so members still group together by id.
-    return { squadName: `Squad ${squadId}`, squadId };
-  }
-
-  const combatId = lastCombatSquadId != null && lastCombatSquadId !== 0 ? lastCombatSquadId : null;
-  if (combatId != null) {
-    const filled = lookup.get(squadKey(teamId, combatId));
-    if (filled?.squadName) {
-      return { squadName: filled.squadName, squadId: combatId };
-    }
-    return { squadName: `Squad ${combatId}`, squadId: combatId };
+    // Keep numeric identity even if name unknown — prefer synthetic name so
+    // members still group together by id (UI maps empty → Unassigned).
+    return { squadName: `Squad ${effectiveId}`, squadId: effectiveId };
   }
 
   return { squadName: "", squadId: null };
+}
+
+/**
+ * After per-player resolution, collapse display names so everyone with the same
+ * (teamId, squadId) shares the best known name (prefer non-synthetic).
+ */
+export function coalesceSquadNamesById(
+  players: Iterable<{
+    teamId: number;
+    squadId: number | null | undefined;
+    squad: string;
+  }>
+): void {
+  const bestName = new Map<string, string>();
+  const isSynthetic = (name: string) => /^Squad \d+$/.test(name);
+
+  for (const p of players) {
+    if (p.squadId == null || p.squadId === 0 || !p.squad) continue;
+    const key = squadKey(p.teamId, p.squadId);
+    const prev = bestName.get(key);
+    if (!prev) {
+      bestName.set(key, p.squad);
+      continue;
+    }
+    // Prefer a real name over "Squad N"
+    if (isSynthetic(prev) && !isSynthetic(p.squad)) {
+      bestName.set(key, p.squad);
+    }
+  }
+
+  for (const p of players) {
+    if (p.squadId == null || p.squadId === 0) continue;
+    const name = bestName.get(squadKey(p.teamId, p.squadId));
+    if (name) p.squad = name;
+  }
 }
 
 export interface SortableMatchPlayer {

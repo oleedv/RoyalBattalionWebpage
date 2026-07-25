@@ -14,6 +14,7 @@ import { MapImg, getMapThumbnailUrls } from "./components/map-img";
 import { TeamColumn } from "./components/team-column";
 import { PlayerCard } from "./components/player-card";
 import { LiveServerTabs } from "./components/live-server-tabs";
+import { getFactionFlagUrl } from "@/lib/squad-assets";
 
 const WS_BASE =
   (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001").replace(
@@ -22,19 +23,26 @@ const WS_BASE =
   );
 
 const FACTION_META: Record<string, { name: string; flag: string }> = {
-  USA:    { name: "United States Army",       flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_USA.png" },
-  USMC:   { name: "US Marine Corps",          flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_USMC.png" },
-  RUS:    { name: "Russian Ground Forces",    flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_RUS.png" },
-  GB:     { name: "British Army",             flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_GB.png" },
-  CAF:    { name: "Canadian Armed Forces",    flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_CAF.png" },
-  AUS:    { name: "Australian Defence Force", flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_AUS.png" },
-  MEA:    { name: "Middle Eastern Alliance",  flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_MEA.png" },
-  INS:    { name: "Insurgents",               flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_INS.png" },
-  MIL:    { name: "Irregular Militia",        flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_MIL.png" },
-  PLA:    { name: "People's Liberation Army", flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_PLA.png" },
-  PLANMC: { name: "PLA Naval Marine Corps",   flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_PLANMC.png" },
-  VDV:    { name: "Russian Airborne",         flag: "https://raw.githubusercontent.com/mahtoid/SquadMaps/master/img/icons/flag_VDV.png" },
-  TLF:    { name: "Turkish Land Forces",      flag: "" },
+  USA:    { name: "United States Army",       flag: getFactionFlagUrl("USA")! },
+  USMC:   { name: "US Marine Corps",          flag: getFactionFlagUrl("USMC")! },
+  RUS:    { name: "Russian Ground Forces",    flag: getFactionFlagUrl("RUS")! },
+  RGF:    { name: "Russian Ground Forces",    flag: getFactionFlagUrl("RGF")! },
+  GB:     { name: "British Army",             flag: getFactionFlagUrl("GB")! },
+  BAF:    { name: "British Army",             flag: getFactionFlagUrl("BAF")! },
+  CAF:    { name: "Canadian Armed Forces",    flag: getFactionFlagUrl("CAF")! },
+  AUS:    { name: "Australian Defence Force", flag: getFactionFlagUrl("AUS")! },
+  ADF:    { name: "Australian Defence Force", flag: getFactionFlagUrl("ADF")! },
+  MEA:    { name: "Middle Eastern Alliance",  flag: getFactionFlagUrl("MEA")! },
+  INS:    { name: "Insurgents",               flag: getFactionFlagUrl("INS")! },
+  MEI:    { name: "Middle Eastern Insurgents", flag: getFactionFlagUrl("MEI")! },
+  MIL:    { name: "Irregular Militia",        flag: getFactionFlagUrl("MIL")! },
+  IMF:    { name: "Irregular Militia Forces", flag: getFactionFlagUrl("IMF")! },
+  PLA:    { name: "People's Liberation Army", flag: getFactionFlagUrl("PLA")! },
+  PLANMC: { name: "PLA Naval Marine Corps",   flag: getFactionFlagUrl("PLANMC")! },
+  PLAAGF: { name: "PLA Amphibious Ground Force", flag: getFactionFlagUrl("PLAAGF")! },
+  VDV:    { name: "Russian Airborne",         flag: getFactionFlagUrl("VDV")! },
+  TLF:    { name: "Turkish Land Forces",      flag: getFactionFlagUrl("TLF")! },
+  WPMC:   { name: "Western Private Military Contractors", flag: getFactionFlagUrl("WPMC")! },
 };
 
 function getFaction(players: Player[], serverFaction?: string): { name: string; flag: string } | null {

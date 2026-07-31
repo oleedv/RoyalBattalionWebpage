@@ -3,14 +3,31 @@ import { env } from "./env";
 import { logger } from "./logger";
 
 const REPO = "oleedv/Royal-Battalion-SquadJS";
-const BRANCH = "main";
+/** Branch used for plugin source/descriptions (latest code). */
+const SOURCE_BRANCH = "main";
 
-const CONFIG_FILES: Record<string, string> = {
+export type Environment = "staging" | "production";
+
+/**
+ * Config commits must land on the branch that triggers the matching deploy workflow:
+ * - staging  → main        (Deploy Staging)
+ * - production → production (Deploy Production)
+ *
+ * Writing production config to main previously only redeployed staging.
+ */
+const CONFIG_BRANCHES: Record<Environment, string> = {
+  staging: "main",
+  production: "production",
+};
+
+const CONFIG_FILES: Record<Environment, string> = {
   staging: "config.squadjs-staging.json",
   production: "config.squadjs-production.json",
 };
 
-export type Environment = "staging" | "production";
+function configBranch(env: Environment): string {
+  return CONFIG_BRANCHES[env];
+}
 
 function getToken(): string | null {
   return env.GITHUB_CONFIG_TOKEN || null;
@@ -39,8 +56,9 @@ export async function readSquadJSConfig(
   const filePath = CONFIG_FILES[env];
   if (!filePath) return null;
 
+  const branch = configBranch(env);
   const res = await fetch(
-    `https://api.github.com/repos/${REPO}/contents/${filePath}?ref=${BRANCH}`,
+    `https://api.github.com/repos/${REPO}/contents/${filePath}?ref=${branch}`,
     { headers: headers() }
   );
 
@@ -119,7 +137,7 @@ export async function writeSquadJSConfig(
     message,
     content,
     sha: current.sha,
-    branch: BRANCH,
+    branch: configBranch(env),
   };
 
   // Set commit author to the Discord user who made the change
@@ -172,7 +190,7 @@ async function fetchPluginSources(): Promise<{ name: string; content: string }[]
   if (!token) return [];
 
   const listRes = await fetch(
-    `https://api.github.com/repos/${REPO}/contents/${PLUGINS_DIR}?ref=${BRANCH}`,
+    `https://api.github.com/repos/${REPO}/contents/${PLUGINS_DIR}?ref=${SOURCE_BRANCH}`,
     { headers: headers() }
   );
 

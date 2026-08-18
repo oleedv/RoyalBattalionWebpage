@@ -5,10 +5,10 @@ import {
   searchTickets,
   getTicket,
   getLegacyTicket,
-  resolveDiscordNames,
 } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useDiscordNameMap } from "@/hooks/use-discord-names";
 import { Skeleton, SkeletonRegion, SkeletonList } from "@/components/skeleton";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type {
@@ -593,23 +593,8 @@ export default function TicketsPage() {
   const [legacyDetails, setLegacyDetails] = useState<Record<number, LegacyTicket>>({});
   const reqSeq = useRef(0);
 
-  // Discord ID -> display name map
-  const [nameMap, setNameMap] = useState<Record<string, string>>({});
-
-  const resolveNames = useCallback(async (ids: string[]) => {
-    if (!apiToken) return;
-    const unknown = ids.filter((id) => id && !nameMap[id]);
-    if (unknown.length === 0) return;
-    const res = await resolveDiscordNames(apiToken, [...new Set(unknown)]);
-    if (res.success && res.data) {
-      setNameMap((prev) => ({ ...prev, ...res.data }));
-    }
-  }, [apiToken, nameMap]);
-
-  function displayName(id: string | null): string {
-    if (!id) return "--";
-    return nameMap[id] || id;
-  }
+  const { resolveNames, displayName } = useDiscordNameMap(apiToken);
+  const hasRowsRef = useRef(false);
 
   // Debounce the search box.
   useEffect(() => {
@@ -637,11 +622,13 @@ export default function TicketsPage() {
     });
     if (seq !== reqSeq.current) return; // a newer request superseded this one
     if (res.success && res.data) {
+      setError(null);
       setRows(res.data.items);
       setTotal(res.data.total);
+      hasRowsRef.current = res.data.items.length > 0 || res.data.total > 0;
       const ids = res.data.items.filter((r) => r.kind === "current").map((r) => r.userId);
-      resolveNames(ids);
-    } else {
+      void resolveNames(ids);
+    } else if (!hasRowsRef.current) {
       setError(res.error || "Failed to load tickets");
     }
     setTicketsLoaded(true);
@@ -709,7 +696,7 @@ export default function TicketsPage() {
   const rangeStart = activeTotal === 0 ? 0 : safePage * pageSize + 1;
   const rangeEnd = safePage * pageSize + rows.length;
 
-  if (error) {
+  if (error && rows.length === 0) {
     return <div className="text-danger">{error}</div>;
   }
 

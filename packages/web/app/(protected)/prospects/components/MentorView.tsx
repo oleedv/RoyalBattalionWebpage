@@ -7,9 +7,9 @@ import {
   unpauseProspect,
   extendProspect,
   reassignMentor,
-  resolveDiscordNames,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useDiscordNameMap } from "@/hooks/use-discord-names";
 import { SkeletonList } from "@/components/skeleton";
 import { formatDate } from "@/lib/format";
 import type { MentorGroup } from "shared";
@@ -17,33 +17,21 @@ import type { MentorGroup } from "shared";
 export function MentorView({ apiToken, canManage }: { apiToken: string; canManage: boolean }) {
   const [mentorGroups, setMentorGroups] = useState<MentorGroup[]>([]);
   const [loading, setLoading] = useState(true);
-  const [nameMap, setNameMap] = useState<Record<string, string>>({});
+  const { resolveNames, displayName } = useDiscordNameMap(apiToken);
   const [actionLoading, setActionLoading] = useState(false);
   const [extendDays, setExtendDays] = useState<Record<number, number>>({});
   const [reassigning, setReassigning] = useState<number | null>(null);
   const [selectedMentor, setSelectedMentor] = useState("");
-
-  async function resolveNames(ids: string[]) {
-    const unknown = ids.filter((id) => id && !nameMap[id]);
-    if (unknown.length === 0) return;
-    const res = await resolveDiscordNames(apiToken, [...new Set(unknown)]);
-    if (res.success && res.data) setNameMap((prev) => ({ ...prev, ...res.data }));
-  }
-
-  function displayName(id: string | null): string {
-    if (!id) return "--";
-    return nameMap[id] || id;
-  }
 
   const refresh = useCallback(async () => {
     const res = await getMentorGroups(apiToken);
     if (res.success && res.data) {
       setMentorGroups(res.data);
       const ids = res.data.flatMap((g) => [g.mentorId, ...g.prospects.map((p) => p.userId)].filter(Boolean) as string[]);
-      resolveNames(ids);
+      void resolveNames(ids);
     }
     setLoading(false);
-  }, [apiToken]);
+  }, [apiToken, resolveNames]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useAutoRefresh(refresh, 20_000, !actionLoading);

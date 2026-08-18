@@ -1,15 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getProspectCooldowns,
   createProspectCooldown,
   updateProspectCooldown,
   deleteProspectCooldown,
   getProspectConfig,
-  resolveDiscordNames,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useDiscordNameMap } from "@/hooks/use-discord-names";
 import { formatDateTime } from "@/lib/format";
 import { SkeletonList } from "@/components/skeleton";
 import type { ProspectCooldown } from "shared";
@@ -34,7 +34,8 @@ export function CooldownList({ apiToken, canManage }: { apiToken: string; canMan
   const [rows, setRows] = useState<ProspectCooldown[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [nameMap, setNameMap] = useState<Record<string, string>>({});
+  const { nameMap, resolveNames } = useDiscordNameMap(apiToken);
+  const hasRowsRef = useRef(false);
   const [defaultDays, setDefaultDays] = useState(28);
   const [showForm, setShowForm] = useState(false);
   const [formUserId, setFormUserId] = useState("");
@@ -45,22 +46,17 @@ export function CooldownList({ apiToken, canManage }: { apiToken: string; canMan
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDays, setEditDays] = useState("28");
 
-  async function resolveNames(ids: string[]) {
-    const unknown = ids.filter((id) => id && !nameMap[id]);
-    if (unknown.length === 0) return;
-    const res = await resolveDiscordNames(apiToken, [...new Set(unknown)]);
-    if (res.success && res.data) setNameMap((prev) => ({ ...prev, ...res.data }));
-  }
-
   const load = useCallback(async () => {
     const [listRes, cfgRes] = await Promise.all([
       getProspectCooldowns(apiToken),
       getProspectConfig(apiToken),
     ]);
     if (listRes.success && listRes.data) {
+      setError(null);
       setRows(listRes.data);
-      resolveNames(listRes.data.flatMap((r) => [r.userId, r.createdBy]));
-    } else {
+      hasRowsRef.current = listRes.data.length > 0;
+      void resolveNames(listRes.data.flatMap((r) => [r.userId, r.createdBy]));
+    } else if (!hasRowsRef.current) {
       setError(listRes.error || "Failed to load cooldowns");
     }
     if (cfgRes.success && cfgRes.data) {
@@ -68,7 +64,7 @@ export function CooldownList({ apiToken, canManage }: { apiToken: string; canMan
       setFormDays(String(cfgRes.data.cooldownDays));
     }
     setLoading(false);
-  }, [apiToken]);
+  }, [apiToken, resolveNames]);
 
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(load, 20_000, !showForm && editingId === null);
@@ -115,7 +111,7 @@ export function CooldownList({ apiToken, canManage }: { apiToken: string; canMan
   }
 
   if (loading && rows.length === 0) return <SkeletonList rows={3} />;
-  if (error) return <div className="text-danger">{error}</div>;
+  if (error && rows.length === 0) return <div className="text-danger">{error}</div>;
 
   return (
     <div className="facet-border rounded-sm bg-bg-card p-5">

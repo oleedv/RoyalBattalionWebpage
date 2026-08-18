@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { getProspects, getProspect, resolveDiscordNames } from "@/lib/api-client";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { getProspects, getProspect } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useDiscordNameMap } from "@/hooks/use-discord-names";
 import { Skeleton, SkeletonList, SkeletonRegion } from "@/components/skeleton";
 import { formatDate, formatDateTime } from "@/lib/format";
 import type { Prospect } from "shared";
@@ -322,27 +323,18 @@ export function ApplicationsList({ apiToken }: { apiToken: string }) {
   const [page, setPage] = useState(0);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [details, setDetails] = useState<Record<number, Prospect>>({});
-  const [nameMap, setNameMap] = useState<Record<string, string>>({});
-
-  const resolveNames = useCallback(async (ids: string[]) => {
-    const unknown = ids.filter((id) => id && !nameMap[id]);
-    if (unknown.length === 0) return;
-    const res = await resolveDiscordNames(apiToken, [...new Set(unknown)]);
-    if (res.success && res.data) setNameMap((prev) => ({ ...prev, ...res.data }));
-  }, [apiToken, nameMap]);
-
-  function displayName(id: string | null): string {
-    if (!id) return "--";
-    return nameMap[id] || id;
-  }
+  const { resolveNames, displayName } = useDiscordNameMap(apiToken);
+  const hasRowsRef = useRef(false);
 
   const load = useCallback(async () => {
     const res = await getProspects(apiToken);
     if (res.success && res.data) {
+      setError(null);
       setProspects(res.data);
+      hasRowsRef.current = res.data.length > 0;
       const ids = res.data.flatMap((p) => [p.userId, p.closedBy, p.mentorId].filter(Boolean) as string[]);
-      resolveNames(ids);
-    } else {
+      void resolveNames(ids);
+    } else if (!hasRowsRef.current) {
       setError(res.error || "Failed to load prospects");
     }
     setLoaded(true);
@@ -389,7 +381,7 @@ export function ApplicationsList({ apiToken }: { apiToken: string }) {
   const rangeStart = filtered.length === 0 ? 0 : safePage * pageSize + 1;
   const rangeEnd = Math.min((safePage + 1) * pageSize, filtered.length);
 
-  if (error) return <div className="text-danger">{error}</div>;
+  if (error && prospects.length === 0) return <div className="text-danger">{error}</div>;
 
   return (
     <div>

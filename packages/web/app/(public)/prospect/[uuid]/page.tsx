@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { NavAuthButton } from "@/components/nav-auth-button";
 import { getProspectByUuid } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/format";
 import { ProspectForumEmbed } from "./ProspectForumEmbed";
 import type { Prospect, ProspectForumMessage } from "shared";
 
@@ -99,6 +100,40 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function getDenialEvent(prospect: Prospect) {
+  const events = prospect.events ?? [];
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].eventType === "denied") return events[i];
+  }
+  return null;
+}
+
+function DenialBanner({ prospect }: { prospect: Prospect }) {
+  if (prospect.status !== "denied") return null;
+
+  const deniedEvent = getDenialEvent(prospect);
+  const reason = deniedEvent?.detail?.trim() || null;
+
+  return (
+    <div
+      role="status"
+      className="mb-6 rounded-sm border border-danger/40 bg-danger/10 p-5"
+    >
+      <div className="mb-2 text-[10px] font-semibold tracking-[0.15em] text-danger uppercase">
+        Denial reason
+      </div>
+      <p className="whitespace-pre-wrap text-base font-medium text-text-primary">
+        {reason ?? "No reason was recorded."}
+      </p>
+      {deniedEvent?.createdAt && (
+        <p className="mt-2 text-xs text-text-muted">
+          Denied {formatDateTime(deniedEvent.createdAt)}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function ProspectPage({ params }: { params: Promise<{ uuid: string }> }) {
   const { uuid } = use(params);
   const [prospect, setProspect] = useState<Prospect | null>(null);
@@ -183,6 +218,8 @@ export default function ProspectPage({ params }: { params: Promise<{ uuid: strin
               </div>
             </div>
 
+            <DenialBanner prospect={prospect} />
+
             {/* Application info */}
             <div className="facet-border mb-6 rounded-sm bg-bg-card p-5">
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -230,12 +267,12 @@ export default function ProspectPage({ params }: { params: Promise<{ uuid: strin
                 )}
                 <div>
                   <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Created</span>
-                  <div className="mt-0.5 text-sm text-text-primary">{new Date(prospect.createdAt).toLocaleString()}</div>
+                  <div className="mt-0.5 text-sm text-text-primary">{formatDateTime(prospect.createdAt)}</div>
                 </div>
                 {prospect.closedAt && (
                   <div>
                     <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Closed</span>
-                    <div className="mt-0.5 text-sm text-text-primary">{new Date(prospect.closedAt).toLocaleString()}</div>
+                    <div className="mt-0.5 text-sm text-text-primary">{formatDateTime(prospect.closedAt)}</div>
                   </div>
                 )}
               </div>
@@ -302,7 +339,7 @@ export default function ProspectPage({ params }: { params: Promise<{ uuid: strin
                           </span>
                         )}
                         <span className="text-xs text-text-muted">
-                          {new Date(msg.createdAt).toLocaleString()}
+                          {formatDateTime(msg.createdAt)}
                         </span>
                       </div>
                       {msg.content && (
@@ -331,25 +368,30 @@ export default function ProspectPage({ params }: { params: Promise<{ uuid: strin
               <div className="facet-border mb-6 rounded-sm bg-bg-card p-5">
                 <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Timeline</h2>
                 <div className="space-y-3">
-                  {prospect.events.map((event) => (
-                    <div key={event.id} className="flex items-start gap-3">
-                      <div className="mt-1.5 h-2 w-2 rounded-full bg-accent/50" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-text-primary capitalize">
-                            {event.eventType.replace(/_/g, " ")}
+                  {prospect.events.map((event) => {
+                    const isDenied = event.eventType === "denied";
+                    return (
+                      <div key={event.id} className="flex items-start gap-3">
+                        <div className={`mt-1.5 h-2 w-2 rounded-full ${isDenied ? "bg-danger" : "bg-accent/50"}`} />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-medium capitalize ${isDenied ? "text-danger" : "text-text-primary"}`}>
+                              {event.eventType.replace(/_/g, " ")}
+                            </span>
+                            <span className="text-xs text-text-muted">by {event.actorId}</span>
+                          </div>
+                          {event.detail && (
+                            <p className={isDenied ? "text-sm font-medium text-text-primary" : "text-xs text-text-secondary"}>
+                              {event.detail}
+                            </p>
+                          )}
+                          <span className="text-xs text-text-muted">
+                            {formatDateTime(event.createdAt)}
                           </span>
-                          <span className="text-xs text-text-muted">by {event.actorId}</span>
                         </div>
-                        {event.detail && (
-                          <p className="text-xs text-text-secondary">{event.detail}</p>
-                        )}
-                        <span className="text-xs text-text-muted">
-                          {new Date(event.createdAt).toLocaleString()}
-                        </span>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -378,7 +420,7 @@ export default function ProspectPage({ params }: { params: Promise<{ uuid: strin
                           </span>
                         )}
                         <span className="text-xs text-text-muted">
-                          {new Date(msg.createdAt).toLocaleString()}
+                          {formatDateTime(msg.createdAt)}
                         </span>
                       </div>
                       {msg.content && (

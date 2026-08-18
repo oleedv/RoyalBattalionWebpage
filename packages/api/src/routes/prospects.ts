@@ -1,6 +1,9 @@
 import { Hono } from "hono";
 import { Prisma } from "../generated/prisma/client";
-import type { Prospect, DiscordEmbed } from "shared";
+import type { Prospect, ProspectEvent, DiscordEmbed } from "shared";
+import prisma from "../lib/db";
+import { env } from "../lib/env";
+import { fetchDiscordDisplayName } from "../lib/discord";
 import getSecretaryDb, { resetSecretaryDb } from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
@@ -10,6 +13,84 @@ import { success, fail } from "../lib/crud-helpers";
 import { logger } from "../lib/logger";
 
 const PROSPECTS_CAP = 500;
+
+function deniedById(closedBy: string | null, eventRows: { event_type: string; actor_id: string | null }[]): string | null {
+  for (let i = eventRows.length - 1; i >= 0; i--) {
+    if (eventRows[i].event_type === "denied" && eventRows[i].actor_id) {
+      return eventRows[i].actor_id;
+    }
+  }
+  return closedBy;
+}
+
+async function resolveNameMap(
+  discordIds: string[],
+  localFallbacks: Record<string, string> = {},
+): Promise<Record<string, string>> {
+  const unique = [...new Set(discordIds.filter(Boolean))];
+  const map: Record<string, string> = {};
+  if (unique.length === 0) return map;
+
+  try {
+    const found = await prisma.user.findMany({
+      where: { discordId: { in: unique } },
+      select: { discordId: true, displayName: true, discordName: true },
+    });
+    for (const u of found) {
+      const name = u.displayName?.trim() || u.discordName?.trim();
+      if (name) map[u.discordId] = name;
+    }
+  } catch (err) {
+    logger.warn("discord-bot", "Failed to resolve Discord names from users table", err);
+  }
+
+  for (const [id, name] of Object.entries(localFallbacks)) {
+    if (id && name && !map[id]) map[id] = name;
+  }
+
+  const missing = unique.filter((id) => !map[id]);
+  const botToken = env.DISCORD_BOT_TOKEN;
+  if (!botToken || missing.length === 0) return map;
+
+  await Promise.all(missing.map(async (id) => {
+    try {
+      const name = await fetchDiscordDisplayName(botToken, id, env.DISCORD_GUILD_ID);
+      if (name) map[id] = name;
+    } catch (err) {
+      logger.warn("discord-bot", `Failed to resolve Discord name for ${id}`, err);
+    }
+  }));
+
+  return map;
+}
+
+function localNameFallbacks(
+  userId: string | null,
+  alias: string | null,
+  messageRows: { author_id?: string | null; author_tag?: string | null }[],
+  forumRows: { author_id?: string | null; author_tag?: string | null }[] = [],
+): Record<string, string> {
+  const fallbacks: Record<string, string> = {};
+  if (userId && alias) fallbacks[userId] = alias;
+  for (const row of [...messageRows, ...forumRows]) {
+    if (row.author_id && row.author_tag && !fallbacks[row.author_id]) {
+      fallbacks[row.author_id] = row.author_tag;
+    }
+  }
+  return fallbacks;
+}
+
+function mapEvents(eventRows: any[], nameMap: Record<string, string>): ProspectEvent[] {
+  return eventRows.map((e) => ({
+    id: e.id,
+    prospectId: e.prospect_id,
+    eventType: e.event_type,
+    actorId: e.actor_id,
+    actorName: nameMap[e.actor_id] ?? null,
+    detail: e.detail,
+    createdAt: new Date(e.created_at).toISOString(),
+  }));
+}
 
 function parseEmbeds(raw: unknown): DiscordEmbed[] | null {
   if (!raw) return null;
@@ -172,6 +253,13 @@ prospects.get(
        FROM prospect_votes WHERE prospect_id = ${id} ORDER BY created_at ASC`
     );
 
+    const nameMap = await resolveNameMap(
+      [r.closed_by, r.mentor_id, r.user_id, ...eventRows.map((e: any) => e.actor_id)],
+      localNameFallbacks(r.user_id, r.alias, messageRows),
+    );
+    const closerId = deniedById(r.closed_by, eventRows);
+    const closedByName = (closerId && nameMap[closerId]) || nameMap[r.closed_by] || null;
+
     const prospect: Prospect = {
       id: r.id,
       uuid: r.uuid,
@@ -194,14 +282,8 @@ prospects.get(
       createdAt: new Date(r.created_at).toISOString(),
       closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
       closedBy: r.closed_by,
-      events: eventRows.map((e) => ({
-        id: e.id,
-        prospectId: e.prospect_id,
-        eventType: e.event_type,
-        actorId: e.actor_id,
-        detail: e.detail,
-        createdAt: new Date(e.created_at).toISOString(),
-      })),
+      closedByName,
+      events: mapEvents(eventRows, nameMap),
       messages: messageRows.map((m) => ({
         id: m.id,
         prospectId: m.prospect_id,
@@ -268,6 +350,13 @@ prospects.get("/by-uuid/:uuid", rateLimit(30), async (c) => {
      ORDER BY created_at ASC`
   );
 
+  const nameMap = await resolveNameMap(
+    [r.closed_by, r.mentor_id, r.user_id, ...eventRows.map((e: any) => e.actor_id)],
+    localNameFallbacks(r.user_id, r.alias, messageRows, forumRows),
+  );
+  const closerId = deniedById(r.closed_by, eventRows);
+  const closedByName = (closerId && nameMap[closerId]) || nameMap[r.closed_by] || null;
+
   const prospect: Prospect = {
     id: r.id,
     uuid: r.uuid,
@@ -290,14 +379,8 @@ prospects.get("/by-uuid/:uuid", rateLimit(30), async (c) => {
     createdAt: new Date(r.created_at).toISOString(),
     closedAt: r.closed_at ? new Date(r.closed_at).toISOString() : null,
     closedBy: r.closed_by,
-    events: eventRows.map((e) => ({
-      id: e.id,
-      prospectId: e.prospect_id,
-      eventType: e.event_type,
-      actorId: e.actor_id,
-      detail: e.detail,
-      createdAt: new Date(e.created_at).toISOString(),
-    })),
+    closedByName,
+    events: mapEvents(eventRows, nameMap),
     messages: messageRows.map((m) => ({
       id: m.id,
       prospectId: m.prospect_id,

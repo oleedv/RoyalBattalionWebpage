@@ -82,6 +82,34 @@ interface GuildMember {
   roles: string[];
 }
 
+/** Server nick, then global name, then username. Null if Discord cannot resolve the user. */
+export async function fetchDiscordDisplayName(
+  botToken: string,
+  userId: string,
+  guildId?: string,
+): Promise<string | null> {
+  if (guildId) {
+    const memberRes = await discordFetch(`${DISCORD_API}/guilds/${guildId}/members/${userId}`, {
+      Authorization: `Bot ${botToken}`,
+    });
+    if (memberRes.ok) {
+      const data = (await memberRes.json()) as {
+        nick?: string | null;
+        user?: { username?: string; global_name?: string | null };
+      };
+      const name = data.nick?.trim() || data.user?.global_name?.trim() || data.user?.username?.trim();
+      if (name) return name;
+    }
+  }
+
+  const userRes = await discordFetch(`${DISCORD_API}/users/${userId}`, {
+    Authorization: `Bot ${botToken}`,
+  });
+  if (!userRes.ok) return null;
+  const user = (await userRes.json()) as { username?: string; global_name?: string | null };
+  return user.global_name?.trim() || user.username?.trim() || null;
+}
+
 export async function fetchAllGuildMembers(
   botToken: string,
   guildId: string

@@ -54,6 +54,8 @@ export interface Prospect {
   createdAt: string;
   closedAt: string | null;
   closedBy: string | null;
+  /** Display name for `closedBy` when it could be resolved. */
+  closedByName?: string | null;
   events?: ProspectEvent[];
   messages?: ProspectMessage[];
   votes?: ProspectVote[];
@@ -65,6 +67,8 @@ export interface ProspectEvent {
   prospectId: number;
   eventType: string;
   actorId: string;
+  /** Display name for `actorId` when it could be resolved. */
+  actorName?: string | null;
   detail: string | null;
   createdAt: string;
 }

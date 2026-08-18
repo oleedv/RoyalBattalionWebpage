@@ -113,6 +113,13 @@ function DenialBanner({ prospect }: { prospect: Prospect }) {
 
   const deniedEvent = getDenialEvent(prospect);
   const reason = deniedEvent?.detail?.trim() || null;
+  const deniedBy =
+    prospect.closedByName?.trim()
+    || deniedEvent?.actorName?.trim()
+    || deniedEvent?.actorId
+    || prospect.closedBy
+    || "Unknown staff member";
+  const deniedAt = deniedEvent?.createdAt || prospect.closedAt;
 
   return (
     <div
@@ -125,11 +132,22 @@ function DenialBanner({ prospect }: { prospect: Prospect }) {
       <p className="whitespace-pre-wrap text-base font-medium text-text-primary">
         {reason ?? "No reason was recorded."}
       </p>
-      {deniedEvent?.createdAt && (
-        <p className="mt-2 text-xs text-text-muted">
-          Denied {formatDateTime(deniedEvent.createdAt)}
-        </p>
-      )}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div>
+          <div className="text-[10px] font-semibold tracking-[0.15em] text-danger/80 uppercase">
+            Denied by
+          </div>
+          <div className="mt-0.5 text-sm font-semibold text-text-primary">{deniedBy}</div>
+        </div>
+        {deniedAt && (
+          <div>
+            <div className="text-[10px] font-semibold tracking-[0.15em] text-danger/80 uppercase">
+              Date
+            </div>
+            <div className="mt-0.5 text-sm text-text-primary">{formatDateTime(deniedAt)}</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -370,6 +388,7 @@ export default function ProspectPage({ params }: { params: Promise<{ uuid: strin
                 <div className="space-y-3">
                   {prospect.events.map((event) => {
                     const isDenied = event.eventType === "denied";
+                    const actorLabel = event.actorName || event.actorId;
                     return (
                       <div key={event.id} className="flex items-start gap-3">
                         <div className={`mt-1.5 h-2 w-2 rounded-full ${isDenied ? "bg-danger" : "bg-accent/50"}`} />
@@ -378,7 +397,7 @@ export default function ProspectPage({ params }: { params: Promise<{ uuid: strin
                             <span className={`text-sm font-medium capitalize ${isDenied ? "text-danger" : "text-text-primary"}`}>
                               {event.eventType.replace(/_/g, " ")}
                             </span>
-                            <span className="text-xs text-text-muted">by {event.actorId}</span>
+                            <span className="text-xs text-text-muted">by {actorLabel}</span>
                           </div>
                           {event.detail && (
                             <p className={isDenied ? "text-sm font-medium text-text-primary" : "text-xs text-text-secondary"}>

@@ -13,11 +13,12 @@ import {
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { Skeleton, SkeletonList } from "@/components/skeleton";
+import { formatDate, formatDateTime } from "@/lib/format";
 import type { Prospect } from "shared";
 import type { MentorGroup } from "shared";
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString();
+  return formatDateTime(iso);
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -396,7 +397,7 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                               <span className="h-1 w-1 rounded-full bg-text-muted" />
                               <span>{p.squadHours}h</span>
                               <span className="h-1 w-1 rounded-full bg-text-muted" />
-                              <span>{new Date(p.createdAt).toLocaleDateString()}</span>
+                              <span>{formatDate(p.createdAt)}</span>
                             </div>
                           </div>
                         </div>
@@ -529,7 +530,7 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                             <span className="h-1 w-1 rounded-full bg-text-muted" />
                             <span>{p.squadHours}h in Squad</span>
                             <span className="h-1 w-1 rounded-full bg-text-muted" />
-                            <span>{new Date(p.createdAt).toLocaleDateString()}</span>
+                            <span>{formatDate(p.createdAt)}</span>
                           </div>
                         </div>
                       </div>
@@ -663,7 +664,7 @@ export default function ProspectsTab({ apiToken, canManage }: { apiToken: string
                               <div className="flex-1">
                                 <div className="flex items-center gap-2">
                                   <span className="text-sm font-medium capitalize text-text-primary">{event.eventType.replace(/_/g, " ")}</span>
-                                  <span className="text-xs text-text-muted">by {displayName(event.actorId)}</span>
+                                  <span className="text-xs text-text-muted">by {event.actorName || displayName(event.actorId)}</span>
                                 </div>
                                 {event.detail && <p className="text-xs text-text-secondary">{event.detail}</p>}
                                 <span className="text-xs text-text-muted">{fmtDate(event.createdAt)}</span>

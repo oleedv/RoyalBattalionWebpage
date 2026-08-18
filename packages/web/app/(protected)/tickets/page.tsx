@@ -12,6 +12,7 @@ import {
 import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { Skeleton, SkeletonRegion, SkeletonList } from "@/components/skeleton";
+import { formatDate, formatDateTime } from "@/lib/format";
 import type {
   Ticket,
   LegacyTicket,
@@ -24,22 +25,18 @@ import type {
 
 type Tab = "tickets" | "prospects";
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString();
-}
-
 function exportTicketText(ticket: Ticket) {
   const lines: string[] = [];
   lines.push(`Ticket #${ticket.id} [${ticket.status}] - ${ticket.tier}`);
   lines.push(`User: ${ticket.userId}`);
-  lines.push(`Created: ${fmtDate(ticket.createdAt)}`);
-  if (ticket.closedAt) lines.push(`Closed: ${fmtDate(ticket.closedAt)}${ticket.closedBy ? ` by ${ticket.closedBy}` : ""}`);
+  lines.push(`Created: ${formatDateTime(ticket.createdAt)}`);
+  if (ticket.closedAt) lines.push(`Closed: ${formatDateTime(ticket.closedAt)}${ticket.closedBy ? ` by ${ticket.closedBy}` : ""}`);
   lines.push(`UUID: ${ticket.uuid}`);
 
   if (ticket.events?.length) {
     lines.push("", "--- Timeline ---");
     for (const e of ticket.events) {
-      lines.push(`[${fmtDate(e.createdAt)}] ${e.eventType} by ${e.actorId}${e.detail ? ` -- ${e.detail}` : ""}`);
+      lines.push(`[${formatDateTime(e.createdAt)}] ${e.eventType} by ${e.actorId}${e.detail ? ` -- ${e.detail}` : ""}`);
     }
   }
 
@@ -47,7 +44,7 @@ function exportTicketText(ticket: Ticket) {
     lines.push("", "--- Messages ---");
     for (const m of ticket.messages) {
       const staff = m.isStaff ? " [STAFF]" : "";
-      lines.push(`[${fmtDate(m.createdAt)}] ${m.authorTag}${staff}: ${m.content || ""}`);
+      lines.push(`[${formatDateTime(m.createdAt)}] ${m.authorTag}${staff}: ${m.content || ""}`);
     }
   }
 
@@ -59,14 +56,14 @@ function exportLegacyTicketText(ticket: LegacyTicket) {
   lines.push(`Legacy Ticket #${ticket.id} [closed]`);
   lines.push(`User: ${ticket.nickname || ticket.username} (${ticket.userId})`);
   if (ticket.threadNumber) lines.push(`Thread: #${ticket.threadNumber}`);
-  lines.push(`Started: ${fmtDate(ticket.startedAt)}`);
-  if (ticket.closedAt) lines.push(`Closed: ${fmtDate(ticket.closedAt)}`);
+  lines.push(`Started: ${formatDateTime(ticket.startedAt)}`);
+  if (ticket.closedAt) lines.push(`Closed: ${formatDateTime(ticket.closedAt)}`);
   lines.push(`UUID: ${ticket.uuid}`);
 
   if (ticket.messages?.length) {
     lines.push("", "--- Messages ---");
     for (const m of ticket.messages) {
-      lines.push(`[${fmtDate(m.createdAt)}] [${m.type}] ${m.author || "System"}: ${m.content || ""}`);
+      lines.push(`[${formatDateTime(m.createdAt)}] [${m.type}] ${m.author || "System"}: ${m.content || ""}`);
     }
   }
 
@@ -86,22 +83,22 @@ function exportProspectText(prospect: Prospect) {
   lines.push(`Competitive: ${prospect.competitive}`);
   lines.push(`Steam ID: ${prospect.steamId}`);
   if (prospect.mentorId) lines.push(`Mentor: ${prospect.mentorId}`);
-  lines.push(`Created: ${fmtDate(prospect.createdAt)}`);
-  if (prospect.closedAt) lines.push(`Closed: ${fmtDate(prospect.closedAt)}${prospect.closedBy ? ` by ${prospect.closedBy}` : ""}`);
+  lines.push(`Created: ${formatDateTime(prospect.createdAt)}`);
+  if (prospect.closedAt) lines.push(`Closed: ${formatDateTime(prospect.closedAt)}${prospect.closedBy ? ` by ${prospect.closedBy}` : ""}`);
   lines.push(`UUID: ${prospect.uuid}`);
   lines.push("", `--- Why Royal Battalion? ---`, prospect.whyRb);
 
   if (prospect.votes?.length) {
     lines.push("", "--- Votes ---");
     for (const v of prospect.votes) {
-      lines.push(`[${fmtDate(v.createdAt)}] ${v.voterTag || v.voterId}: ${v.vote}${v.reason ? ` -- ${v.reason}` : ""}`);
+      lines.push(`[${formatDateTime(v.createdAt)}] ${v.voterTag || v.voterId}: ${v.vote}${v.reason ? ` -- ${v.reason}` : ""}`);
     }
   }
 
   if (prospect.events?.length) {
     lines.push("", "--- Timeline ---");
     for (const e of prospect.events) {
-      lines.push(`[${fmtDate(e.createdAt)}] ${e.eventType} by ${e.actorId}${e.detail ? ` -- ${e.detail}` : ""}`);
+      lines.push(`[${formatDateTime(e.createdAt)}] ${e.eventType} by ${e.actorId}${e.detail ? ` -- ${e.detail}` : ""}`);
     }
   }
 
@@ -109,7 +106,7 @@ function exportProspectText(prospect: Prospect) {
     lines.push("", "--- Messages ---");
     for (const m of prospect.messages) {
       const staff = m.isStaff ? " [STAFF]" : "";
-      lines.push(`[${fmtDate(m.createdAt)}] ${m.authorTag}${staff}: ${m.content || ""}`);
+      lines.push(`[${formatDateTime(m.createdAt)}] ${m.authorTag}${staff}: ${m.content || ""}`);
     }
   }
 
@@ -260,7 +257,7 @@ function LegacyMessageItem({ msg }: { msg: LegacyTicketMessage }) {
           {style.label}
         </span>
         <span className="text-xs text-text-muted">
-          {new Date(msg.createdAt).toLocaleString()}
+          {formatDateTime(msg.createdAt)}
         </span>
       </div>
       {msg.content && (
@@ -289,12 +286,12 @@ function LegacyTicketDetail({ ticket }: { ticket: LegacyTicket }) {
           )}
           <div>
             <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Started</span>
-            <div className="text-sm text-text-primary">{new Date(ticket.startedAt).toLocaleString()}</div>
+            <div className="text-sm text-text-primary">{formatDateTime(ticket.startedAt)}</div>
           </div>
           {ticket.closedAt && (
             <div>
               <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Closed</span>
-              <div className="text-sm text-text-primary">{new Date(ticket.closedAt).toLocaleString()}</div>
+              <div className="text-sm text-text-primary">{formatDateTime(ticket.closedAt)}</div>
             </div>
           )}
           {ticket.previousThreads != null && ticket.previousThreads > 0 && (
@@ -343,12 +340,12 @@ function TicketDetail({ ticket, displayName }: {
           </div>
           <div>
             <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Created</span>
-            <div className="text-sm text-text-primary">{new Date(ticket.createdAt).toLocaleString()}</div>
+            <div className="text-sm text-text-primary">{formatDateTime(ticket.createdAt)}</div>
           </div>
           {ticket.closedAt && (
             <div>
               <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Closed</span>
-              <div className="text-sm text-text-primary">{new Date(ticket.closedAt).toLocaleString()}</div>
+              <div className="text-sm text-text-primary">{formatDateTime(ticket.closedAt)}</div>
             </div>
           )}
           {ticket.closedBy && (
@@ -384,7 +381,7 @@ function TicketDetail({ ticket, displayName }: {
                     <p className="text-xs text-text-secondary">{event.detail}</p>
                   )}
                   <span className="text-xs text-text-muted">
-                    {new Date(event.createdAt).toLocaleString()}
+                    {formatDateTime(event.createdAt)}
                   </span>
                 </div>
               </div>
@@ -419,7 +416,7 @@ function TicketDetail({ ticket, displayName }: {
                     </span>
                   )}
                   <span className="text-xs text-text-muted">
-                    {new Date(msg.createdAt).toLocaleString()}
+                    {formatDateTime(msg.createdAt)}
                   </span>
                 </div>
                 {msg.content && (
@@ -443,12 +440,71 @@ function TicketDetail({ ticket, displayName }: {
   );
 }
 
+function getDenialEvent(prospect: Prospect) {
+  const events = prospect.events ?? [];
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].eventType === "denied") return events[i];
+  }
+  return null;
+}
+
+function ProspectDenialBanner({
+  prospect,
+  displayName,
+}: {
+  prospect: Prospect;
+  displayName: (id: string | null) => string;
+}) {
+  if (prospect.status !== "denied") return null;
+
+  const deniedEvent = getDenialEvent(prospect);
+  const reason = deniedEvent?.detail?.trim() || null;
+  const actorId = deniedEvent?.actorId || prospect.closedBy;
+  const deniedBy =
+    prospect.closedByName?.trim()
+    || deniedEvent?.actorName?.trim()
+    || (actorId ? displayName(actorId) : null)
+    || "Unknown staff member";
+  const deniedAt = deniedEvent?.createdAt || prospect.closedAt;
+
+  return (
+    <div
+      role="status"
+      className="mb-5 rounded-sm border border-danger/40 bg-danger/10 p-4"
+    >
+      <div className="mb-2 text-[10px] font-semibold tracking-[0.15em] text-danger uppercase">
+        Denial reason
+      </div>
+      <p className="whitespace-pre-wrap text-sm font-medium text-text-primary">
+        {reason ?? "No reason was recorded."}
+      </p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div>
+          <div className="text-[10px] font-semibold tracking-[0.15em] text-danger/80 uppercase">
+            Denied by
+          </div>
+          <div className="mt-0.5 text-sm font-semibold text-text-primary">{deniedBy}</div>
+        </div>
+        {deniedAt && (
+          <div>
+            <div className="text-[10px] font-semibold tracking-[0.15em] text-danger/80 uppercase">
+              Date
+            </div>
+            <div className="mt-0.5 text-sm text-text-primary">{formatDateTime(deniedAt)}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ProspectDetail({ prospect, displayName }: { prospect: Prospect; displayName: (id: string | null) => string }) {
   return (
     <div className="border-t border-border/50 px-5 pb-5 pt-4">
       <div className="mb-4 flex justify-end">
         <DownloadButton text={exportProspectText(prospect)} filename={`prospect-${prospect.alias}.txt`} />
       </div>
+      <ProspectDenialBanner prospect={prospect} displayName={displayName} />
       {/* Application info */}
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div>
@@ -530,27 +586,32 @@ function ProspectDetail({ prospect, displayName }: { prospect: Prospect; display
             Timeline
           </h4>
           <div className="space-y-2">
-            {prospect.events.map((event) => (
-              <div key={event.id} className="flex items-start gap-3">
-                <div className="mt-1.5 h-2 w-2 rounded-full bg-accent/50" />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-text-primary capitalize">
-                      {event.eventType.replace(/_/g, " ")}
-                    </span>
+            {prospect.events.map((event) => {
+              const isDenied = event.eventType === "denied";
+              return (
+                <div key={event.id} className="flex items-start gap-3">
+                  <div className={`mt-1.5 h-2 w-2 rounded-full ${isDenied ? "bg-danger" : "bg-accent/50"}`} />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-medium capitalize ${isDenied ? "text-danger" : "text-text-primary"}`}>
+                        {event.eventType.replace(/_/g, " ")}
+                      </span>
+                      <span className="text-xs text-text-muted">
+                        by {event.actorName || displayName(event.actorId)}
+                      </span>
+                    </div>
+                    {event.detail && (
+                      <p className={isDenied ? "text-sm font-medium text-text-primary" : "text-xs text-text-secondary"}>
+                        {event.detail}
+                      </p>
+                    )}
                     <span className="text-xs text-text-muted">
-                      by {displayName(event.actorId)}
+                      {formatDateTime(event.createdAt)}
                     </span>
                   </div>
-                  {event.detail && (
-                    <p className="text-xs text-text-secondary">{event.detail}</p>
-                  )}
-                  <span className="text-xs text-text-muted">
-                    {new Date(event.createdAt).toLocaleString()}
-                  </span>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -581,7 +642,7 @@ function ProspectDetail({ prospect, displayName }: { prospect: Prospect; display
                     </span>
                   )}
                   <span className="text-xs text-text-muted">
-                    {new Date(msg.createdAt).toLocaleString()}
+                    {formatDateTime(msg.createdAt)}
                   </span>
                 </div>
                 {msg.content && (
@@ -696,11 +757,11 @@ function UnifiedRow({ row, expanded, onExpand, currentDetail, legacyDetail, disp
                 <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
                   <span>{who}</span>
                   <span className="h-1 w-1 rounded-full bg-text-muted" />
-                  <span>{new Date(row.createdAt).toLocaleDateString()}</span>
+                  <span>{formatDate(row.createdAt)}</span>
                   {row.closedAt && (
                     <>
                       <span className="h-1 w-1 rounded-full bg-text-muted" />
-                      <span>Closed: {new Date(row.closedAt).toLocaleDateString()}</span>
+                      <span>Closed: {formatDate(row.closedAt)}</span>
                     </>
                   )}
                 </div>
@@ -772,11 +833,11 @@ function ProspectRow({ prospect, onExpand, expanded, detail, displayName }: {
                   <span className="h-1 w-1 rounded-full bg-text-muted" />
                   <span>{prospect.squadHours}h in Squad</span>
                   <span className="h-1 w-1 rounded-full bg-text-muted" />
-                  <span>{new Date(prospect.createdAt).toLocaleDateString()}</span>
+                  <span>{formatDate(prospect.createdAt)}</span>
                   {prospect.closedAt && (
                     <>
                       <span className="h-1 w-1 rounded-full bg-text-muted" />
-                      <span>Closed: {new Date(prospect.closedAt).toLocaleDateString()}</span>
+                      <span>Closed: {formatDate(prospect.closedAt)}</span>
                     </>
                   )}
                 </div>

@@ -3,6 +3,7 @@ import {
   ShieldCheck,
   Radio,
   Ticket,
+  UserPlus,
   Sprout,
   Swords,
   Users,
@@ -66,6 +67,16 @@ export const NAV_GROUPS: NavGroup[] = [
           "view:tickets:admin_officer",
           "view:tickets:comp_team",
           "view:tickets:whitelist",
+        ],
+      },
+      {
+        label: "Prospects",
+        href: "/prospects",
+        icon: UserPlus,
+        requiredPermissions: [
+          "view:prospects",
+          "view:prospect-settings",
+          "manage:prospects",
         ],
       },
       {

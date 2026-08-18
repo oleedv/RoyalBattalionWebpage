@@ -1004,6 +1004,66 @@ export function getMentorGroups(
   });
 }
 
+export function getProspectConfig(
+  token: string
+): Promise<ApiResponse<import("shared").ProspectConfig>> {
+  return request<import("shared").ProspectConfig>("/prospects/config", {
+    headers: authHeaders(token),
+  });
+}
+
+export function updateProspectConfig(
+  token: string,
+  data: Partial<import("shared").ProspectConfig>
+): Promise<ApiResponse<import("shared").ProspectConfig>> {
+  return request<import("shared").ProspectConfig>("/prospects/config", {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function getProspectCooldowns(
+  token: string
+): Promise<ApiResponse<import("shared").ProspectCooldown[]>> {
+  return request<import("shared").ProspectCooldown[]>("/prospects/cooldowns", {
+    headers: authHeaders(token),
+  });
+}
+
+export function createProspectCooldown(
+  token: string,
+  data: { userId: string; days: number; reason?: string }
+): Promise<ApiResponse<import("shared").ProspectCooldown>> {
+  return request<import("shared").ProspectCooldown>("/prospects/cooldowns", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateProspectCooldown(
+  token: string,
+  id: number,
+  data: { days: number }
+): Promise<ApiResponse<import("shared").ProspectCooldown>> {
+  return request<import("shared").ProspectCooldown>(`/prospects/cooldowns/${id}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteProspectCooldown(
+  token: string,
+  id: number
+): Promise<ApiResponse<{ deleted: true }>> {
+  return request<{ deleted: true }>(`/prospects/cooldowns/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
 // Unified User Profile
 export function getUserProfile(token: string, id: string): Promise<ApiResponse<UserProfile>> {
   return request<UserProfile>(`/users/${id}/profile`, {

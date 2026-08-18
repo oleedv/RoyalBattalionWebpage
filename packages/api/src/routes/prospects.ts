@@ -1,6 +1,8 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { Prisma } from "../generated/prisma/client";
-import type { Prospect, ProspectEvent, DiscordEmbed } from "shared";
+import type { Prospect, ProspectEvent, DiscordEmbed, ProspectConfig, ProspectCooldown, Permission } from "shared";
+import { DEFAULT_PROSPECT_CONFIG, validateProspectConfigPatch } from "shared";
 import prisma from "../lib/db";
 import { env } from "../lib/env";
 import { fetchDiscordDisplayName } from "../lib/discord";
@@ -11,6 +13,7 @@ import { rateLimit } from "../middleware/rate-limit";
 import { audit } from "../lib/audit";
 import { success, fail } from "../lib/crud-helpers";
 import { logger } from "../lib/logger";
+import { validate } from "../lib/validate";
 
 const PROSPECTS_CAP = 500;
 
@@ -108,7 +111,7 @@ prospects.get(
   "/",
   authMiddleware,
   rateLimit(30),
-  requirePermission("view:tickets", "manage:tickets"),
+  requirePermission("view:prospects", "manage:prospects"),
   async (c) => {
     const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
       SELECT id, uuid, channel_id, user_id, status, alias, nationality, date_of_birth,
@@ -151,7 +154,7 @@ prospects.get(
 prospects.get(
   "/mentors",
   authMiddleware,
-  requirePermission("view:discord-bot", "manage:discord-bot"),
+  requirePermission("view:prospects", "manage:prospects"),
   async (c) => {
     try {
       const db = getSecretaryDb();
@@ -216,12 +219,264 @@ prospects.get(
   }
 );
 
+const VIEW_SETTINGS: Permission[] = ["view:prospects", "view:prospect-settings", "manage:prospects"];
+
+function mapConfigRow(r: any | undefined): ProspectConfig {
+  if (!r) return { ...DEFAULT_PROSPECT_CONFIG };
+  return {
+    voteStartHours: Number(r.vote_start_hours) || DEFAULT_PROSPECT_CONFIG.voteStartHours,
+    voteAcceptHours: Number(r.vote_accept_hours) || DEFAULT_PROSPECT_CONFIG.voteAcceptHours,
+    periodDays: Number(r.period_days) || DEFAULT_PROSPECT_CONFIG.periodDays,
+    cooldownDays: Number(r.cooldown_days) || DEFAULT_PROSPECT_CONFIG.cooldownDays,
+    minYesVotes: Number(r.min_yes_votes) || DEFAULT_PROSPECT_CONFIG.minYesVotes,
+    minYesRate: Number(r.min_yes_rate) || DEFAULT_PROSPECT_CONFIG.minYesRate,
+  };
+}
+
+function mapCooldownRow(r: any): ProspectCooldown {
+  return {
+    id: Number(r.id),
+    userId: r.user_id,
+    expiresAt: new Date(r.expires_at).toISOString(),
+    createdBy: r.created_by,
+    reason: r.reason ?? null,
+    prospectId: r.prospect_id != null ? Number(r.prospect_id) : null,
+    createdAt: new Date(r.created_at).toISOString(),
+  };
+}
+
+// GET /config — singleton; defaults when the row does not exist
+prospects.get(
+  "/config",
+  authMiddleware,
+  rateLimit(30),
+  requirePermission(...VIEW_SETTINGS),
+  async (c) => {
+    try {
+      const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+        SELECT vote_start_hours, vote_accept_hours, period_days, cooldown_days, min_yes_votes, min_yes_rate
+         FROM prospect_config WHERE id = 1`
+      );
+      return success(c, mapConfigRow(rows[0]));
+    } catch (err) {
+      resetSecretaryDb();
+      logger.warn("prospects", "Failed to read prospect_config, returning defaults", err);
+      return success(c, { ...DEFAULT_PROSPECT_CONFIG });
+    }
+  }
+);
+
+const configPatchSchema = z.object({
+  voteStartHours: z.number().int().optional(),
+  voteAcceptHours: z.number().int().optional(),
+  periodDays: z.number().int().optional(),
+  cooldownDays: z.number().int().optional(),
+  minYesVotes: z.number().int().optional(),
+  minYesRate: z.number().optional(),
+});
+
+// PATCH /config
+prospects.patch(
+  "/config",
+  authMiddleware,
+  rateLimit(20),
+  requirePermission("manage:prospects"),
+  validate("json", configPatchSchema),
+  async (c) => {
+    const body = c.req.valid("json");
+    let current: ProspectConfig = { ...DEFAULT_PROSPECT_CONFIG };
+    try {
+      const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+        SELECT vote_start_hours, vote_accept_hours, period_days, cooldown_days, min_yes_votes, min_yes_rate
+         FROM prospect_config WHERE id = 1`
+      );
+      current = mapConfigRow(rows[0]);
+    } catch {
+      current = { ...DEFAULT_PROSPECT_CONFIG };
+    }
+
+    const checked = validateProspectConfigPatch(body, current);
+    if (!checked.ok) return fail(c, checked.error, 400);
+    const next = checked.value;
+
+    try {
+      const db = getSecretaryDb();
+      await db.$queryRaw(Prisma.sql`
+        INSERT INTO prospect_config
+          (id, vote_start_hours, vote_accept_hours, period_days, cooldown_days, min_yes_votes, min_yes_rate)
+        VALUES
+          (1, ${next.voteStartHours}, ${next.voteAcceptHours}, ${next.periodDays}, ${next.cooldownDays}, ${next.minYesVotes}, ${next.minYesRate})
+        ON DUPLICATE KEY UPDATE
+          vote_start_hours = VALUES(vote_start_hours),
+          vote_accept_hours = VALUES(vote_accept_hours),
+          period_days = VALUES(period_days),
+          cooldown_days = VALUES(cooldown_days),
+          min_yes_votes = VALUES(min_yes_votes),
+          min_yes_rate = VALUES(min_yes_rate)`
+      );
+      await audit(c, "prospect.update_config", "prospect", null, next as unknown as Record<string, unknown>);
+      return success(c, next);
+    } catch (err) {
+      resetSecretaryDb();
+      logger.error("prospects", "Failed to save prospect_config", err);
+      return fail(c, "Failed to save prospect settings", 500);
+    }
+  }
+);
+
+const COOLDOWNS_CAP = 500;
+
+prospects.get(
+  "/cooldowns",
+  authMiddleware,
+  rateLimit(30),
+  requirePermission(...VIEW_SETTINGS),
+  async (c) => {
+    try {
+      const rows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
+        SELECT id, user_id, expires_at, created_by, reason, prospect_id, created_at
+         FROM prospect_cooldowns
+         WHERE expires_at > NOW()
+         ORDER BY expires_at ASC
+         LIMIT ${COOLDOWNS_CAP}`
+      );
+      return success(c, rows.map(mapCooldownRow));
+    } catch (err) {
+      resetSecretaryDb();
+      logger.error("prospects", "Failed to list prospect cooldowns", err);
+      return fail(c, "Failed to load cooldowns", 500);
+    }
+  }
+);
+
+const cooldownCreateSchema = z.object({
+  userId: z.string().min(1).max(20),
+  days: z.number().int().min(1).max(365),
+  reason: z.string().max(500).optional(),
+});
+
+prospects.post(
+  "/cooldowns",
+  authMiddleware,
+  rateLimit(20),
+  requirePermission("manage:prospects"),
+  validate("json", cooldownCreateSchema),
+  async (c) => {
+    const { userId, days, reason } = c.req.valid("json");
+    const actorId = c.get("userId") as string;
+    try {
+      const db = getSecretaryDb();
+      const created = await db.$transaction(async (tx) => {
+        const existing: any[] = await tx.$queryRaw(Prisma.sql`
+          SELECT id FROM prospect_cooldowns
+           WHERE user_id = ${userId} AND expires_at > NOW()
+           ORDER BY expires_at DESC LIMIT 1`
+        );
+        if (existing[0]) {
+          await tx.$queryRaw(Prisma.sql`
+            UPDATE prospect_cooldowns
+               SET expires_at = DATE_ADD(NOW(), INTERVAL ${days} DAY),
+                   created_by = ${actorId},
+                   reason = ${reason ?? null}
+             WHERE id = ${existing[0].id}`
+          );
+          const rows: any[] = await tx.$queryRaw(Prisma.sql`
+            SELECT id, user_id, expires_at, created_by, reason, prospect_id, created_at
+             FROM prospect_cooldowns WHERE id = ${existing[0].id}`
+          );
+          return rows[0];
+        }
+        await tx.$queryRaw(Prisma.sql`
+          INSERT INTO prospect_cooldowns (user_id, expires_at, created_by, reason)
+           VALUES (${userId}, DATE_ADD(NOW(), INTERVAL ${days} DAY), ${actorId}, ${reason ?? null})`
+        );
+        const rows: any[] = await tx.$queryRaw(Prisma.sql`
+          SELECT id, user_id, expires_at, created_by, reason, prospect_id, created_at
+           FROM prospect_cooldowns WHERE id = LAST_INSERT_ID()`
+        );
+        return rows[0];
+      });
+      const mapped = mapCooldownRow(created);
+      await audit(c, "prospect.cooldown_create", "prospect", String(mapped.id), { userId, days, reason });
+      return success(c, mapped, 201);
+    } catch (err) {
+      resetSecretaryDb();
+      logger.error("prospects", "Failed to create prospect cooldown", err);
+      return fail(c, "Failed to create cooldown", 500);
+    }
+  }
+);
+
+const cooldownPatchSchema = z.object({
+  days: z.number().int().min(1).max(365),
+});
+
+prospects.patch(
+  "/cooldowns/:id",
+  authMiddleware,
+  rateLimit(20),
+  requirePermission("manage:prospects"),
+  validate("json", cooldownPatchSchema),
+  async (c) => {
+    const id = Number(c.req.param("id"));
+    if (!Number.isFinite(id)) return fail(c, "Invalid cooldown id", 400);
+    const { days } = c.req.valid("json");
+    try {
+      const db = getSecretaryDb();
+      const existing: any[] = await db.$queryRaw(Prisma.sql`
+        SELECT id FROM prospect_cooldowns WHERE id = ${id}`
+      );
+      if (existing.length === 0) return fail(c, "Cooldown not found", 404);
+      await db.$queryRaw(Prisma.sql`
+        UPDATE prospect_cooldowns
+           SET expires_at = DATE_ADD(NOW(), INTERVAL ${days} DAY)
+         WHERE id = ${id}`
+      );
+      const rows: any[] = await db.$queryRaw(Prisma.sql`
+        SELECT id, user_id, expires_at, created_by, reason, prospect_id, created_at
+         FROM prospect_cooldowns WHERE id = ${id}`
+      );
+      await audit(c, "prospect.cooldown_update", "prospect", String(id), { days });
+      return success(c, mapCooldownRow(rows[0]));
+    } catch (err) {
+      resetSecretaryDb();
+      logger.error("prospects", "Failed to update prospect cooldown", err);
+      return fail(c, "Failed to update cooldown", 500);
+    }
+  }
+);
+
+prospects.delete(
+  "/cooldowns/:id",
+  authMiddleware,
+  rateLimit(20),
+  requirePermission("manage:prospects"),
+  async (c) => {
+    const id = Number(c.req.param("id"));
+    if (!Number.isFinite(id)) return fail(c, "Invalid cooldown id", 400);
+    try {
+      const db = getSecretaryDb();
+      const existing: any[] = await db.$queryRaw(Prisma.sql`
+        SELECT id FROM prospect_cooldowns WHERE id = ${id}`
+      );
+      if (existing.length === 0) return fail(c, "Cooldown not found", 404);
+      await db.$queryRaw(Prisma.sql`DELETE FROM prospect_cooldowns WHERE id = ${id}`);
+      await audit(c, "prospect.cooldown_delete", "prospect", String(id));
+      return success(c, { deleted: true as const });
+    } catch (err) {
+      resetSecretaryDb();
+      logger.error("prospects", "Failed to delete prospect cooldown", err);
+      return fail(c, "Failed to delete cooldown", 500);
+    }
+  }
+);
+
 // GET /:id - get prospect with events, messages, votes
 prospects.get(
   "/:id",
   authMiddleware,
   rateLimit(30),
-  requirePermission("view:tickets", "manage:tickets"),
+  requirePermission("view:prospects", "manage:prospects"),
   async (c) => {
     const id = Number(c.req.param("id"));
 
@@ -422,7 +677,7 @@ prospects.get("/by-uuid/:uuid", rateLimit(30), async (c) => {
 prospects.patch(
   "/:id",
   authMiddleware,
-  requirePermission("manage:discord-bot"),
+  requirePermission("manage:prospects"),
   async (c) => {
     try {
       const id = Number(c.req.param("id"));
@@ -496,7 +751,7 @@ prospects.patch(
 prospects.post(
   "/:id/mentor-reassignment",
   authMiddleware,
-  requirePermission("manage:discord-bot"),
+  requirePermission("manage:prospects"),
   async (c) => {
     try {
       const id = Number(c.req.param("id"));

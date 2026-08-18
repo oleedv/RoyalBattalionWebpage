@@ -132,6 +132,28 @@ const PERMISSION_GROUPS: PermGroup[] = [
     ],
   },
   {
+    id: "prospects",
+    label: "Prospects",
+    description: "Prospect applications, mentors, and settings",
+    entries: [
+      {
+        perm: "view:prospects",
+        label: "View Prospects",
+        description: "Applications, mentors, and settings (read-only)",
+      },
+      {
+        perm: "view:prospect-settings",
+        label: "View Prospect Settings",
+        description: "Settings and cooldown list only (read-only)",
+      },
+      {
+        perm: "manage:prospects",
+        label: "Manage Prospects",
+        description: "Edit settings, cooldowns, and mentor assignments",
+      },
+    ],
+  },
+  {
     id: "roles",
     label: "Roles",
     description: "Discord role and permission assignment",

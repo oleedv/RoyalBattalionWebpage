@@ -33,6 +33,7 @@ const ACTION_PREFIXES = [
   "match",
   "squadjs",
   "discord_bot",
+  "prospect",
   "rcon",
 ];
 

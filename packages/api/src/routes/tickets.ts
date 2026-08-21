@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { Prisma } from "../generated/prisma/client";
-import type { Ticket, Permission } from "shared";
+import type { Ticket, Permission, DiscordEmbed, TicketMessage } from "shared";
 import getSecretaryDb from "../lib/secretary-db";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission, getAllowedTicketTiers } from "../middleware/permissions";
@@ -9,6 +9,35 @@ import { success, fail } from "../lib/crud-helpers";
 import { searchTickets } from "../lib/ticket-search";
 
 const TICKETS_CAP = 500;
+
+function parseEmbeds(raw: unknown): DiscordEmbed[] | null {
+  if (!raw) return null;
+  if (Array.isArray(raw)) return raw as DiscordEmbed[];
+  if (typeof raw === "string") {
+    try { return JSON.parse(raw) as DiscordEmbed[]; } catch { return null; }
+  }
+  return null;
+}
+
+function mapTicketMessage(m: any): TicketMessage {
+  return {
+    id: m.id,
+    ticketId: m.ticket_id,
+    authorId: m.author_id,
+    authorTag: m.author_tag,
+    content: m.content,
+    attachments: m.attachments,
+    isStaff: Boolean(m.is_staff),
+    isBot: Boolean(m.is_bot),
+    createdAt: new Date(m.created_at).toISOString(),
+    discordMessageId: m.discord_message_id ?? null,
+    channelMessageId: m.channel_message_id ?? null,
+    replyToMessageId: m.reply_to_message_id ?? null,
+    threadId: m.thread_id ?? null,
+    threadName: m.thread_name ?? null,
+    embeds: parseEmbeds(m.embeds),
+  };
+}
 
 const tickets = new Hono();
 
@@ -42,7 +71,9 @@ tickets.get("/by-uuid/:uuid", rateLimit(30), async (c) => {
   );
 
   const messageRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
-    SELECT id, ticket_id, author_id, author_tag, content, attachments, is_staff, created_at
+    SELECT id, ticket_id, author_id, author_tag, content, attachments, is_staff, is_bot,
+           created_at, discord_message_id, channel_message_id, reply_to_message_id,
+           thread_id, thread_name, embeds
      FROM ticket_messages WHERE ticket_id = ${id} ORDER BY created_at ASC`
   );
 
@@ -64,16 +95,7 @@ tickets.get("/by-uuid/:uuid", rateLimit(30), async (c) => {
       detail: e.detail,
       createdAt: new Date(e.created_at).toISOString(),
     })),
-    messages: messageRows.map((m) => ({
-      id: m.id,
-      ticketId: m.ticket_id,
-      authorId: m.author_id,
-      authorTag: m.author_tag,
-      content: m.content,
-      attachments: m.attachments,
-      isStaff: Boolean(m.is_staff),
-      createdAt: new Date(m.created_at).toISOString(),
-    })),
+    messages: messageRows.map(mapTicketMessage),
   };
 
   return success(c, ticket);
@@ -171,7 +193,9 @@ tickets.get("/:id", rateLimit(30), requirePermission("view:tickets", "manage:tic
   );
 
   const messageRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
-    SELECT id, ticket_id, author_id, author_tag, content, attachments, is_staff, created_at
+    SELECT id, ticket_id, author_id, author_tag, content, attachments, is_staff, is_bot,
+           created_at, discord_message_id, channel_message_id, reply_to_message_id,
+           thread_id, thread_name, embeds
      FROM ticket_messages WHERE ticket_id = ${id} ORDER BY created_at ASC`
   );
 
@@ -193,16 +217,7 @@ tickets.get("/:id", rateLimit(30), requirePermission("view:tickets", "manage:tic
       detail: e.detail,
       createdAt: new Date(e.created_at).toISOString(),
     })),
-    messages: messageRows.map((m) => ({
-      id: m.id,
-      ticketId: m.ticket_id,
-      authorId: m.author_id,
-      authorTag: m.author_tag,
-      content: m.content,
-      attachments: m.attachments,
-      isStaff: Boolean(m.is_staff),
-      createdAt: new Date(m.created_at).toISOString(),
-    })),
+    messages: messageRows.map(mapTicketMessage),
   };
 
   return success(c, ticket);

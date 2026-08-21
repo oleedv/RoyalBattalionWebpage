@@ -7,6 +7,7 @@ import { NavAuthButton } from "@/components/nav-auth-button";
 import { getProspectByUuid } from "@/lib/api-client";
 import { formatDateTime } from "@/lib/format";
 import { ProspectForumEmbed } from "./ProspectForumEmbed";
+import { DiscordTranscript } from "@/components/discord-transcript/DiscordTranscript";
 import type { Prospect, ProspectForumMessage } from "shared";
 
 function extractUrls(arr: unknown[]): string[] {
@@ -418,42 +419,10 @@ export default function ProspectPage({ params }: { params: Promise<{ uuid: strin
             {/* Messages */}
             <div className="facet-border rounded-sm bg-bg-card p-5">
               <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Messages</h2>
-              {prospect.messages && prospect.messages.length > 0 ? (
-                <div className="space-y-3">
-                  {prospect.messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`rounded-sm border p-4 ${
-                        msg.isStaff
-                          ? "border-accent/20 bg-accent/5"
-                          : "border-border/50 bg-bg-tertiary/30"
-                      }`}
-                    >
-                      <div className="mb-2 flex items-center gap-2">
-                        <span className="text-sm font-medium text-text-primary">
-                          {msg.authorTag}
-                        </span>
-                        {msg.isStaff && (
-                          <span className="rounded-sm bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent uppercase">
-                            Staff
-                          </span>
-                        )}
-                        <span className="text-xs text-text-muted">
-                          {formatDateTime(msg.createdAt)}
-                        </span>
-                      </div>
-                      {msg.content && (
-                        <p className="whitespace-pre-wrap text-sm text-text-secondary">
-                          <Linkify text={msg.content} />
-                        </p>
-                      )}
-                      <MessageAttachments attachments={msg.attachments} />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-text-muted">No messages recorded.</p>
-              )}
+              <DiscordTranscript
+                messages={prospect.messages}
+                emptyLabel="No messages recorded."
+              />
             </div>
           </>
         )}

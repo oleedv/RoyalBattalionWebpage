@@ -29,7 +29,14 @@ export interface TicketMessage {
   content: string | null;
   attachments: string | null;
   isStaff: boolean;
+  isBot?: boolean;
   createdAt: string;
+  discordMessageId?: string | null;
+  channelMessageId?: string | null;
+  replyToMessageId?: string | null;
+  threadId?: string | null;
+  threadName?: string | null;
+  embeds?: DiscordEmbed[] | null;
 }
 
 export interface Prospect {
@@ -81,7 +88,14 @@ export interface ProspectMessage {
   content: string | null;
   attachments: string | null;
   isStaff: boolean;
+  isBot?: boolean;
   createdAt: string;
+  discordMessageId?: string | null;
+  channelMessageId?: string | null;
+  replyToMessageId?: string | null;
+  threadId?: string | null;
+  threadName?: string | null;
+  embeds?: DiscordEmbed[] | null;
 }
 
 export interface ProspectVote {

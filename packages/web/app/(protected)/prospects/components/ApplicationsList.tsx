@@ -6,6 +6,8 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useDiscordNameMap } from "@/hooks/use-discord-names";
 import { Skeleton, SkeletonList, SkeletonRegion } from "@/components/skeleton";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { DiscordTranscript } from "@/components/discord-transcript/DiscordTranscript";
+import { exportTranscriptLines } from "@/components/discord-transcript/group-transcript";
 import type { Prospect } from "shared";
 
 function exportProspectText(prospect: Prospect) {
@@ -39,10 +41,7 @@ function exportProspectText(prospect: Prospect) {
   }
   if (prospect.messages?.length) {
     lines.push("", "--- Messages ---");
-    for (const m of prospect.messages) {
-      const staff = m.isStaff ? " [STAFF]" : "";
-      lines.push(`[${formatDateTime(m.createdAt)}] ${m.authorTag}${staff}: ${m.content || ""}`);
-    }
+    lines.push(...exportTranscriptLines(prospect.messages, formatDateTime));
   }
   return lines.join("\n");
 }
@@ -64,40 +63,6 @@ function DownloadButton({ text, filename }: { text: string; filename: string }) 
     >
       Download
     </button>
-  );
-}
-
-function parseAttachments(raw: string | string[] | null): string[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw.filter((u: unknown) => typeof u === "string");
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed.filter((u: unknown) => typeof u === "string");
-  } catch { /* not JSON */ }
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
-}
-
-function isImageUrl(url: string): boolean {
-  return /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url) || url.includes("cdn.discordapp.com");
-}
-
-function MessageAttachments({ attachments }: { attachments: string | null }) {
-  const urls = parseAttachments(attachments);
-  if (urls.length === 0) return null;
-  return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {urls.map((url, i) =>
-        isImageUrl(url) ? (
-          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
-            <img src={url} alt={`Attachment ${i + 1}`} className="max-h-32 max-w-48 rounded-sm border border-border/50 object-cover transition-opacity hover:opacity-80" loading="lazy" />
-          </a>
-        ) : (
-          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs text-accent transition-colors hover:bg-bg-card-hover">
-            Attachment {i + 1}
-          </a>
-        )
-      )}
-    </div>
   );
 }
 
@@ -267,19 +232,7 @@ function ProspectDetail({ prospect, displayName }: { prospect: Prospect; display
       {prospect.messages && prospect.messages.length > 0 && (
         <div>
           <h4 className="mb-3 text-xs font-medium tracking-[0.15em] text-text-muted uppercase">Messages</h4>
-          <div className="space-y-3">
-            {prospect.messages.map((msg) => (
-              <div key={msg.id} className={`rounded-sm border p-3 ${msg.isStaff ? "border-accent/20 bg-accent/5" : "border-border/50 bg-bg-tertiary/30"}`}>
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="text-sm font-medium text-text-primary">{msg.authorTag}</span>
-                  {msg.isStaff && <span className="rounded-sm bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent uppercase">Staff</span>}
-                  <span className="text-xs text-text-muted">{formatDateTime(msg.createdAt)}</span>
-                </div>
-                {msg.content && <p className="whitespace-pre-wrap text-sm text-text-secondary">{msg.content}</p>}
-                <MessageAttachments attachments={msg.attachments} />
-              </div>
-            ))}
-          </div>
+          <DiscordTranscript messages={prospect.messages} compact />
         </div>
       )}
     </div>

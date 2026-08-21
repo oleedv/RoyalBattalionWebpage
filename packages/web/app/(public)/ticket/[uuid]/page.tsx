@@ -5,6 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { NavAuthButton } from "@/components/nav-auth-button";
 import { getTicketByUuid } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/format";
+import { DiscordTranscript } from "@/components/discord-transcript/DiscordTranscript";
 import type { Ticket } from "shared";
 
 function StatusBadge({ status }: { status: string }) {
@@ -16,116 +18,6 @@ function StatusBadge({ status }: { status: string }) {
     <span className={`rounded-sm border px-2.5 py-1 text-xs font-medium ${colors[status] || colors.closed}`}>
       {status}
     </span>
-  );
-}
-
-function extractUrls(arr: unknown[]): string[] {
-  return arr
-    .map((item) => {
-      if (typeof item === "string") return item;
-      if (item && typeof item === "object" && "url" in item) return (item as { url: string }).url;
-      return null;
-    })
-    .filter(Boolean) as string[];
-}
-
-function parseAttachments(raw: string | string[] | null): string[] {
-  if (!raw) return [];
-  if (Array.isArray(raw)) return extractUrls(raw);
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return extractUrls(parsed);
-  } catch {
-    // Not JSON
-  }
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
-}
-
-function stripQuery(url: string): string {
-  const q = url.indexOf("?");
-  return q === -1 ? url : url.slice(0, q);
-}
-
-function isImageUrl(url: string): boolean {
-  return /\.(png|jpe?g|gif|webp)$/i.test(stripQuery(url));
-}
-
-function isVideoUrl(url: string): boolean {
-  return /\.(mp4|webm|mov|m4v)$/i.test(stripQuery(url));
-}
-
-const URL_REGEX = /(https?:\/\/[^\s<]+)/g;
-
-function Linkify({ text }: { text: string }) {
-  const parts = text.split(URL_REGEX);
-  return (
-    <>
-      {parts.map((part, i) =>
-        URL_REGEX.test(part) ? (
-          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-accent underline break-all hover:text-accent-bright">
-            {part}
-          </a>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </>
-  );
-}
-
-function MessageAttachments({ attachments }: { attachments: string | null }) {
-  const urls = parseAttachments(attachments);
-  if (urls.length === 0) return null;
-
-  return (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {urls.map((url, i) => {
-        if (isVideoUrl(url)) {
-          return (
-            <div key={i} className="flex flex-col gap-1">
-              <video
-                src={url}
-                controls
-                preload="metadata"
-                className="max-h-64 max-w-96 rounded-sm border border-border/50"
-              />
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-                className="self-start text-xs text-accent underline hover:text-accent-bright"
-              >
-                Download
-              </a>
-            </div>
-          );
-        }
-        if (isImageUrl(url)) {
-          return (
-            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
-              <img
-                src={url}
-                alt={`Attachment ${i + 1}`}
-                className="max-h-32 max-w-48 rounded-sm border border-border/50 object-cover transition-opacity hover:opacity-80"
-                loading="lazy"
-              />
-            </a>
-          );
-        }
-        return (
-          <a
-            key={i}
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 rounded-sm border border-border bg-bg-tertiary px-2 py-1 text-xs text-accent transition-colors hover:bg-bg-card-hover"
-          >
-            Attachment {i + 1}
-          </a>
-        );
-      })}
-    </div>
   );
 }
 
@@ -238,12 +130,12 @@ export default function TicketPage({ params }: { params: Promise<{ uuid: string 
                 </div>
                 <div>
                   <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Created</span>
-                  <div className="mt-0.5 text-sm text-text-primary">{new Date(ticket.createdAt).toLocaleString()}</div>
+                  <div className="mt-0.5 text-sm text-text-primary">{formatDateTime(ticket.createdAt)}</div>
                 </div>
                 {ticket.closedAt && (
                   <div>
                     <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Closed</span>
-                    <div className="mt-0.5 text-sm text-text-primary">{new Date(ticket.closedAt).toLocaleString()}</div>
+                    <div className="mt-0.5 text-sm text-text-primary">{formatDateTime(ticket.closedAt)}</div>
                   </div>
                 )}
                 {ticket.closedBy && (
@@ -274,7 +166,7 @@ export default function TicketPage({ params }: { params: Promise<{ uuid: string 
                           <p className="text-xs text-text-secondary">{event.detail}</p>
                         )}
                         <span className="text-xs text-text-muted">
-                          {new Date(event.createdAt).toLocaleString()}
+                          {formatDateTime(event.createdAt)}
                         </span>
                       </div>
                     </div>
@@ -287,38 +179,7 @@ export default function TicketPage({ params }: { params: Promise<{ uuid: string 
             {ticket.messages && ticket.messages.length > 0 && (
               <div className="facet-border rounded-sm bg-bg-card p-5">
                 <h2 className="font-display mb-4 text-lg font-semibold tracking-wide">Messages</h2>
-                <div className="space-y-3">
-                  {ticket.messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`rounded-sm border p-4 ${
-                        msg.isStaff
-                          ? "border-accent/20 bg-accent/5"
-                          : "border-border/50 bg-bg-tertiary/30"
-                      }`}
-                    >
-                      <div className="mb-2 flex items-center gap-2">
-                        <span className="text-sm font-medium text-text-primary">
-                          {msg.authorTag}
-                        </span>
-                        {msg.isStaff && (
-                          <span className="rounded-sm bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent uppercase">
-                            Staff
-                          </span>
-                        )}
-                        <span className="text-xs text-text-muted">
-                          {new Date(msg.createdAt).toLocaleString()}
-                        </span>
-                      </div>
-                      {msg.content && (
-                        <p className="whitespace-pre-wrap text-sm text-text-secondary">
-                          <Linkify text={msg.content} />
-                        </p>
-                      )}
-                      <MessageAttachments attachments={msg.attachments} />
-                    </div>
-                  ))}
-                </div>
+                <DiscordTranscript messages={ticket.messages} />
               </div>
             )}
 

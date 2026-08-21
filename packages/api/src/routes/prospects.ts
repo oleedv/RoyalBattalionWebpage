@@ -104,6 +104,26 @@ function parseEmbeds(raw: unknown): DiscordEmbed[] | null {
   return null;
 }
 
+function mapProspectMessage(m: any) {
+  return {
+    id: m.id,
+    prospectId: m.prospect_id,
+    authorId: m.author_id,
+    authorTag: m.author_tag,
+    content: m.content,
+    attachments: m.attachments,
+    isStaff: Boolean(m.is_staff),
+    isBot: Boolean(m.is_bot),
+    createdAt: new Date(m.created_at).toISOString(),
+    discordMessageId: m.discord_message_id ?? null,
+    channelMessageId: m.channel_message_id ?? null,
+    replyToMessageId: m.reply_to_message_id ?? null,
+    threadId: m.thread_id ?? null,
+    threadName: m.thread_name ?? null,
+    embeds: parseEmbeds(m.embeds),
+  };
+}
+
 const prospects = new Hono();
 
 // GET / - list all prospects
@@ -499,7 +519,9 @@ prospects.get(
     );
 
     const messageRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
-      SELECT id, prospect_id, author_id, author_tag, content, attachments, is_staff, created_at
+      SELECT id, prospect_id, author_id, author_tag, content, attachments, is_staff, is_bot,
+             created_at, discord_message_id, channel_message_id, reply_to_message_id,
+             thread_id, thread_name, embeds
        FROM prospect_messages WHERE prospect_id = ${id} ORDER BY created_at ASC`
     );
 
@@ -539,16 +561,7 @@ prospects.get(
       closedBy: r.closed_by,
       closedByName,
       events: mapEvents(eventRows, nameMap),
-      messages: messageRows.map((m) => ({
-        id: m.id,
-        prospectId: m.prospect_id,
-        authorId: m.author_id,
-        authorTag: m.author_tag,
-        content: m.content,
-        attachments: m.attachments,
-        isStaff: Boolean(m.is_staff),
-        createdAt: new Date(m.created_at).toISOString(),
-      })),
+      messages: messageRows.map(mapProspectMessage),
       votes: voteRows.map((v) => ({
         id: v.id,
         prospectId: v.prospect_id,
@@ -588,7 +601,9 @@ prospects.get("/by-uuid/:uuid", rateLimit(30), async (c) => {
   );
 
   const messageRows: any[] = await getSecretaryDb().$queryRaw(Prisma.sql`
-    SELECT id, prospect_id, author_id, author_tag, content, attachments, is_staff, created_at
+    SELECT id, prospect_id, author_id, author_tag, content, attachments, is_staff, is_bot,
+           created_at, discord_message_id, channel_message_id, reply_to_message_id,
+           thread_id, thread_name, embeds
      FROM prospect_messages WHERE prospect_id = ${id} ORDER BY created_at ASC`
   );
 
@@ -636,16 +651,7 @@ prospects.get("/by-uuid/:uuid", rateLimit(30), async (c) => {
     closedBy: r.closed_by,
     closedByName,
     events: mapEvents(eventRows, nameMap),
-    messages: messageRows.map((m) => ({
-      id: m.id,
-      prospectId: m.prospect_id,
-      authorId: m.author_id,
-      authorTag: m.author_tag,
-      content: m.content,
-      attachments: m.attachments,
-      isStaff: Boolean(m.is_staff),
-      createdAt: new Date(m.created_at).toISOString(),
-    })),
+    messages: messageRows.map(mapProspectMessage),
     votes: voteRows.map((v) => ({
       id: v.id,
       prospectId: v.prospect_id,

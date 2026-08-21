@@ -4,9 +4,19 @@ import { useState, useEffect, useCallback } from "react";
 import { getBotMessages } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { SkeletonTableRows } from "@/components/skeleton";
+import { formatDateTime, formatNumber } from "@/lib/format";
 import type { BotMessage } from "shared";
 
 const PAGE_SIZE = 50;
+
+function channelLabel(m: BotMessage): string {
+  if (m.isDm) return "DM";
+  if (m.threadName) {
+    const parent = m.parentChannelName || m.parentChannelId;
+    return parent ? `${parent} › ${m.threadName}` : m.threadName;
+  }
+  return m.channelName || m.channelId;
+}
 
 const MESSAGE_COLUMNS = [
   { key: "time" },
@@ -161,7 +171,7 @@ export default function MessagesTab({ apiToken }: { apiToken: string }) {
       {/* Results info */}
       <div className="mb-3 flex items-center justify-between">
         <span className="text-xs text-text-muted">
-          {total.toLocaleString()} messages {loading && "(loading...)"}
+          {formatNumber(total)} messages {loading && "(loading...)"}
         </span>
         <div className="flex items-center gap-2">
           <button
@@ -214,25 +224,35 @@ export default function MessagesTab({ apiToken }: { apiToken: string }) {
                   messages.map((m) => (
                   <tr key={m.id} className="border-b border-border/30 last:border-0">
                     <td className="whitespace-nowrap px-4 py-2 text-text-muted">
-                      {new Date(m.createdAt).toLocaleString()}
+                      {formatDateTime(m.createdAt)}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-text-primary">
                       {m.authorTag}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-text-secondary">
-                      {m.channelName || m.channelId}
+                      {channelLabel(m)}
                     </td>
-                    <td className="max-w-md truncate px-4 py-2 text-text-secondary">
-                      {m.content || ""}
-                      {m.attachments && m.attachments.length > 0 && (
-                        <span className="ml-1 rounded-sm bg-bg-tertiary px-1.5 py-0.5 text-[10px] text-text-muted">
-                          {m.attachments.length} file{m.attachments.length > 1 ? "s" : ""}
-                        </span>
+                    <td className="max-w-md px-4 py-2 text-text-secondary">
+                      {(m.replyToTag || m.replyToContent) && (
+                        <div className="mb-0.5 truncate text-[11px] text-text-muted">
+                          Reply to {m.replyToTag || "message"}
+                          {m.replyToContent ? `: ${m.replyToContent}` : ""}
+                        </div>
                       )}
+                      <div className="truncate">
+                        {m.content || ""}
+                        {m.attachments && m.attachments.length > 0 && (
+                          <span className="ml-1 rounded-sm bg-bg-tertiary px-1.5 py-0.5 text-[10px] text-text-muted">
+                            {m.attachments.length} file{m.attachments.length > 1 ? "s" : ""}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2">
                       {m.isDm ? (
                         <span className="rounded-sm border border-accent/30 bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent">DM</span>
+                      ) : m.threadId ? (
+                        <span className="rounded-sm border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">Thread</span>
                       ) : (
                         <span className="text-xs text-text-muted">Guild</span>
                       )}

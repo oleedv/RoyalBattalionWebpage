@@ -54,6 +54,13 @@ function mapBotMessage(r: any): BotMessage {
     isDm: Boolean(r.is_dm),
     direction: r.direction || "incoming",
     createdAt: new Date(r.created_at).toISOString(),
+    parentChannelId: r.parent_channel_id ?? null,
+    parentChannelName: r.parent_channel_name ?? null,
+    threadId: r.thread_id ?? null,
+    threadName: r.thread_name ?? null,
+    replyToMessageId: r.reply_to_message_id ?? null,
+    replyToTag: r.reply_to_tag ?? null,
+    replyToContent: r.reply_to_content ?? null,
   };
 }
 
@@ -92,7 +99,9 @@ messages.get(
       const conditions: Prisma.Sql[] = [];
 
       if (author) { conditions.push(Prisma.sql`author_id = ${author}`); }
-      if (channel) { conditions.push(Prisma.sql`channel_id = ${channel}`); }
+      if (channel) {
+        conditions.push(Prisma.sql`(channel_id = ${channel} OR parent_channel_id = ${channel} OR thread_id = ${channel})`);
+      }
       if (dm === "1") { conditions.push(Prisma.sql`is_dm = 1`); }
       if (search) { conditions.push(Prisma.sql`content LIKE ${`%${search}%`}`); }
       if (from) { conditions.push(Prisma.sql`created_at >= ${from}`); }
@@ -107,7 +116,9 @@ messages.get(
         db.$queryRaw<any[]>(Prisma.sql`SELECT COUNT(*) as total FROM bot_messages ${where}`),
         db.$queryRaw<any[]>(Prisma.sql`
           SELECT id, message_id, channel_id, channel_name, guild_id, author_id, author_tag,
-                  content, attachments, is_dm, direction, created_at
+                  content, attachments, is_dm, direction, created_at,
+                  parent_channel_id, parent_channel_name, thread_id, thread_name,
+                  reply_to_message_id, reply_to_tag, reply_to_content
            FROM bot_messages ${where} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${skip}`),
       ]);
 

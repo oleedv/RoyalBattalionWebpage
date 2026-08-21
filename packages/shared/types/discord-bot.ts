@@ -94,6 +94,13 @@ export interface BotMessage {
   isDm: boolean;
   direction: "incoming" | "outgoing";
   createdAt: string;
+  parentChannelId?: string | null;
+  parentChannelName?: string | null;
+  threadId?: string | null;
+  threadName?: string | null;
+  replyToMessageId?: string | null;
+  replyToTag?: string | null;
+  replyToContent?: string | null;
 }
 
 export interface BotLog {

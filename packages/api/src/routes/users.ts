@@ -494,6 +494,8 @@ users.patch("/:id/status", authMiddleware, requirePermission("developer"), valid
       await audit(c, "whitelist.deactivate", "WhitelistEntry", id, {
         count: wl.count,
         triggeredBy: "member.disable",
+        name: target.discordName,
+        steamId: target.steamId,
       });
     }
     return success(c, { disabled: true as const });
@@ -517,6 +519,8 @@ users.patch("/:id/status", authMiddleware, requirePermission("developer"), valid
     await audit(c, "whitelist.reactivate", "WhitelistEntry", id, {
       count: wl.count,
       triggeredBy: "member.enable",
+      name: target.discordName,
+      steamId: target.steamId,
     });
   }
   return success(c, { disabled: false as const });
@@ -572,6 +576,7 @@ users.post("/bulk-disable", authMiddleware, requirePermission("developer"), rate
     await audit(c, "whitelist.deactivate", "WhitelistEntry", null, {
       count: wl.count,
       triggeredBy: "member.bulk_disable",
+      names: safeTargets.map((t) => t.discordName),
     });
   }
   return success(c, { disabled: userResult.count });
@@ -610,6 +615,7 @@ users.post("/bulk-enable", authMiddleware, requirePermission("developer"), rateL
     await audit(c, "whitelist.reactivate", "WhitelistEntry", null, {
       count: wl.count,
       triggeredBy: "member.bulk_enable",
+      names: targets.map((t) => t.discordName),
     });
   }
   return success(c, { enabled: userResult.count });

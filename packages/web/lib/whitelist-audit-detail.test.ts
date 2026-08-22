@@ -69,34 +69,48 @@ describe("formatWhitelistActionSummary", () => {
     }, ["Role: Seeder → Member"])).toBe("Updated entry on Lind (76561198819769429) · Role: Seeder → Member");
   });
 
-  test("add includes name and steamId", () => {
+  test("add names the player", () => {
     expect(formatWhitelistActionSummary("whitelist.add", {
       name: "Lind",
       steamId: "76561198819769429",
       server: "main",
-    })).toBe("Added Lind (76561198819769429) on main");
+    })).toBe("Added entry on Lind (76561198819769429) · main");
   });
 
-  test("delete includes name and steamId", () => {
+  test("delete names the player", () => {
     expect(formatWhitelistActionSummary("whitelist.delete", {
       name: "Lind",
       steamId: "76561198819769429",
       server: "main",
-    })).toBe("Removed Lind (76561198819769429) from main");
+    })).toBe("Removed entry on Lind (76561198819769429) · main");
   });
 
-  test("comment add prefixes the player", () => {
+  test("comment add names the player", () => {
     expect(formatWhitelistActionSummary("whitelist.comment.add", {
       name: "Lind",
       steamId: "76561198819769429",
       textPreview: "hello",
-    })).toBe('Lind (76561198819769429) · Commented: "hello"');
+    })).toBe('Added comment on Lind (76561198819769429) · "hello"');
   });
 
-  test("comment delete prefixes the player", () => {
+  test("comment delete names the player", () => {
     expect(formatWhitelistActionSummary("whitelist.comment.delete", {
       name: "Lind",
       steamId: "76561198819769429",
-    })).toBe("Lind (76561198819769429) · Deleted comment");
+    })).toBe("Deleted comment on Lind (76561198819769429)");
+  });
+
+  test("deactivate names the player", () => {
+    expect(formatWhitelistActionSummary("whitelist.deactivate", {
+      name: "Lind",
+      steamId: "76561198819769429",
+    })).toBe("Deactivated entry on Lind (76561198819769429)");
+  });
+
+  test("bulk delete lists who was removed", () => {
+    expect(formatWhitelistActionSummary("whitelist.bulk_delete", {
+      count: 3,
+      names: ["Lind", "Bob", "Cara"],
+    })).toBe("Deleted 3 entries on Lind, Bob, Cara");
   });
 });

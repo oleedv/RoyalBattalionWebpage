@@ -2,9 +2,14 @@ function asNonEmptyString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((v) => asNonEmptyString(v)).filter(Boolean);
+}
+
 export function whitelistSubject(detail: Record<string, unknown> | null | undefined): string {
   if (!detail) return "";
-  const name = asNonEmptyString(detail.name);
+  const name = asNonEmptyString(detail.name) || asNonEmptyString(detail.targetName);
   const steamId = asNonEmptyString(detail.steamId);
   if (name && steamId) return `${name} (${steamId})`;
   return name || steamId;
@@ -17,9 +22,10 @@ export function formatExtendedByDays(value: unknown): string | null {
   return `+${n} day${n === 1 ? "" : "s"}`;
 }
 
-function withSubject(detail: Record<string, unknown>, text: string): string {
+function onPlayer(verb: string, detail: Record<string, unknown>, extra?: string | null): string {
   const who = whitelistSubject(detail);
-  return who ? `${who} · ${text}` : text;
+  const base = who ? `${verb} on ${who}` : verb;
+  return extra ? `${base} · ${extra}` : base;
 }
 
 function updateChangeText(detail: Record<string, unknown>, changeParts: string[]): string | null {
@@ -35,17 +41,32 @@ function updateChangeText(detail: Record<string, unknown>, changeParts: string[]
   return null;
 }
 
-function updateSummary(detail: Record<string, unknown>, changeParts: string[]): string {
-  const who = whitelistSubject(detail);
-  const base = who ? `Updated entry on ${who}` : "Updated entry";
-  const extra = updateChangeText(detail, changeParts);
-  return extra ? `${base} · ${extra}` : base;
-}
-
 function commentPreview(detail: Record<string, unknown>): string | null {
   const preview = asNonEmptyString(detail.textPreview);
   if (!preview) return null;
-  return preview.length > 60 ? `${preview.slice(0, 60)}…` : preview;
+  const trimmed = preview.length > 60 ? `${preview.slice(0, 60)}…` : preview;
+  return `"${trimmed}"`;
+}
+
+function bulkWho(detail: Record<string, unknown>): string | null {
+  const names = stringList(detail.names);
+  const steamIds = stringList(detail.steamIds);
+  const labels = names.length > 0 ? names : steamIds;
+  if (labels.length === 0) return null;
+  const shown = labels.slice(0, 3).join(", ");
+  return labels.length > 3 ? `${shown} · +${labels.length - 3} more` : shown;
+}
+
+function bulkSummary(verb: string, count: unknown, detail: Record<string, unknown>, extra?: string | null): string {
+  const base = `${verb} ${count ?? "?"} entries`;
+  const who = bulkWho(detail);
+  const withWho = who ? `${base} on ${who}` : base;
+  return extra ? `${withWho} · ${extra}` : withWho;
+}
+
+function serverExtra(detail: Record<string, unknown>): string | null {
+  const server = asNonEmptyString(detail.server);
+  return server || null;
 }
 
 export function formatWhitelistActionSummary(
@@ -54,27 +75,37 @@ export function formatWhitelistActionSummary(
   changeParts: string[] = [],
 ): string {
   const d = detail ?? {};
-  const who = whitelistSubject(d) || "entry";
   switch (action) {
     case "whitelist.add":
-      return `Added ${who}${d.server ? ` on ${d.server}` : ""}`;
+      return onPlayer("Added entry", d, serverExtra(d));
     case "whitelist.update":
-      return updateSummary(d, changeParts);
+      return onPlayer("Updated entry", d, updateChangeText(d, changeParts));
     case "whitelist.delete":
-      return `Removed ${who}${d.server ? ` from ${d.server}` : ""}`;
+      return onPlayer("Removed entry", d, serverExtra(d));
     case "whitelist.bulk_add":
-      return `Added ${d.created ?? "?"} entries (${d.skipped ?? 0} skipped)`;
+      return bulkSummary("Added", d.created, d, d.skipped != null ? `${d.skipped} skipped` : null);
     case "whitelist.bulk_update":
-      return `Updated ${d.count ?? "?"} entries`;
+      return bulkSummary("Updated", d.count, d);
     case "whitelist.bulk_delete":
-      return `Deleted ${d.count ?? "?"} entries`;
-    case "whitelist.comment.add": {
-      const preview = commentPreview(d);
-      return withSubject(d, preview ? `Commented: "${preview}"` : "Added comment");
-    }
+      return bulkSummary("Deleted", d.count, d);
+    case "whitelist.comment.add":
+      return onPlayer("Added comment", d, commentPreview(d));
     case "whitelist.comment.delete":
-      return withSubject(d, "Deleted comment");
+      return onPlayer("Deleted comment", d);
+    case "whitelist.deactivate":
+      return whitelistSubject(d)
+        ? onPlayer("Deactivated entry", d)
+        : bulkSummary("Deactivated", d.count ?? 1, d);
+    case "whitelist.reactivate":
+      return whitelistSubject(d)
+        ? onPlayer("Reactivated entry", d)
+        : bulkSummary("Reactivated", d.count ?? 1, d);
     default:
+      if (action.startsWith("whitelist.")) {
+        const label = action.split(".").slice(1).join(" ").replace(/_/g, " ");
+        const verb = label.charAt(0).toUpperCase() + label.slice(1);
+        return onPlayer(verb, d);
+      }
       return action;
   }
 }

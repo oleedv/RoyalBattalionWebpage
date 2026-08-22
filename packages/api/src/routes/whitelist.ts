@@ -357,7 +357,14 @@ whitelist.post("/bulk", requirePermission("manage:whitelist"), rateLimit(5), val
   });
 
   deployInBackground(server);
-  audit(c, "whitelist.bulk_add", "WhitelistEntry", null, { server, created: result.created, skipped: result.skipped.length, total: entries.length });
+  audit(c, "whitelist.bulk_add", "WhitelistEntry", null, {
+    server,
+    created: result.created,
+    skipped: result.skipped.length,
+    total: entries.length,
+    names: entries.map((e) => e.name).filter((n): n is string => !!n),
+    steamIds: entries.map((e) => e.steamId),
+  });
 
   return success(c, { created: result.created, skipped: result.skipped }, 201);
   } catch (err) {
@@ -393,7 +400,16 @@ whitelist.post("/bulk-update", requirePermission("manage:whitelist"), rateLimit(
     const sampleEntry = await prisma.whitelistEntry.findFirst({ where: { id: { in: ids } }, select: { server: true } });
     if (sampleEntry) deployInBackground(sampleEntry.server);
 
-    audit(c, "whitelist.bulk_update", "WhitelistEntry", null, { count: result.count, changes: data });
+    const targets = await prisma.whitelistEntry.findMany({
+      where: { id: { in: ids } },
+      select: { name: true, steamId: true },
+    });
+    audit(c, "whitelist.bulk_update", "WhitelistEntry", null, {
+      count: result.count,
+      changes: data,
+      names: targets.map((e) => e.name).filter((n): n is string => !!n),
+      steamIds: targets.map((e) => e.steamId),
+    });
 
     return success(c, { updated: result.count });
   } catch (err) {
@@ -422,6 +438,7 @@ whitelist.post("/bulk-delete", requirePermission("manage:whitelist"), rateLimit(
 
     audit(c, "whitelist.bulk_delete", "WhitelistEntry", null, {
       count: result.count,
+      names: entries.map((e) => e.name).filter((n): n is string => !!n),
       steamIds: entries.map((e) => e.steamId),
     });
 

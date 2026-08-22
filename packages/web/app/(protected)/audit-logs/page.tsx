@@ -104,6 +104,11 @@ function formatDetailSummary(action: string, detail: Record<string, unknown> | n
     case "whitelist.delete":
     case "whitelist.comment.add":
     case "whitelist.comment.delete":
+    case "whitelist.bulk_add":
+    case "whitelist.bulk_update":
+    case "whitelist.bulk_delete":
+    case "whitelist.deactivate":
+    case "whitelist.reactivate":
       return formatWhitelistActionSummary(action, detail);
     default:
       return null;

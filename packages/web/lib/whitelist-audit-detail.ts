@@ -15,6 +15,43 @@ export function whitelistSubject(detail: Record<string, unknown> | null | undefi
   return name || steamId;
 }
 
+const ACTION_LABELS: Record<string, string> = {
+  "whitelist.add": "Add",
+  "whitelist.update": "Update",
+  "whitelist.delete": "Delete",
+  "whitelist.bulk_add": "Bulk add",
+  "whitelist.bulk_update": "Bulk update",
+  "whitelist.bulk_delete": "Bulk delete",
+  "whitelist.comment.add": "Comment",
+  "whitelist.comment.delete": "Delete comment",
+  "whitelist.deactivate": "Deactivate",
+  "whitelist.reactivate": "Reactivate",
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  "sl-reward": "SL Reward",
+  "seed-tracker": "Seed Tracker",
+};
+
+export function formatWhitelistActionLabel(action: string): string {
+  if (ACTION_LABELS[action]) return ACTION_LABELS[action];
+  const rest = action.split(".").slice(1).join(" ").replace(/_/g, " ");
+  if (!rest) return action;
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
+export function formatAuditSource(value: unknown): string | null {
+  const raw = asNonEmptyString(value);
+  if (!raw) return null;
+  return SOURCE_LABELS[raw] ?? raw;
+}
+
+export const HIDDEN_AUDIT_DETAIL_KEYS = new Set([
+  "commentId",
+  "userId",
+  "triggeredBy",
+]);
+
 export function formatExtendedByDays(value: unknown): string | null {
   if (!value || typeof value !== "object" || !("extendedByDays" in value)) return null;
   const n = (value as { extendedByDays: unknown }).extendedByDays;

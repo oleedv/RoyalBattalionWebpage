@@ -1112,7 +1112,7 @@ export function bulkDeleteAuditLogs(token: string, ids: string[]): Promise<ApiRe
 // Audit Logs
 export function getAuditLogs(
   token: string,
-  params: { page?: number; limit?: number; action?: string; resource?: string; resourceId?: string; userId?: string; from?: string; to?: string } = {}
+  params: { page?: number; limit?: number; action?: string; resource?: string; resourceId?: string; userId?: string; q?: string; from?: string; to?: string } = {}
 ): Promise<ApiResponse<Paginated<AuditLogEntry>>> {
   const qs = new URLSearchParams();
   if (params.page) qs.set("page", String(params.page));
@@ -1121,6 +1121,7 @@ export function getAuditLogs(
   if (params.resource) qs.set("resource", params.resource);
   if (params.resourceId) qs.set("resourceId", params.resourceId);
   if (params.userId) qs.set("userId", params.userId);
+  if (params.q) qs.set("q", params.q);
   if (params.from) qs.set("from", params.from);
   if (params.to) qs.set("to", params.to);
   const q = qs.toString();

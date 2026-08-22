@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  formatAuditSource,
   formatExtendedByDays,
+  formatWhitelistActionLabel,
   formatWhitelistActionSummary,
   whitelistSubject,
 } from "./whitelist-audit-detail";
@@ -112,5 +114,28 @@ describe("formatWhitelistActionSummary", () => {
       count: 3,
       names: ["Lind", "Bob", "Cara"],
     })).toBe("Deleted 3 entries on Lind, Bob, Cara");
+  });
+});
+
+describe("formatWhitelistActionLabel", () => {
+  test("does not collapse comment add into add", () => {
+    expect(formatWhitelistActionLabel("whitelist.add")).toBe("Add");
+    expect(formatWhitelistActionLabel("whitelist.comment.add")).toBe("Comment");
+    expect(formatWhitelistActionLabel("whitelist.bulk_add")).toBe("Bulk add");
+  });
+
+  test("humanizes remaining whitelist actions", () => {
+    expect(formatWhitelistActionLabel("whitelist.update")).toBe("Update");
+    expect(formatWhitelistActionLabel("whitelist.delete")).toBe("Delete");
+    expect(formatWhitelistActionLabel("whitelist.comment.delete")).toBe("Delete comment");
+    expect(formatWhitelistActionLabel("whitelist.deactivate")).toBe("Deactivate");
+    expect(formatWhitelistActionLabel("whitelist.reactivate")).toBe("Reactivate");
+  });
+});
+
+describe("formatAuditSource", () => {
+  test("maps known system sources", () => {
+    expect(formatAuditSource("sl-reward")).toBe("SL Reward");
+    expect(formatAuditSource("seed-tracker")).toBe("Seed Tracker");
   });
 });

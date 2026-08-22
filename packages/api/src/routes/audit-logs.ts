@@ -10,6 +10,61 @@ import { fillMissingWhitelistTarget } from "../lib/whitelist-audit-enrich";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 
+function likePattern(q: string): string {
+  return `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+}
+
+async function findDetailMatchIds(q: string, resource?: string): Promise<string[]> {
+  const like = likePattern(q);
+  try {
+    const rows = resource
+      ? await prisma.$queryRaw<{ id: string }[]>`
+          SELECT id FROM AuditLog
+          WHERE resource = ${resource}
+            AND detail IS NOT NULL
+            AND CAST(detail AS CHAR) LIKE ${like}
+          LIMIT 1000
+        `
+      : await prisma.$queryRaw<{ id: string }[]>`
+          SELECT id FROM AuditLog
+          WHERE detail IS NOT NULL
+            AND CAST(detail AS CHAR) LIKE ${like}
+          LIMIT 1000
+        `;
+    return rows.map((r) => r.id);
+  } catch {
+    return [];
+  }
+}
+
+async function whitelistAuditSearchOr(q: string, resource: string | undefined) {
+  const [matchingEntries, jsonIds] = await Promise.all([
+    prisma.whitelistEntry.findMany({
+      where: {
+        OR: [
+          { name: { contains: q } },
+          { steamId: { contains: q } },
+        ],
+      },
+      select: { id: true },
+      take: 1000,
+    }),
+    findDetailMatchIds(q, resource),
+  ]);
+
+  const or: Record<string, unknown>[] = [
+    { userName: { contains: q } },
+    { userId: q },
+  ];
+  if (matchingEntries.length > 0) {
+    or.push({ resourceId: { in: matchingEntries.map((e) => e.id) } });
+  }
+  if (jsonIds.length > 0) {
+    or.push({ id: { in: jsonIds } });
+  }
+  return or;
+}
+
 const auditLogs = new Hono();
 
 auditLogs.use("*", authMiddleware, requirePermission("view:audit-logs"));
@@ -22,6 +77,7 @@ auditLogs.get("/", async (c) => {
   const resourceId = c.req.query("resourceId") || undefined;
   const from = c.req.query("from") || undefined;
   const to = c.req.query("to") || undefined;
+  const q = (c.req.query("q") || "").trim();
 
   const where: Record<string, unknown> = {};
 
@@ -42,6 +98,10 @@ auditLogs.get("/", async (c) => {
     if (from) createdAt.gte = new Date(from);
     if (to) createdAt.lte = new Date(to);
     where.createdAt = createdAt;
+  }
+  if (q) {
+    const searchOr = await whitelistAuditSearchOr(q, resource);
+    if (searchOr.length > 0) where.OR = searchOr;
   }
 
   const [items, total] = await Promise.all([

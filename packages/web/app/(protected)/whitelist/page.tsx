@@ -33,7 +33,13 @@ import { Modal } from "@/components/modal";
 import { SearchInput } from "@/components/search-input";
 import { Skeleton, SkeletonCard, SkeletonTableRows } from "@/components/skeleton";
 import { formatDate, formatRelativeTime, formatDateTime } from "@/lib/format";
-import { formatExtendedByDays, formatWhitelistActionSummary } from "@/lib/whitelist-audit-detail";
+import {
+  formatAuditSource,
+  formatExtendedByDays,
+  formatWhitelistActionLabel,
+  formatWhitelistActionSummary,
+  HIDDEN_AUDIT_DETAIL_KEYS,
+} from "@/lib/whitelist-audit-detail";
 import type { WhitelistEntry, WhitelistEntryWithComments, WhitelistComment, WhitelistCandidate, AdminGroup, Clan, ServerConfig, AuditLogEntry, PlaytimeStats } from "shared";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -2298,6 +2304,7 @@ const WL_DETAIL_LABELS: Record<string, string> = {
   textPreview: "Comment",
   commentId: "Comment",
   steamIds: "Steam IDs",
+  names: "Names",
   changes: "Changes",
   source: "Source",
 };
@@ -2349,11 +2356,15 @@ function ActivityDetail({ log, groups, clans }: { log: AuditLogEntry; groups: Ad
   const { changes, name, steamId, ...rest } = detail;
   const restEntries = [
     ...(name != null && name !== "" ? [{ label: "Name", value: wlReadableValue("name", name, groups, clans) }] : []),
-    ...(steamId != null && steamId !== "" ? [{ label: "Steam ID", value: wlReadableValue("steamId", steamId, groups, clans) }] : []),
-    ...Object.entries(rest).map(([k, v]) => ({
-      label: WL_DETAIL_LABELS[k] ?? k,
-      value: wlReadableValue(k, v, groups, clans),
-    })),
+    ...(steamId != null && steamId !== "" ? [{ label: "Steam ID", value: String(steamId), copy: true }] : []),
+    ...Object.entries(rest)
+      .filter(([k]) => !HIDDEN_AUDIT_DETAIL_KEYS.has(k))
+      .map(([k, v]) => ({
+        label: WL_DETAIL_LABELS[k] ?? k,
+        value: k === "source"
+          ? (formatAuditSource(v) ?? wlReadableValue(k, v, groups, clans))
+          : wlReadableValue(k, v, groups, clans),
+      })),
   ];
 
   const fromToChanges = wlReadableChanges(changes, groups, clans);
@@ -2383,7 +2394,9 @@ function ActivityDetail({ log, groups, clans }: { log: AuditLogEntry; groups: Ad
           {restEntries.map((e) => (
             <Fragment key={e.label}>
               <dt className="font-medium text-text-muted">{e.label}</dt>
-              <dd className="break-words text-text-primary">{e.value}</dd>
+              <dd className="break-words text-text-primary">
+                {"copy" in e && e.copy ? <CopyableId value={e.value} /> : e.value}
+              </dd>
             </Fragment>
           ))}
         </dl>
@@ -2439,7 +2452,7 @@ function ActivityTab({
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [actionFilter, setActionFilter] = useState("");
-  const [userSearch, setUserSearch] = useState("");
+  const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -2453,16 +2466,16 @@ function ActivityTab({
       limit: PAGE_SIZE,
       resource: "WhitelistEntry",
       action: actionFilter || undefined,
-      userId: userSearch || undefined,
+      q: search || undefined,
       from: fromDate || undefined,
-      to: toDate || undefined,
+      to: toDate ? `${toDate}T23:59:59.999` : undefined,
     });
     if (res.success && res.data) {
       setLogs(res.data.items);
       setTotal(res.data.total);
     }
     setLoading(false);
-  }, [apiToken, page, actionFilter, userSearch, fromDate, toDate]);
+  }, [apiToken, page, actionFilter, search, fromDate, toDate]);
 
   useEffect(() => {
     fetchLogs();
@@ -2480,8 +2493,10 @@ function ActivityTab({
     { value: "whitelist.bulk_add", label: "Bulk Add" },
     { value: "whitelist.bulk_update", label: "Bulk Update" },
     { value: "whitelist.bulk_delete", label: "Bulk Delete" },
-    { value: "whitelist.comment.add", label: "Comment Add" },
-    { value: "whitelist.comment.delete", label: "Comment Delete" },
+    { value: "whitelist.comment.add", label: "Comment" },
+    { value: "whitelist.comment.delete", label: "Delete comment" },
+    { value: "whitelist.deactivate", label: "Deactivate" },
+    { value: "whitelist.reactivate", label: "Reactivate" },
   ];
 
   function getActionBadge(action: string): string {
@@ -2492,8 +2507,7 @@ function ActivityTab({
   }
 
   function getActionLabel(action: string): string {
-    const parts = action.split(".");
-    return parts[parts.length - 1];
+    return formatWhitelistActionLabel(action);
   }
 
   function getDetailSummary(log: AuditLogEntry): string {
@@ -2517,12 +2531,11 @@ function ActivityTab({
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
-        <input
-          type="text"
-          value={userSearch}
-          onChange={(e) => { setUserSearch(e.target.value); setPage(1); }}
-          placeholder="User ID..."
-          className="rounded-sm border border-border bg-bg-tertiary px-4 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+        <SearchInput
+          value={search}
+          onChange={(value) => { setSearch(value); setPage(1); }}
+          placeholder="Player, Steam ID, or staff..."
+          className="w-64"
         />
         <input
           type="date"
@@ -2574,11 +2587,15 @@ function ActivityTab({
                   return (
                     <Fragment key={log.id}>
                       <tr
-                        onClick={() => setExpandedId(expanded ? null : log.id)}
+                        onClick={() => {
+                          if (window.getSelection()?.toString()) return;
+                          setExpandedId(expanded ? null : log.id);
+                        }}
                         className={`cursor-pointer border-b border-border/50 transition-colors hover:bg-bg-tertiary/50 ${expanded ? "bg-bg-tertiary/40" : ""}`}
                       >
                         <td className="px-4 py-3 text-xs text-text-secondary" title={formatDateTime(log.createdAt)}>
-                          {formatRelativeTime(log.createdAt)}
+                          <div>{formatRelativeTime(log.createdAt)}</div>
+                          <div className="text-[10px] text-text-muted">{formatDateTime(log.createdAt)}</div>
                         </td>
                         <td className="px-4 py-3 text-text-primary text-xs font-medium">
                           {log.userName}

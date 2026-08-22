@@ -22,7 +22,7 @@ function withSubject(detail: Record<string, unknown>, text: string): string {
   return who ? `${who} · ${text}` : text;
 }
 
-function updateActionText(detail: Record<string, unknown>, changeParts: string[]): string {
+function updateChangeText(detail: Record<string, unknown>, changeParts: string[]): string | null {
   if (changeParts.length > 0) {
     if (changeParts.length <= 2) return changeParts.join(" · ");
     return `${changeParts.slice(0, 2).join(" · ")} · +${changeParts.length - 2} more`;
@@ -32,7 +32,14 @@ function updateActionText(detail: Record<string, unknown>, changeParts: string[]
     const ext = formatExtendedByDays((changes as Record<string, unknown>).expiresAt);
     if (ext) return `Expires ${ext}`;
   }
-  return "Updated entry";
+  return null;
+}
+
+function updateSummary(detail: Record<string, unknown>, changeParts: string[]): string {
+  const who = whitelistSubject(detail);
+  const base = who ? `Updated entry on ${who}` : "Updated entry";
+  const extra = updateChangeText(detail, changeParts);
+  return extra ? `${base} · ${extra}` : base;
 }
 
 function commentPreview(detail: Record<string, unknown>): string | null {
@@ -52,7 +59,7 @@ export function formatWhitelistActionSummary(
     case "whitelist.add":
       return `Added ${who}${d.server ? ` on ${d.server}` : ""}`;
     case "whitelist.update":
-      return withSubject(d, updateActionText(d, changeParts));
+      return updateSummary(d, changeParts);
     case "whitelist.delete":
       return `Removed ${who}${d.server ? ` from ${d.server}` : ""}`;
     case "whitelist.bulk_add":

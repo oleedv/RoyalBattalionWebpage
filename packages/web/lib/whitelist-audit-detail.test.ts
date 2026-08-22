@@ -39,27 +39,34 @@ describe("formatExtendedByDays", () => {
 });
 
 describe("formatWhitelistActionSummary", () => {
-  test("SL reward extend shows the player and days", () => {
+  test("SL reward extend shows updated entry on the player", () => {
     expect(formatWhitelistActionSummary("whitelist.update", {
       source: "sl-reward",
       name: "Lind",
       steamId: "76561198819769429",
       changes: { expiresAt: { extendedByDays: 7 } },
-    })).toBe("Lind (76561198819769429) · Expires +7 days");
+    })).toBe("Updated entry on Lind (76561198819769429) · Expires +7 days");
   });
 
   test("update without identity still describes the change", () => {
     expect(formatWhitelistActionSummary("whitelist.update", {
       source: "sl-reward",
       changes: { expiresAt: { extendedByDays: 7 } },
-    })).toBe("Expires +7 days");
+    })).toBe("Updated entry · Expires +7 days");
   });
 
-  test("prefixes from-to change parts with the player", () => {
+  test("plain update names the player", () => {
     expect(formatWhitelistActionSummary("whitelist.update", {
       name: "Lind",
       steamId: "76561198819769429",
-    }, ["Role: Seeder → Member"])).toBe("Lind (76561198819769429) · Role: Seeder → Member");
+    })).toBe("Updated entry on Lind (76561198819769429)");
+  });
+
+  test("from-to change parts follow the player", () => {
+    expect(formatWhitelistActionSummary("whitelist.update", {
+      name: "Lind",
+      steamId: "76561198819769429",
+    }, ["Role: Seeder → Member"])).toBe("Updated entry on Lind (76561198819769429) · Role: Seeder → Member");
   });
 
   test("add includes name and steamId", () => {

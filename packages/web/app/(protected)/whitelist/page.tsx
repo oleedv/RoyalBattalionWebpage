@@ -33,6 +33,7 @@ import { Modal } from "@/components/modal";
 import { SearchInput } from "@/components/search-input";
 import { Skeleton, SkeletonCard, SkeletonTableRows } from "@/components/skeleton";
 import { formatDate, formatRelativeTime, formatDateTime } from "@/lib/format";
+import { formatExtendedByDays, formatWhitelistActionSummary } from "@/lib/whitelist-audit-detail";
 import type { WhitelistEntry, WhitelistEntryWithComments, WhitelistComment, WhitelistCandidate, AdminGroup, Clan, ServerConfig, AuditLogEntry, PlaytimeStats } from "shared";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -660,7 +661,7 @@ function EntriesTab({
       return clans.find((cl) => cl.id === value)?.name ?? String(value);
     }
     if (field === "expiresAt" && typeof value === "string") {
-      return new Date(value).toLocaleDateString();
+      return formatDate(value);
     }
     return String(value);
   }
@@ -1590,7 +1591,7 @@ function EntriesTab({
                         const changes = getUpdateChanges(log);
                         const commentPreview = getCommentPreview(log);
                         const isExpanded = expandedActivity.has(log.id);
-                        const exactTime = new Date(log.createdAt).toLocaleString();
+                        const exactTime = formatDateTime(log.createdAt);
                         const changeCount = changes ? Object.keys(changes).length : 0;
                         return (
                           <div key={log.id} className="text-xs text-text-secondary">
@@ -2298,6 +2299,7 @@ const WL_DETAIL_LABELS: Record<string, string> = {
   commentId: "Comment",
   steamIds: "Steam IDs",
   changes: "Changes",
+  source: "Source",
 };
 
 // Resolve a stored value into something a human can read (ids -> names, dates, etc.)
@@ -2307,8 +2309,10 @@ function wlReadableValue(field: string, value: unknown, groups: AdminGroup[], cl
   if (field === "clanId") return clans.find((c) => c.id === value)?.name ?? String(value);
   if (field === "expiresAt" && typeof value === "string") {
     const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleDateString();
+    return Number.isNaN(d.getTime()) ? String(value) : formatDate(d);
   }
+  const extended = formatExtendedByDays(value);
+  if (extended) return extended;
   if (Array.isArray(value)) return value.join(", ");
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
@@ -2342,11 +2346,15 @@ function ActivityDetail({ log, groups, clans }: { log: AuditLogEntry; groups: Ad
   const [showRaw, setShowRaw] = useState(false);
   const detail = (log.detail || {}) as Record<string, unknown>;
 
-  const { changes, ...rest } = detail;
-  const restEntries = Object.entries(rest).map(([k, v]) => ({
-    label: WL_DETAIL_LABELS[k] ?? k,
-    value: wlReadableValue(k, v, groups, clans),
-  }));
+  const { changes, name, steamId, ...rest } = detail;
+  const restEntries = [
+    ...(name != null && name !== "" ? [{ label: "Name", value: wlReadableValue("name", name, groups, clans) }] : []),
+    ...(steamId != null && steamId !== "" ? [{ label: "Steam ID", value: wlReadableValue("steamId", steamId, groups, clans) }] : []),
+    ...Object.entries(rest).map(([k, v]) => ({
+      label: WL_DETAIL_LABELS[k] ?? k,
+      value: wlReadableValue(k, v, groups, clans),
+    })),
+  ];
 
   const fromToChanges = wlReadableChanges(changes, groups, clans);
   // bulk_update stores `changes` as a plain map of new values (not from/to pairs)
@@ -2490,35 +2498,10 @@ function ActivityTab({
 
   function getDetailSummary(log: AuditLogEntry): string {
     const detail = (log.detail || {}) as Record<string, unknown>;
-    switch (log.action) {
-      case "whitelist.add":
-        return `Added ${(detail.name as string) || (detail.steamId as string) || "entry"}${detail.server ? ` on ${detail.server}` : ""}`;
-      case "whitelist.update": {
-        const readable = wlReadableChanges(detail.changes, groups, clans);
-        if (readable.length === 0) return "Updated entry";
-        const parts = readable.map((c) => `${c.label}: ${c.from} → ${c.to}`);
-        if (parts.length <= 2) return parts.join(" · ");
-        return `${parts.slice(0, 2).join(" · ")} · +${parts.length - 2} more`;
-      }
-      case "whitelist.delete":
-        return `Removed ${(detail.name as string) || (detail.steamId as string) || "entry"}${detail.server ? ` from ${detail.server}` : ""}`;
-      case "whitelist.bulk_add":
-        return `Added ${detail.created ?? "?"} entries (${detail.skipped ?? 0} skipped)`;
-      case "whitelist.bulk_update":
-        return `Updated ${detail.count ?? "?"} entries`;
-      case "whitelist.bulk_delete":
-        return `Deleted ${detail.count ?? "?"} entries`;
-      case "whitelist.comment.add": {
-        const preview = detail.textPreview as string | undefined;
-        if (!preview) return "Added comment";
-        const trimmed = preview.length > 60 ? `${preview.slice(0, 60)}…` : preview;
-        return `Commented: "${trimmed}"`;
-      }
-      case "whitelist.comment.delete":
-        return "Deleted comment";
-      default:
-        return log.action;
-    }
+    const readable = log.action === "whitelist.update"
+      ? wlReadableChanges(detail.changes, groups, clans).map((c) => `${c.label}: ${c.from} → ${c.to}`)
+      : [];
+    return formatWhitelistActionSummary(log.action, detail, readable);
   }
 
   return (

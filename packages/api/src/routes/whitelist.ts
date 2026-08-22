@@ -519,7 +519,7 @@ whitelist.patch("/:id", requirePermission("manage:whitelist"), validate("json", 
         changes[f] = { from: before, to: after };
       }
     }
-    audit(c, "whitelist.update", "WhitelistEntry", id, { steamId: existing.steamId, changes });
+    audit(c, "whitelist.update", "WhitelistEntry", id, { steamId: existing.steamId, name: existing.name, changes });
 
     return success(c, toEntry(entry));
   } catch (err) {
@@ -550,7 +550,7 @@ whitelist.post("/:id/comments", requirePermission("manage:whitelist"), validate(
   const authorId = c.get("userId") as string;
   const { text } = c.req.valid("json");
 
-  await findOrThrow(prisma.whitelistEntry, { id: entryId }, "Whitelist entry");
+  const existing = await findOrThrow(prisma.whitelistEntry, { id: entryId }, "Whitelist entry");
 
   const author = await prisma.user.findUnique({
     where: { id: authorId },
@@ -569,6 +569,8 @@ whitelist.post("/:id/comments", requirePermission("manage:whitelist"), validate(
   audit(c, "whitelist.comment.add", "WhitelistEntry", entryId, {
     commentId: comment.id,
     textPreview: text.slice(0, 200),
+    steamId: existing.steamId,
+    name: existing.name,
   });
 
   return success(c, mapComment(comment), 201);
@@ -590,8 +592,13 @@ whitelist.delete("/:id/comments/:commentId", requirePermission("manage:whitelist
     return fail(c, "Comment not found", 404);
   }
 
+  const existing = await findOrThrow(prisma.whitelistEntry, { id: entryId }, "Whitelist entry");
   await prisma.whitelistComment.delete({ where: { id: commentId } });
-  audit(c, "whitelist.comment.delete", "WhitelistEntry", entryId, { commentId });
+  audit(c, "whitelist.comment.delete", "WhitelistEntry", entryId, {
+    commentId,
+    steamId: existing.steamId,
+    name: existing.name,
+  });
 
   return c.body(null, 204);
 });

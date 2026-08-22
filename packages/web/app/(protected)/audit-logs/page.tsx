@@ -7,6 +7,7 @@ import { usePermissions } from "@/lib/permission-context";
 import { DataTable, type Column } from "@/components/data-table";
 import { SearchInput } from "@/components/search-input";
 import { formatDateTime } from "@/lib/format";
+import { formatWhitelistActionSummary } from "@/lib/whitelist-audit-detail";
 import type { AuditLogEntry } from "shared";
 
 const RESOURCE_OPTIONS = [
@@ -99,9 +100,11 @@ function formatDetailSummary(action: string, detail: Record<string, unknown> | n
     case "rcon.endmatch":
       return "Ended current match";
     case "whitelist.add":
-      return detail.name ? `Added ${detail.name}${detail.server ? ` on ${detail.server}` : ""}` : null;
+    case "whitelist.update":
     case "whitelist.delete":
-      return detail.name ? `Removed ${detail.name}` : null;
+    case "whitelist.comment.add":
+    case "whitelist.comment.delete":
+      return formatWhitelistActionSummary(action, detail);
     default:
       return null;
   }

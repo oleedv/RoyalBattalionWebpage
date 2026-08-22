@@ -6,6 +6,7 @@ import prisma from "../lib/db";
 import { success, fail } from "../lib/crud-helpers";
 import { parsePageParams, paginate } from "../lib/pagination";
 import { audit } from "../lib/audit";
+import { fillMissingWhitelistTarget } from "../lib/whitelist-audit-enrich";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 
@@ -53,16 +54,35 @@ auditLogs.get("/", async (c) => {
     prisma.auditLog.count({ where }),
   ]);
 
-  const entries: AuditLogEntry[] = items.map((row) => ({
-    id: row.id,
-    userId: row.userId,
-    userName: row.userName,
-    action: row.action,
-    resource: row.resource,
-    resourceId: row.resourceId,
-    detail: row.detail as Record<string, unknown> | null,
-    createdAt: row.createdAt.toISOString(),
-  }));
+  const whitelistIds = [...new Set(
+    items
+      .filter((row) => row.resource === "WhitelistEntry" && row.resourceId)
+      .map((row) => row.resourceId as string),
+  )];
+  const whitelistRows = whitelistIds.length
+    ? await prisma.whitelistEntry.findMany({
+        where: { id: { in: whitelistIds } },
+        select: { id: true, steamId: true, name: true },
+      })
+    : [];
+  const whitelistById = new Map(whitelistRows.map((e) => [e.id, e]));
+
+  const entries: AuditLogEntry[] = items.map((row) => {
+    const stored = row.detail as Record<string, unknown> | null;
+    const target = row.resource === "WhitelistEntry" && row.resourceId
+      ? whitelistById.get(row.resourceId)
+      : undefined;
+    return {
+      id: row.id,
+      userId: row.userId,
+      userName: row.userName,
+      action: row.action,
+      resource: row.resource,
+      resourceId: row.resourceId,
+      detail: fillMissingWhitelistTarget(stored, target),
+      createdAt: row.createdAt.toISOString(),
+    };
+  });
 
   return success(c, paginate(entries, total, page, limit));
 });

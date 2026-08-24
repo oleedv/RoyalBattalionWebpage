@@ -16,6 +16,10 @@ export function formatDateTime(date: string | Date): string {
   });
 }
 
+export function formatNumber(n: number): string {
+  return n.toLocaleString("en-GB");
+}
+
 export function formatRelativeTime(date: string | Date): string {
   const now = Date.now();
   const then = new Date(date).getTime();

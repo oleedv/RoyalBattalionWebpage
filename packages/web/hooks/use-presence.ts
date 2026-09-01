@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { getHidePresence, HIDE_PRESENCE_EVENT } from "@/lib/hide-presence";
 
 export type PresenceUser = {
   userId: string;
@@ -44,8 +45,9 @@ export function usePresence(
       const wsBase = (
         process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
       ).replace(/^http/, "ws");
+      const hidden = getHidePresence() ? "&hidden=1" : "";
       const ws = new WebSocket(
-        `${wsBase}/presence/ws?page=${encodeURIComponent(pathname)}`,
+        `${wsBase}/presence/ws?page=${encodeURIComponent(pathname)}${hidden}`,
         [`auth-${token}`],
       );
       ws.onmessage = (e) => {
@@ -84,6 +86,27 @@ export function usePresence(
       ws.send(JSON.stringify({ page: pathname }));
     }
   }, [pathname]);
+
+  useEffect(() => {
+    function sendHidden(hidden: boolean) {
+      const ws = presenceWsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ hidden }));
+      }
+    }
+
+    function onChange(e: Event) {
+      const hidden = e instanceof CustomEvent ? Boolean(e.detail) : getHidePresence();
+      sendHidden(hidden);
+    }
+
+    window.addEventListener(HIDE_PRESENCE_EVENT, onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener(HIDE_PRESENCE_EVENT, onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
 
   return onlineUsers;
 }

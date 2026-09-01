@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePermissions } from "@/lib/permission-context";
+import { getHidePresence, setHidePresence as persistHidePresence } from "@/lib/hide-presence";
 
 type Theme = "dark" | "light" | "system";
 
@@ -28,13 +30,17 @@ function applyTheme(theme: Theme) {
 }
 
 export default function SettingsPage() {
+  const { permissions } = usePermissions();
+  const isDeveloper = permissions.includes("developer");
   const [theme, setTheme] = useState<Theme>("dark");
   const [defaultServer, setDefaultServer] = useState("");
+  const [hideOnline, setHideOnline] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     setTheme(getStoredTheme());
     setDefaultServer(getStoredDefaultServer());
+    setHideOnline(getHidePresence());
   }, []);
 
   // Listen for OS theme changes when in system mode
@@ -57,6 +63,12 @@ export default function SettingsPage() {
     localStorage.setItem("rb-default-server", s);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  function handleHideOnlineChange(hidden: boolean) {
+    if (!isDeveloper) return;
+    setHideOnline(hidden);
+    persistHidePresence(hidden);
   }
 
   return (
@@ -137,6 +149,33 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
+
+        {isDeveloper && (
+          <div className="facet-border rounded-sm bg-bg-card p-6">
+            <h2 className="font-display mb-1 text-base font-semibold tracking-wide">
+              Hide from online list
+            </h2>
+            <p className="mb-4 text-sm text-text-secondary">
+              Stay connected but do not appear in the staff online roster.
+            </p>
+            <div className="flex gap-3">
+              {([false, true] as const).map((hidden) => (
+                <button
+                  key={hidden ? "hidden" : "visible"}
+                  type="button"
+                  onClick={() => handleHideOnlineChange(hidden)}
+                  className={`flex-1 rounded-sm border px-4 py-3 text-sm font-medium transition-all ${
+                    hideOnline === hidden
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border text-text-secondary hover:border-accent/40 hover:text-text-primary"
+                  }`}
+                >
+                  {hidden ? "Hidden" : "Visible"}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* About */}
         <div className="facet-border rounded-sm bg-bg-card p-6">

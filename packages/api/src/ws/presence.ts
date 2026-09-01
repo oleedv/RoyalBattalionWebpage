@@ -4,18 +4,40 @@ import type { WSData } from "./types";
 
 export const presenceClients = new Set<ServerWebSocket<WSData>>();
 
-function broadcastPresence() {
-  const users = Array.from(presenceClients).map((ws) => ({
-    userId: ws.data.userId,
-    userName: ws.data.userName,
-    displayName: ws.data.displayName,
-    avatarUrl: ws.data.avatarUrl,
-    currentPage: ws.data.currentPage,
-  }));
-  // Deduplicate by userId (keep latest)
-  const seen = new Map<string, typeof users[0]>();
+/** Only developers can hide. Returns the resulting hidden state. */
+export function setHidePresence(
+  data: Pick<WSData, "permissions" | "hidePresence">,
+  hidden: unknown,
+): boolean {
+  data.hidePresence = hidden === true && data.permissions.includes("developer");
+  return data.hidePresence;
+}
+
+export function visiblePresenceUsers(
+  clients: Iterable<{ data: WSData }>,
+): Array<{
+  userId: string;
+  userName: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  currentPage: string;
+}> {
+  const users = Array.from(clients)
+    .filter((ws) => !ws.data.hidePresence)
+    .map((ws) => ({
+      userId: ws.data.userId,
+      userName: ws.data.userName,
+      displayName: ws.data.displayName,
+      avatarUrl: ws.data.avatarUrl,
+      currentPage: ws.data.currentPage,
+    }));
+  const seen = new Map<string, (typeof users)[0]>();
   for (const u of users) seen.set(u.userId, u);
-  const payload = JSON.stringify({ type: "presence", users: Array.from(seen.values()) });
+  return Array.from(seen.values());
+}
+
+function broadcastPresence() {
+  const payload = JSON.stringify({ type: "presence", users: visiblePresenceUsers(presenceClients) });
   for (const ws of presenceClients) {
     try { ws.send(payload); } catch (err) {
       logger.debug("presence", "Failed to send presence payload", { userId: ws.data.userId, err });
@@ -32,11 +54,17 @@ export function handlePresenceOpen(ws: ServerWebSocket<WSData>) {
 export function handlePresenceMessage(ws: ServerWebSocket<WSData>, message: string | Buffer) {
   try {
     const text = typeof message === "string" ? message : message.toString();
-    const msg = JSON.parse(text) as { page?: string };
-    if (msg.page) {
+    const msg = JSON.parse(text) as { page?: string; hidden?: boolean };
+    let changed = false;
+    if (typeof msg.page === "string" && msg.page) {
       ws.data.currentPage = msg.page;
-      broadcastPresence();
+      changed = true;
     }
+    if (typeof msg.hidden === "boolean") {
+      setHidePresence(ws.data, msg.hidden);
+      changed = true;
+    }
+    if (changed) broadcastPresence();
   } catch (err) {
     logger.warn("presence", "Failed to parse presence message", { userId: ws.data.userId, err });
   }

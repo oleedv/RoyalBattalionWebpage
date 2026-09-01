@@ -11,4 +11,5 @@ export interface WSData {
   canView: boolean;
   serverKey: string;
   currentPage: string;
+  hidePresence: boolean;
 }

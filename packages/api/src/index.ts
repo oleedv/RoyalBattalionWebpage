@@ -34,7 +34,7 @@ import { Prisma } from "./generated/prisma/client";
 import { env } from "./lib/env";
 import { bootstrap } from "./lib/bootstrap";
 import { initLiveServerRelay, handleLiveServerOpen, handleLiveServerMessage, handleLiveServerClose } from "./ws/live-server";
-import { handlePresenceOpen, handlePresenceMessage, handlePresenceClose } from "./ws/presence";
+import { handlePresenceOpen, handlePresenceMessage, handlePresenceClose, setHidePresence } from "./ws/presence";
 import { printStartupBanner, printReadyBanner, printShutdownBanner } from "./lib/print-banner";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { Permission } from "shared";
@@ -253,6 +253,7 @@ async function verifyToken(token: string): Promise<WSData | null> {
         permissions.includes("manage:rcon-console"),
       serverKey: "",
       currentPage: "",
+      hidePresence: false,
     };
   } catch (err) {
     logger.error("live-server", "Token verification failed", err instanceof Error ? err.message : err);
@@ -315,6 +316,7 @@ export default {
         }
         data.wsType = "presence";
         data.currentPage = url.searchParams.get("page") || "/dashboard";
+        setHidePresence(data, url.searchParams.get("hidden") === "1");
         const upgraded = server.upgrade(req, {
           data,
           ...(authProtocol ? { headers: { "sec-websocket-protocol": authProtocol } } : {}),

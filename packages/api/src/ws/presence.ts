@@ -15,6 +15,7 @@ export function setHidePresence(
 
 export function visiblePresenceUsers(
   clients: Iterable<{ data: WSData }>,
+  viewer?: Pick<WSData, "permissions">,
 ): Array<{
   userId: string;
   userName: string;
@@ -22,8 +23,9 @@ export function visiblePresenceUsers(
   avatarUrl: string | null;
   currentPage: string;
 }> {
+  const includeHidden = viewer?.permissions.includes("developer") === true;
   const users = Array.from(clients)
-    .filter((ws) => !ws.data.hidePresence)
+    .filter((ws) => includeHidden || !ws.data.hidePresence)
     .map((ws) => ({
       userId: ws.data.userId,
       userName: ws.data.userName,
@@ -37,8 +39,11 @@ export function visiblePresenceUsers(
 }
 
 function broadcastPresence() {
-  const payload = JSON.stringify({ type: "presence", users: visiblePresenceUsers(presenceClients) });
   for (const ws of presenceClients) {
+    const payload = JSON.stringify({
+      type: "presence",
+      users: visiblePresenceUsers(presenceClients, ws.data),
+    });
     try { ws.send(payload); } catch (err) {
       logger.debug("presence", "Failed to send presence payload", { userId: ws.data.userId, err });
     }

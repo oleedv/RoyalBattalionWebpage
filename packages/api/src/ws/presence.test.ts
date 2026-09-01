@@ -38,3 +38,23 @@ test("visiblePresenceUsers omits hidden developers", () => {
   const users = visiblePresenceUsers([hidden, visible]);
   expect(users.map((u) => u.userId)).toEqual(["shown"]);
 });
+
+test("visiblePresenceUsers still shows hidden developers to a developer viewer", () => {
+  const hidden = { data: data({ userId: "hidden", hidePresence: true }) };
+  const visible = { data: data({ userId: "shown", userName: "shown", hidePresence: false }) };
+  const users = visiblePresenceUsers(
+    [hidden, visible],
+    data({ userId: "viewer" }),
+  );
+  expect(users.map((u) => u.userId).sort()).toEqual(["hidden", "shown"]);
+});
+
+test("visiblePresenceUsers omits hidden developers for a non-developer viewer", () => {
+  const hidden = { data: data({ userId: "hidden", hidePresence: true }) };
+  const visible = { data: data({ userId: "shown", userName: "shown", hidePresence: false }) };
+  const users = visiblePresenceUsers(
+    [hidden, visible],
+    data({ userId: "viewer", permissions: ["view:members"] as Permission[] }),
+  );
+  expect(users.map((u) => u.userId)).toEqual(["shown"]);
+});

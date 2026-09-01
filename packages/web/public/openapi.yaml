@@ -776,7 +776,7 @@ paths:
     get:
       tags: [Roles]
       summary: List all roles
-      description: Returns all Discord roles with their mapped permissions.
+      description: Returns all Discord roles with their mapped permissions and member counts.
       responses:
         "200":
           description: List of roles
@@ -859,6 +859,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiResponse_DiscordRole"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Role not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-required-permissions:
+        - manage:roles
+
+  /roles/{id}/members:
+    get:
+      tags: [Roles]
+      summary: List members with a role
+      description: |
+        Returns every registered user who currently has this role, ordered by
+        Discord username. Capped at 5000. Used by the roles page roster.
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Members who have the role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_RoleMemberArray"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -3908,6 +3937,40 @@ components:
           type: boolean
         isMemberRole:
           type: boolean
+        memberCount:
+          type: integer
+          description: Number of registered users currently assigned this role
+
+    RoleMember:
+      type: object
+      properties:
+        id:
+          type: string
+        discordId:
+          type: string
+        discordName:
+          type: string
+        displayName:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        hasLoggedIn:
+          type: boolean
+        disabled:
+          type: boolean
+
+    ApiResponse_RoleMemberArray:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoleMember"
 
     ApiResponse_DiscordRole:
       type: object

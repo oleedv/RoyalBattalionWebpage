@@ -14,6 +14,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import type { DiscordRole, Permission } from "shared";
 import { PERMISSIONS } from "shared";
 import { Skeleton, SkeletonList } from "@/components/skeleton";
+import { RoleMembersPanel } from "./RoleMembersPanel";
 
 // ---------------------------------------------------------------------------
 // Permission group metadata
@@ -351,6 +352,7 @@ export default function RolesPage() {
 
   // Accordion – only one role expanded at a time
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedTab, setExpandedTab] = useState<"members" | "permissions">("members");
 
   // Whitelist grant toggle
   const [togglingWl, setTogglingWl] = useState<string | null>(null);
@@ -754,7 +756,14 @@ export default function RolesPage() {
               >
                 {/* Role header - clickable to expand/collapse */}
                 <div
-                  onClick={() => setExpandedId(isExpanded ? null : role.id)}
+                  onClick={() => {
+                    if (isExpanded) {
+                      setExpandedId(null);
+                    } else {
+                      setExpandedId(role.id);
+                      setExpandedTab("members");
+                    }
+                  }}
                   className="flex cursor-pointer items-center justify-between p-5 pb-4 transition-colors hover:bg-bg-tertiary/30"
                 >
                   <div className="flex items-center gap-3">
@@ -788,6 +797,10 @@ export default function RolesPage() {
                           {permCount > 0
                             ? `${permCount} permission${permCount !== 1 ? "s" : ""}`
                             : "No permissions"}
+                        </span>
+                        <span className="text-text-muted/40">|</span>
+                        <span>
+                          {role.memberCount} member{role.memberCount !== 1 ? "s" : ""}
                         </span>
                         {role.grantsWhitelist && (
                           <>
@@ -833,11 +846,53 @@ export default function RolesPage() {
                   )}
                 </div>
 
-                {/* Expanded: permissions + actions */}
+                {/* Expanded: roster + permissions */}
                 {isExpanded && (
                   <>
+                    <div
+                      role="tablist"
+                      className="mx-5 mt-1 mb-2 flex gap-1 rounded-sm border border-border bg-bg-tertiary/50 p-1"
+                    >
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={expandedTab === "members"}
+                        onClick={() => setExpandedTab("members")}
+                        className={`flex-1 rounded-sm px-4 py-1.5 text-center text-xs font-medium tracking-wide transition-colors ${
+                          expandedTab === "members"
+                            ? "bg-bg-card text-accent"
+                            : "text-text-muted hover:text-text-secondary"
+                        }`}
+                      >
+                        Members ({role.memberCount})
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={expandedTab === "permissions"}
+                        onClick={() => setExpandedTab("permissions")}
+                        className={`flex-1 rounded-sm px-4 py-1.5 text-center text-xs font-medium tracking-wide transition-colors ${
+                          expandedTab === "permissions"
+                            ? "bg-bg-card text-accent"
+                            : "text-text-muted hover:text-text-secondary"
+                        }`}
+                      >
+                        Permissions ({permCount})
+                      </button>
+                    </div>
+
+                    <div className={expandedTab === "members" ? "" : "hidden"}>
+                      {apiToken && (
+                        <RoleMembersPanel
+                          apiToken={apiToken}
+                          roleId={role.id}
+                          memberCount={role.memberCount}
+                        />
+                      )}
+                    </div>
+
                     {/* Role toggles + Save/Discard */}
-                    {canManage && (
+                    {expandedTab === "permissions" && canManage && (
                       <div className="flex items-center justify-between border-t border-border/50 px-5 py-3">
                         <div className="flex items-center gap-4">
                           <button
@@ -927,22 +982,23 @@ export default function RolesPage() {
                       </div>
                     )}
 
-                    {saveError && savingId === null && (
+                    {expandedTab === "permissions" && saveError && savingId === null && (
                       <div className="mx-5 mb-3 text-sm text-danger">
                         {saveError}
                       </div>
                     )}
 
-                    {/* Permission groups */}
-                    <div
-                      className={`space-y-2 px-5 pb-5 ${
-                        !canManage ? "pointer-events-none opacity-70" : ""
-                      }`}
-                    >
-                      {PERMISSION_GROUPS.map((group) =>
-                        renderGroup(role.id, group, effectivePerms)
-                      )}
-                    </div>
+                    {expandedTab === "permissions" && (
+                      <div
+                        className={`space-y-2 px-5 pb-5 ${
+                          !canManage ? "pointer-events-none opacity-70" : ""
+                        }`}
+                      >
+                        {PERMISSION_GROUPS.map((group) =>
+                          renderGroup(role.id, group, effectivePerms)
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </div>

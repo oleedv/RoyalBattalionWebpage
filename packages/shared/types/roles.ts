@@ -41,6 +41,17 @@ export interface DiscordRole {
   permissions: Permission[];
   grantsWhitelist: boolean;
   isMemberRole: boolean;
+  memberCount: number;
+}
+
+export interface RoleMember {
+  id: string;
+  discordId: string;
+  discordName: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  hasLoggedIn: boolean;
+  disabled: boolean;
 }
 
 export interface RolePermission {

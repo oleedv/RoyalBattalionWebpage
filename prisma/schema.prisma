@@ -61,6 +61,7 @@ model UserRole {
   role   DiscordRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([userId, roleId])
+  @@index([roleId])
 }
 
 model RolePermission {

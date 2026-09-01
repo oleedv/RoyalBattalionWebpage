@@ -17,6 +17,7 @@ import type {
   Prospect,
   LegacyTicket,
   DiscordRole,
+  RoleMember,
   Permission,
   Match,
   SquadJSPlugin,
@@ -503,6 +504,15 @@ export function updateRolePermissions(
     method: "PUT",
     headers: authHeaders(token),
     body: JSON.stringify({ permissions }),
+  });
+}
+
+export function getRoleMembers(
+  token: string,
+  roleId: string,
+): Promise<ApiResponse<RoleMember[]>> {
+  return request<RoleMember[]>(`/roles/${roleId}/members`, {
+    headers: authHeaders(token),
   });
 }
 

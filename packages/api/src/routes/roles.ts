@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { validate } from "../lib/validate";
 import { PERMISSIONS } from "shared";
-import type { DiscordRole, Permission } from "shared";
+import type { DiscordRole, Permission, RoleMember } from "shared";
 import prisma from "../lib/db";
 import { findOrThrow, success, fail } from "../lib/crud-helpers";
 import { authMiddleware } from "../middleware/auth";
@@ -14,6 +14,31 @@ const roles = new Hono();
 
 // All routes require auth + manage:roles
 roles.use("*", authMiddleware, requirePermission("manage:roles"));
+
+const roleInclude = {
+  permissions: true,
+  _count: { select: { users: true } },
+} as const;
+
+function toDiscordRole(r: {
+  id: string;
+  discordRoleId: string;
+  name: string;
+  grantsWhitelist: boolean;
+  isMemberRole: boolean;
+  permissions: { permission: string }[];
+  _count: { users: number };
+}): DiscordRole {
+  return {
+    id: r.id,
+    discordRoleId: r.discordRoleId,
+    name: r.name,
+    permissions: r.permissions.map((p) => p.permission as Permission),
+    grantsWhitelist: r.grantsWhitelist,
+    isMemberRole: r.isMemberRole,
+    memberCount: r._count.users,
+  };
+}
 
 const createRoleSchema = z.object({
   discordRoleId: z.string().min(1),
@@ -27,21 +52,12 @@ const updatePermissionsSchema = z.object({
 
 roles.get("/", async (c) => {
   const dbRoles = await prisma.discordRole.findMany({
-    include: { permissions: true },
+    include: roleInclude,
     orderBy: { name: "asc" },
     take: 500,
   });
 
-  const result: DiscordRole[] = dbRoles.map((r) => ({
-    id: r.id,
-    discordRoleId: r.discordRoleId,
-    name: r.name,
-    permissions: r.permissions.map((p) => p.permission as Permission),
-    grantsWhitelist: r.grantsWhitelist,
-    isMemberRole: r.isMemberRole,
-  }));
-
-  return success(c, result);
+  return success(c, dbRoles.map(toDiscordRole));
 });
 
 roles.post("/", validate("json", createRoleSchema), async (c) => {
@@ -64,21 +80,12 @@ roles.post("/", validate("json", createRoleSchema), async (c) => {
           create: permissions.map((p) => ({ permission: p })),
         },
       },
-      include: { permissions: true },
+      include: roleInclude,
     });
-
-    const result: DiscordRole = {
-      id: role.id,
-      discordRoleId: role.discordRoleId,
-      name: role.name,
-      permissions: role.permissions.map((p) => p.permission as Permission),
-      grantsWhitelist: role.grantsWhitelist,
-      isMemberRole: role.isMemberRole,
-    };
 
     audit(c, "role.create", "DiscordRole", role.id, { name, discordRoleId, permissions });
 
-    return success(c, result, 201);
+    return success(c, toDiscordRole(role), 201);
   } catch (err) {
     logger.error("roles", "Failed to create role", { name, discordRoleId, err });
     return fail(c, "Failed to create role.", 500);
@@ -99,19 +106,42 @@ roles.put("/:id/permissions", validate("json", updatePermissionsSchema), async (
 
   const updated = await prisma.discordRole.findUnique({
     where: { id },
-    include: { permissions: true },
+    include: roleInclude,
   });
 
-  const result: DiscordRole = {
-    id: updated!.id,
-    discordRoleId: updated!.discordRoleId,
-    name: updated!.name,
-    permissions: updated!.permissions.map((p) => p.permission as Permission),
-    grantsWhitelist: updated!.grantsWhitelist,
-    isMemberRole: updated!.isMemberRole,
-  };
-
   audit(c, "role.update_permissions", "DiscordRole", id, { name: existing.name, permissions });
+
+  return success(c, toDiscordRole(updated!));
+});
+
+roles.get("/:id/members", async (c) => {
+  const id = c.req.param("id");
+  await findOrThrow(prisma.discordRole, { id }, "Role");
+
+  const users = await prisma.user.findMany({
+    where: { roles: { some: { roleId: id } } },
+    select: {
+      id: true,
+      discordId: true,
+      discordName: true,
+      displayName: true,
+      avatarUrl: true,
+      hasLoggedIn: true,
+      disabled: true,
+    },
+    orderBy: { discordName: "asc" },
+    take: 5000,
+  });
+
+  const result: RoleMember[] = users.map((u) => ({
+    id: u.id,
+    discordId: u.discordId,
+    discordName: u.discordName,
+    displayName: u.displayName,
+    avatarUrl: u.avatarUrl,
+    hasLoggedIn: u.hasLoggedIn,
+    disabled: u.disabled,
+  }));
 
   return success(c, result);
 });
@@ -136,17 +166,8 @@ roles.patch("/:id", validate("json", updateRoleSchema), async (c) => {
 
   const updated = await prisma.discordRole.findUnique({
     where: { id },
-    include: { permissions: true },
+    include: roleInclude,
   });
-
-  const result: DiscordRole = {
-    id: updated!.id,
-    discordRoleId: updated!.discordRoleId,
-    name: updated!.name,
-    permissions: updated!.permissions.map((p) => p.permission as Permission),
-    grantsWhitelist: updated!.grantsWhitelist,
-    isMemberRole: updated!.isMemberRole,
-  };
 
   if (isMemberRole !== undefined) {
     audit(c, "role.update_member_role", "DiscordRole", id, { name: existing.name, isMemberRole });
@@ -155,7 +176,7 @@ roles.patch("/:id", validate("json", updateRoleSchema), async (c) => {
     audit(c, "role.update_whitelist_grant", "DiscordRole", id, { name: existing.name, grantsWhitelist });
   }
 
-  return success(c, result);
+  return success(c, toDiscordRole(updated!));
 });
 
 roles.delete("/:id", async (c) => {

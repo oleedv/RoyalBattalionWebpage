@@ -918,11 +918,11 @@ export function getBotStatus(
 
 export function getBotMessages(
   token: string,
-  params: { limit?: number; offset?: number; author?: string; channel?: string; dm?: boolean; search?: string; from?: string; to?: string } = {}
+  params: { limit?: number; page?: number; author?: string; channel?: string; dm?: boolean; search?: string; from?: string; to?: string } = {}
 ): Promise<ApiResponse<Paginated<BotMessage>>> {
   const qs = new URLSearchParams();
   if (params.limit) qs.set("limit", String(params.limit));
-  if (params.offset) qs.set("offset", String(params.offset));
+  if (params.page != null) qs.set("page", String(params.page));
   if (params.author) qs.set("author", params.author);
   if (params.channel) qs.set("channel", params.channel);
   if (params.dm) qs.set("dm", "1");
@@ -937,11 +937,11 @@ export function getBotMessages(
 
 export function getBotLogs(
   token: string,
-  params: { limit?: number; offset?: number; level?: number; module?: string; search?: string; from?: string; to?: string } = {}
+  params: { limit?: number; page?: number; level?: number; module?: string; search?: string; from?: string; to?: string } = {}
 ): Promise<ApiResponse<Paginated<BotLog>>> {
   const qs = new URLSearchParams();
   if (params.limit) qs.set("limit", String(params.limit));
-  if (params.offset) qs.set("offset", String(params.offset));
+  if (params.page != null) qs.set("page", String(params.page));
   if (params.level) qs.set("level", String(params.level));
   if (params.module) qs.set("module", params.module);
   if (params.search) qs.set("search", params.search);

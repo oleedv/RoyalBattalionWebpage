@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getBotLogs } from "@/lib/api-client";
 import { Skeleton, SkeletonRegion } from "@/components/skeleton";
+import { formatDateTime, formatNumber } from "@/lib/format";
 import type { BotLog } from "shared";
 
 const PAGE_SIZE = 100;
@@ -43,7 +44,7 @@ export default function LogsTab({ apiToken }: { apiToken: string }) {
     setError(null);
     const res = await getBotLogs(apiToken, {
       limit: PAGE_SIZE,
-      offset: pageNum * PAGE_SIZE,
+      page: pageNum + 1,
       level: levelFilter ? Number(levelFilter) : undefined,
       module: moduleFilter || undefined,
       search: search || undefined,
@@ -181,7 +182,7 @@ export default function LogsTab({ apiToken }: { apiToken: string }) {
       {/* Results info + pagination */}
       <div className="mb-3 flex items-center justify-between">
         <span className="text-xs text-text-muted">
-          {total.toLocaleString()} logs {loading && "(loading...)"} {autoRefresh && " -- auto-refreshing"}
+          {formatNumber(total)} logs {loading && "(loading...)"} {autoRefresh && " -- auto-refreshing"}
         </span>
         <div className="flex items-center gap-2">
           <button
@@ -236,7 +237,7 @@ export default function LogsTab({ apiToken }: { apiToken: string }) {
                   className="flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-bg-card-hover"
                 >
                   <span className="shrink-0 whitespace-nowrap text-xs text-text-muted">
-                    {new Date(log.createdAt).toLocaleString()}
+                    {formatDateTime(log.createdAt)}
                   </span>
                   <span className="shrink-0">
                     <LevelBadge level={log.level} label={log.levelLabel} />

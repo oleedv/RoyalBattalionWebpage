@@ -737,12 +737,12 @@ users.post("/resolve-ids", authMiddleware, validate("json", resolveIdsSchema), a
 
   const found = await prisma.user.findMany({
     where: { discordId: { in: discordIds } },
-    select: { discordId: true, discordName: true },
+    select: { discordId: true, discordName: true, displayName: true },
   });
 
   const nameMap: Record<string, string> = {};
   for (const u of found) {
-    nameMap[u.discordId] = u.discordName;
+    nameMap[u.discordId] = u.displayName?.trim() || u.discordName;
   }
 
   return success(c, nameMap);

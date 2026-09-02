@@ -5,7 +5,6 @@ import type { AuditLogEntry } from "shared";
 import prisma from "../lib/db";
 import { success, fail } from "../lib/crud-helpers";
 import { parsePageParams, paginate } from "../lib/pagination";
-import { audit } from "../lib/audit";
 import { fillMissingWhitelistTarget } from "../lib/whitelist-audit-enrich";
 import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
@@ -156,7 +155,6 @@ const bulkDeleteSchema = z.object({
 auditLogs.post("/bulk-delete", requirePermission("developer"), validate("json", bulkDeleteSchema), async (c) => {
   const { ids } = c.req.valid("json");
   const result = await prisma.auditLog.deleteMany({ where: { id: { in: ids } } });
-  await audit(c, "audit-log.bulk-delete", "audit_log", null, { ids, count: result.count });
   return success(c, { deleted: result.count });
 });
 
@@ -165,7 +163,6 @@ auditLogs.delete("/:id", requirePermission("developer"), async (c) => {
   const existing = await prisma.auditLog.findUnique({ where: { id }, select: { id: true } });
   if (!existing) return fail(c, "Audit log entry not found", 404);
   await prisma.auditLog.delete({ where: { id } });
-  await audit(c, "audit-log.delete", "audit_log", id, { deletedId: id });
   return c.body(null, 204);
 });
 

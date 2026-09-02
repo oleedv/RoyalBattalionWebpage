@@ -3178,7 +3178,7 @@ paths:
     post:
       tags: [Audit Logs]
       summary: Bulk delete audit logs
-      description: Deletes multiple audit log entries; the deletion itself is audited.
+      description: Deletes multiple audit log entries.
       requestBody:
         required: true
         content:
@@ -3218,7 +3218,7 @@ paths:
     delete:
       tags: [Audit Logs]
       summary: Delete audit log entry
-      description: Deletes a single audit log entry; the deletion itself is audited.
+      description: Deletes a single audit log entry.
       parameters:
         - $ref: "#/components/parameters/ResourceId"
       responses:

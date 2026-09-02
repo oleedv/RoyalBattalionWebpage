@@ -24,11 +24,12 @@ model User {
   disabled       Boolean         @default(false)
   disabledAt     DateTime?
   disabledReason String?         @db.Text
-  roles            UserRole[]
-  comments         MemberComment[]
-  whitelistEntries WhitelistEntry[]
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  roles               UserRole[]
+  comments            MemberComment[]
+  whitelistEntries    WhitelistEntry[]
+  whitelistDismissals WhitelistRequestDismissal[]
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 }
 
 model MemberComment {
@@ -130,6 +131,25 @@ model WhitelistComment {
   createdAt        DateTime       @default(now())
 
   @@index([whitelistEntryId])
+}
+
+/// Staff dismiss of a computed whitelist request. Unique per (user, server).
+/// Active while restoredAt is null and expiresAt is in the future (30 days).
+model WhitelistRequestDismissal {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server          String
+  dismissedBy     String
+  dismissedByName String
+  reason          String?
+  dismissedAt     DateTime  @default(now())
+  expiresAt       DateTime
+  restoredAt      DateTime?
+
+  @@unique([userId, server])
+  @@index([server, expiresAt])
+  @@index([userId])
 }
 
 model ServerConfig {

@@ -84,8 +84,49 @@ export interface WhitelistEntryWithComments extends WhitelistEntry {
 export interface WhitelistCandidate {
   userId: string;
   discordName: string;
+  displayName: string | null;
   steamId: string;
+  avatarUrl: string | null;
   roleName: string;
+  roleNames: string[];
+  membershipDate: string | null;
+}
+
+export interface DismissedWhitelistCandidate extends WhitelistCandidate {
+  dismissedAt: string;
+  dismissedBy: string;
+  dismissedByName: string;
+  expiresAt: string;
+  reason: string | null;
+}
+
+export interface WhitelistCandidateMeta {
+  server: string;
+  pendingCount: number;
+  dismissedCount: number;
+  eligibleCount: number;
+  alreadyWhitelistedCount: number;
+  truncated: boolean;
+}
+
+export interface WhitelistCandidateList {
+  pending: WhitelistCandidate[];
+  dismissed: DismissedWhitelistCandidate[];
+  meta: WhitelistCandidateMeta;
+}
+
+export interface WhitelistCandidateSummary {
+  totalPending: number;
+  byServer: { server: string; pending: number }[];
+}
+
+export interface DismissWhitelistCandidateRequest {
+  server: string;
+  reason?: string;
+}
+
+export interface RestoreWhitelistCandidateRequest {
+  server: string;
 }
 
 export interface LinkSteamRequest {

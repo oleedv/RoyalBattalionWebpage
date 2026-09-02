@@ -561,7 +561,11 @@ paths:
     get:
       tags: [Whitelist]
       summary: Get whitelist candidates
-      description: Returns users eligible for whitelist (have a whitelist-granting role but aren't yet whitelisted).
+      description: >
+        Returns pending and dismissed whitelist requests for a server. A pending
+        request is a user with a whitelist-granting Discord role and linked Steam ID
+        who does not have an active (non-expired, non-deactivated) entry on that
+        server and has not been dismissed in the last 30 days.
       parameters:
         - name: server
           in: query
@@ -570,23 +574,103 @@ paths:
             default: main
       responses:
         "200":
-          description: Candidate list
+          description: Pending and dismissed candidates with counts
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/WhitelistCandidate"
+                $ref: "#/components/schemas/ApiResponse_WhitelistCandidateList"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:whitelist
+
+  /whitelist/candidates/summary:
+    get:
+      tags: [Whitelist]
+      summary: Whitelist request counts by server
+      description: Pending request counts per server, used by the nav badge.
+      responses:
+        "200":
+          description: Pending counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponse_WhitelistCandidateSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+      x-required-permissions:
+        - manage:whitelist
+
+  /whitelist/candidates/{userId}/dismiss:
+    post:
+      tags: [Whitelist]
+      summary: Dismiss a whitelist request
+      description: Hides the request for 30 days for all staff on the given server. Re-dismissing resets the 30-day window.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server]
+              properties:
+                server:
+                  type: string
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        "201":
+          description: Dismissal stored
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: User not found
+      x-required-permissions:
+        - manage:whitelist
+
+  /whitelist/candidates/{userId}/restore:
+    post:
+      tags: [Whitelist]
+      summary: Restore a dismissed whitelist request
+      description: Clears an active 30-day dismissal so the request reappears if the user is still eligible.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server]
+              properties:
+                server:
+                  type: string
+      responses:
+        "200":
+          description: Dismissal cleared
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: No active dismissal found
       x-required-permissions:
         - manage:whitelist
 
@@ -2386,10 +2470,103 @@ components:
           type: string
         discordName:
           type: string
+        displayName:
+          type: string
+          nullable: true
         steamId:
           type: string
+        avatarUrl:
+          type: string
+          nullable: true
         roleName:
           type: string
+        roleNames:
+          type: array
+          items:
+            type: string
+        membershipDate:
+          type: string
+          format: date-time
+          nullable: true
+
+    DismissedWhitelistCandidate:
+      allOf:
+        - $ref: "#/components/schemas/WhitelistCandidate"
+        - type: object
+          properties:
+            dismissedAt:
+              type: string
+              format: date-time
+            dismissedBy:
+              type: string
+            dismissedByName:
+              type: string
+            expiresAt:
+              type: string
+              format: date-time
+            reason:
+              type: string
+              nullable: true
+
+    WhitelistCandidateList:
+      type: object
+      properties:
+        pending:
+          type: array
+          items:
+            $ref: "#/components/schemas/WhitelistCandidate"
+        dismissed:
+          type: array
+          items:
+            $ref: "#/components/schemas/DismissedWhitelistCandidate"
+        meta:
+          type: object
+          properties:
+            server:
+              type: string
+            pendingCount:
+              type: integer
+            dismissedCount:
+              type: integer
+            eligibleCount:
+              type: integer
+            alreadyWhitelistedCount:
+              type: integer
+            truncated:
+              type: boolean
+
+    WhitelistCandidateSummary:
+      type: object
+      properties:
+        totalPending:
+          type: integer
+        byServer:
+          type: array
+          items:
+            type: object
+            properties:
+              server:
+                type: string
+              pending:
+                type: integer
+
+    ApiResponse_WhitelistCandidateList:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/WhitelistCandidateList"
+
+    ApiResponse_WhitelistCandidateSummary:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: "#/components/schemas/WhitelistCandidateSummary"
 
     ApiResponse_WhitelistEntry:
       type: object

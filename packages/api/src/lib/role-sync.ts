@@ -2,6 +2,8 @@ import prisma from "./db";
 import { fetchAllGuildMembers } from "./discord";
 import { env } from "./env";
 import { logger } from "./logger";
+import { loadProspectProfiles } from "./prospect-profile-backfill";
+import { prospectToUserPatch } from "./prospect-profile";
 
 export async function syncAllUserRoles(): Promise<{ updated: number; created: number }> {
   const botToken = env.DISCORD_BOT_TOKEN;
@@ -103,13 +105,13 @@ export async function syncAllUserRoles(): Promise<{ updated: number; created: nu
   let created = 0;
 
   if (memberRoleDiscordIds.size > 0) {
-    for (const member of guildMembers) {
-      if (existingDiscordIds.has(member.discordId)) continue;
+    const toCreate = guildMembers.filter((member) => {
+      if (existingDiscordIds.has(member.discordId)) return false;
+      return member.roles.some((r) => memberRoleDiscordIds.has(r));
+    });
+    const prospectByDiscordId = await loadProspectProfiles(toCreate.map((m) => m.discordId));
 
-      // Check if this guild member has any of the member roles
-      const hasMemberRole = member.roles.some((r) => memberRoleDiscordIds.has(r));
-      if (!hasMemberRole) continue;
-
+    for (const member of toCreate) {
       const avatarUrl = member.avatar
         ? `https://cdn.discordapp.com/avatars/${member.discordId}/${member.avatar}.png`
         : null;
@@ -121,23 +123,49 @@ export async function syncAllUserRoles(): Promise<{ updated: number; created: nu
         if (dbRoleId) mappedRoleIds.push(dbRoleId);
       }
 
-      try {
-        const newUser = await prisma.user.create({
-          data: {
+      const prospect = prospectByDiscordId.get(member.discordId);
+      const profilePatch = prospect
+        ? prospectToUserPatch(prospect, {
+            id: "",
             discordId: member.discordId,
-            discordName: member.username,
-            displayName: member.displayName,
-            avatarUrl,
-            hasLoggedIn: false,
-            roles: mappedRoleIds.length > 0
-              ? { create: mappedRoleIds.map((roleId) => ({ roleId })) }
-              : undefined,
-          },
-        });
+            country: null,
+            dateOfBirth: null,
+            membershipDate: null,
+            steamId: null,
+          })
+        : null;
+
+      const baseData = {
+        discordId: member.discordId,
+        discordName: member.username,
+        displayName: member.displayName,
+        avatarUrl,
+        hasLoggedIn: false,
+        ...(profilePatch ?? {}),
+        roles: mappedRoleIds.length > 0
+          ? { create: mappedRoleIds.map((roleId) => ({ roleId })) }
+          : undefined,
+      };
+
+      try {
+        await prisma.user.create({ data: baseData });
         existingDiscordIds.add(member.discordId);
         created++;
         logger.info("role-sync", `Created Discord-only member ${member.username}(${member.discordId}) with ${mappedRoleIds.length} roles`);
       } catch (err) {
+        if (profilePatch?.steamId && err && typeof err === "object" && (err as { code?: string }).code === "P2002") {
+          try {
+            const { steamId: _ignored, ...withoutSteam } = baseData;
+            await prisma.user.create({ data: withoutSteam });
+            existingDiscordIds.add(member.discordId);
+            created++;
+            logger.warn("role-sync", `Created ${member.username}(${member.discordId}) without steamId (already in use)`);
+            continue;
+          } catch (retryErr) {
+            logger.error("role-sync", `Failed to create member ${member.username}(${member.discordId})`, retryErr);
+            continue;
+          }
+        }
         logger.error("role-sync", `Failed to create member ${member.username}(${member.discordId})`, err);
       }
     }

@@ -1,10 +1,13 @@
 import { syncMatches } from "./match-sync";
 import { backfillUserEosIds } from "./eos-backfill";
+import { backfillMemberProfilesFromProspects } from "./prospect-profile-backfill";
 import { syncAllUserRoles } from "./role-sync";
 import { fetchGuildRoleDefinitions } from "./discord";
 import { logger } from "./logger";
 import prisma from "./db";
 import { env } from "./env";
+import getSecretaryDb from "./secretary-db";
+import { ensureProspectSettingsTables } from "./prospect-schema";
 
 async function ensureMemberRoles() {
   const raw = env.DISCORD_MEMBER_ROLE_IDS;
@@ -100,6 +103,21 @@ export async function bootstrap() {
           .catch((err) => logger.error("role-sync", "Role sync failed", err)),
       2 * 60 * 1000
     );
+  }
+
+  if (env.SECRETARY_DATABASE_URL) {
+    await ensureProspectSettingsTables(getSecretaryDb()).catch((err) =>
+      logger.warn("bootstrap", "Could not ensure prospect settings tables", err),
+    );
+
+    const runProspectProfileBackfill = () =>
+      backfillMemberProfilesFromProspects()
+        .then(({ updated }) => {
+          if (updated > 0) logger.info("prospect-profile", `Backfilled ${updated} member profiles from prospects`);
+        })
+        .catch((err) => logger.error("prospect-profile", "Prospect profile backfill failed", err));
+    runProspectProfileBackfill();
+    setInterval(runProspectProfileBackfill, 2 * 60 * 1000);
   }
 
   // Cleanup audit logs older than 30 days -- run on startup and every 24 hours

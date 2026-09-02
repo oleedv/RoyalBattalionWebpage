@@ -110,7 +110,7 @@ export default function MembersPage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Sorting
-  type SortKey = "name" | "steamId" | "joined" | "country" | "loggedIn";
+  type SortKey = "name" | "steamId" | "joined" | "membershipDate" | "dateOfBirth" | "country" | "loggedIn";
   type SortDir = "asc" | "desc";
   const [sortKey, setSortKey] = useState<SortKey>("loggedIn");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -337,6 +337,18 @@ export default function MembersPage() {
         }
         case "joined":
           return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        case "membershipDate": {
+          if (!a.membershipDate && !b.membershipDate) return 0;
+          if (!a.membershipDate) return 1;
+          if (!b.membershipDate) return -1;
+          return dir * (new Date(a.membershipDate).getTime() - new Date(b.membershipDate).getTime());
+        }
+        case "dateOfBirth": {
+          if (!a.dateOfBirth && !b.dateOfBirth) return 0;
+          if (!a.dateOfBirth) return 1;
+          if (!b.dateOfBirth) return -1;
+          return dir * (new Date(a.dateOfBirth).getTime() - new Date(b.dateOfBirth).getTime());
+        }
         case "country": {
           if (!a.country && !b.country) return 0;
           if (!a.country) return 1;
@@ -616,7 +628,7 @@ export default function MembersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left">
-                  {["Member", "Steam ID", "Roles", "Joined", "Country"].map((label) => (
+                  {["Member", "Steam ID", "Roles", "Joined", "Member since", "Date of birth", "Country"].map((label) => (
                     <th
                       key={label}
                       className="px-4 py-3 text-xs font-medium uppercase tracking-[0.15em] text-text-muted"
@@ -634,6 +646,8 @@ export default function MembersPage() {
                     { key: "steamId" },
                     { key: "roles" },
                     { key: "joined" },
+                    { key: "membershipDate" },
+                    { key: "dateOfBirth" },
                     { key: "country" },
                   ]}
                 />
@@ -831,6 +845,8 @@ export default function MembersPage() {
                     { key: "steamId" as SortKey, label: "Steam ID" },
                     { key: null, label: "Roles" },
                     { key: "joined" as SortKey, label: "Joined" },
+                    { key: "membershipDate" as SortKey, label: "Member since" },
+                    { key: "dateOfBirth" as SortKey, label: "Date of birth" },
                     { key: "country" as SortKey, label: "Country" },
                   ] as const
                 ).map(({ key, label }) => (
@@ -858,7 +874,7 @@ export default function MembersPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={bulkMode ? 7 : 6} className="px-4 py-8 text-center text-text-muted">
+                  <td colSpan={bulkMode ? 9 : 8} className="px-4 py-8 text-center text-text-muted">
                     {search || activeFilterCount > 0 ? "No members match your filters" : "No members found"}
                   </td>
                 </tr>
@@ -947,6 +963,20 @@ export default function MembersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-text-secondary">{formatDate(user.createdAt)}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {user.membershipDate ? (
+                        <span className="text-text-secondary">{formatDate(user.membershipDate)}</span>
+                      ) : (
+                        <span className="text-text-muted">--</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {user.dateOfBirth ? (
+                        <span className="text-text-secondary">{formatDate(user.dateOfBirth)}</span>
+                      ) : (
+                        <span className="text-text-muted">--</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {user.country ? (

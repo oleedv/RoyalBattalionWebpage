@@ -34,12 +34,11 @@ import { SearchInput } from "@/components/search-input";
 import { Skeleton, SkeletonCard, SkeletonTableRows } from "@/components/skeleton";
 import { formatDate, formatRelativeTime, formatDateTime } from "@/lib/format";
 import {
-  formatAuditSource,
   formatExtendedByDays,
   formatWhitelistActionLabel,
   formatWhitelistActionSummary,
-  HIDDEN_AUDIT_DETAIL_KEYS,
 } from "@/lib/whitelist-audit-detail";
+import { AuditLogDetail, FilterNameButton } from "@/components/audit-log-detail";
 import type { WhitelistEntry, WhitelistEntryWithComments, WhitelistComment, WhitelistCandidate, AdminGroup, Clan, ServerConfig, AuditLogEntry, PlaytimeStats } from "shared";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -2348,96 +2347,6 @@ function wlReadableChanges(changes: unknown, groups: AdminGroup[], clans: Clan[]
   return out;
 }
 
-// Human-readable detail panel shown inline under a clicked activity row.
-function ActivityDetail({ log, groups, clans }: { log: AuditLogEntry; groups: AdminGroup[]; clans: Clan[] }) {
-  const [showRaw, setShowRaw] = useState(false);
-  const detail = (log.detail || {}) as Record<string, unknown>;
-
-  const { changes, name, steamId, ...rest } = detail;
-  const restEntries = [
-    ...(name != null && name !== "" ? [{ label: "Name", value: wlReadableValue("name", name, groups, clans) }] : []),
-    ...(steamId != null && steamId !== "" ? [{ label: "Steam ID", value: String(steamId), copy: true }] : []),
-    ...Object.entries(rest)
-      .filter(([k]) => !HIDDEN_AUDIT_DETAIL_KEYS.has(k))
-      .map(([k, v]) => ({
-        label: WL_DETAIL_LABELS[k] ?? k,
-        value: k === "source"
-          ? (formatAuditSource(v) ?? wlReadableValue(k, v, groups, clans))
-          : wlReadableValue(k, v, groups, clans),
-      })),
-  ];
-
-  const fromToChanges = wlReadableChanges(changes, groups, clans);
-  // bulk_update stores `changes` as a plain map of new values (not from/to pairs)
-  const plainChanges =
-    fromToChanges.length === 0 && changes && typeof changes === "object"
-      ? Object.entries(changes as Record<string, unknown>).map(([k, v]) => ({
-          label: WL_DETAIL_LABELS[k] ?? k,
-          value: wlReadableValue(k, v, groups, clans),
-        }))
-      : [];
-
-  return (
-    <div className="rounded-sm border border-border bg-bg-secondary/40 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-xs font-medium uppercase tracking-[0.15em] text-text-muted">Details</h3>
-        <button
-          onClick={() => setShowRaw((v) => !v)}
-          className="text-[10px] uppercase tracking-wider text-text-muted transition-colors hover:text-text-primary"
-        >
-          {showRaw ? "Hide raw" : "Show raw"}
-        </button>
-      </div>
-
-      {restEntries.length > 0 && (
-        <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-4 gap-y-1.5 text-xs">
-          {restEntries.map((e) => (
-            <Fragment key={e.label}>
-              <dt className="font-medium text-text-muted">{e.label}</dt>
-              <dd className="break-words text-text-primary">
-                {"copy" in e && e.copy ? <CopyableId value={e.value} /> : e.value}
-              </dd>
-            </Fragment>
-          ))}
-        </dl>
-      )}
-
-      {fromToChanges.length > 0 && (
-        <div className={restEntries.length > 0 ? "mt-3" : ""}>
-          <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-text-muted">Changes</div>
-          <div className="space-y-1.5">
-            {fromToChanges.map((c) => (
-              <div key={c.key} className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="min-w-[5rem] font-medium text-text-muted">{c.label}</span>
-                <span className="text-text-secondary">{c.from}</span>
-                <span className="text-text-muted">→</span>
-                <span className="font-medium text-text-primary">{c.to}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {plainChanges.length > 0 && (
-        <dl className="mt-3 grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-4 gap-y-1.5 text-xs">
-          {plainChanges.map((e) => (
-            <Fragment key={e.label}>
-              <dt className="font-medium text-text-muted">{e.label}</dt>
-              <dd className="break-words text-text-primary">{e.value}</dd>
-            </Fragment>
-          ))}
-        </dl>
-      )}
-
-      {showRaw && (
-        <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap border-t border-border/50 pt-3 font-mono text-xs text-text-muted">
-          {JSON.stringify(log.detail, null, 2)}
-        </pre>
-      )}
-    </div>
-  );
-}
-
 function ActivityTab({
   apiToken,
   groups,
@@ -2537,6 +2446,7 @@ function ActivityTab({
           placeholder="Player, Steam ID, or staff..."
           className="w-64"
         />
+        <span className="text-[11px] text-text-muted">Click a name to filter by that person.</span>
         <input
           type="date"
           value={fromDate}
@@ -2598,7 +2508,14 @@ function ActivityTab({
                           <div className="text-[10px] text-text-muted">{formatDateTime(log.createdAt)}</div>
                         </td>
                         <td className="px-4 py-3 text-text-primary text-xs font-medium">
-                          {log.userName}
+                          <FilterNameButton
+                            name={log.userName}
+                            active={search === log.userName}
+                            onFilter={(name) => {
+                              setSearch(search === name ? "" : name);
+                              setPage(1);
+                            }}
+                          />
                         </td>
                         <td className="px-4 py-3">
                           <span className={`rounded-sm px-2 py-0.5 text-[10px] font-medium tracking-wide ${getActionBadge(log.action)}`}>
@@ -2620,10 +2537,18 @@ function ActivityTab({
                           </div>
                         </td>
                       </tr>
-                      {expanded && log.detail && (
+                      {expanded && (
                         <tr className="border-b border-border/50">
                           <td colSpan={4} className="bg-bg-tertiary/20 px-4 pb-4 pt-1">
-                            <ActivityDetail log={log} groups={groups} clans={clans} />
+                            <AuditLogDetail
+                              log={log}
+                              filterName={search}
+                              onFilterName={(name) => {
+                                setSearch(search === name ? "" : name);
+                                setPage(1);
+                              }}
+                              context={{ groups, clans }}
+                            />
                           </td>
                         </tr>
                       )}

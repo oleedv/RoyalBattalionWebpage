@@ -74,7 +74,7 @@ adminGroups.patch("/:id", validate("json", updateGroupSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
-  await findOrThrow(prisma.adminGroup, { id }, "Admin group");
+  const existing = await findOrThrow(prisma.adminGroup, { id }, "Admin group");
 
   try {
     const group = await prisma.adminGroup.update({
@@ -86,7 +86,7 @@ adminGroups.patch("/:id", validate("json", updateGroupSchema), async (c) => {
       },
     });
 
-    await audit(c, "admin_group.update", "admin_group", id, { changes: body });
+    await audit(c, "admin_group.update", "admin_group", id, { name: existing.name, changes: body });
 
     return success(c, toAdminGroup(group));
   } catch (err) {

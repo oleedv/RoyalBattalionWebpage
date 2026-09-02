@@ -62,7 +62,7 @@ clans.patch("/:id", validate("json", updateClanSchema), async (c) => {
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
-  await findOrThrow(prisma.clan, { id }, "Clan");
+  const existing = await findOrThrow(prisma.clan, { id }, "Clan");
 
   try {
     const clan = await prisma.clan.update({
@@ -84,7 +84,7 @@ clans.patch("/:id", validate("json", updateClanSchema), async (c) => {
       );
     }
 
-    await audit(c, "clan.update", "clan", id, { changes: body });
+    await audit(c, "clan.update", "clan", id, { name: existing.name, tag: existing.tag, changes: body });
     return success(c, toClan(clan));
   } catch (err) {
     logger.error("clans", "Failed to update clan", { id, err });

@@ -355,7 +355,7 @@ giveaway.patch(
       await getSecretaryDb().$executeRaw(Prisma.sql`
         UPDATE giveaway_config SET ${Prisma.join(sets)} WHERE id = 1
       `);
-      await audit(c, "giveaway.update_config", "giveaway");
+      await audit(c, "giveaway.update_config", "giveaway", undefined, { changes: body });
       return success(c, await loadConfig());
     } catch (err) {
       resetSecretaryDb();
@@ -406,7 +406,11 @@ giveaway.patch(
       `);
       const userId = c.get("userId") as string;
       await queueAction("giveaway_refresh_entry", {}, userId, active.id);
-      await audit(c, "giveaway.update_active", "giveaway", String(active.id), body);
+      await audit(c, "giveaway.update_active", "giveaway", String(active.id), {
+        prize: active.prize,
+        status: active.status,
+        changes: body,
+      });
       const updated = await loadGiveawayById(active.id);
       return success(c, updated ? await buildSnapshot(updated) : null);
     } catch (err) {
@@ -536,7 +540,11 @@ giveaway.post(
       if (!active) return fail(c, "No active giveaway", 404);
       const userId = c.get("userId") as string;
       await queueAction("giveaway_draw", {}, userId, active.id);
-      await audit(c, "giveaway.draw", "giveaway", String(active.id));
+      await audit(c, "giveaway.draw", "giveaway", String(active.id), {
+        prize: active.prize,
+        status: active.status,
+        monthLabel: active.monthLabel,
+      });
       return success(c, { queued: true as const }, 202);
     } catch (err) {
       resetSecretaryDb();
@@ -555,7 +563,11 @@ giveaway.post(
       if (!active) return fail(c, "No active giveaway", 404);
       const userId = c.get("userId") as string;
       await queueAction("giveaway_cancel", {}, userId, active.id);
-      await audit(c, "giveaway.cancel", "giveaway", String(active.id));
+      await audit(c, "giveaway.cancel", "giveaway", String(active.id), {
+        prize: active.prize,
+        status: active.status,
+        monthLabel: active.monthLabel,
+      });
       return success(c, { queued: true as const }, 202);
     } catch (err) {
       resetSecretaryDb();
@@ -676,6 +688,8 @@ giveaway.post(
         userId: body.userId,
         delta: body.delta,
         bonusTickets: nextBonus,
+        prize: active.prize,
+        previousBonus: currentBonus,
       });
       const updated = await loadGiveawayById(active.id);
       return success(c, updated ? await buildSnapshot(updated) : null);

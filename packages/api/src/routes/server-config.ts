@@ -91,7 +91,13 @@ serverConfig.post("/", requirePermission("developer"), validate("json", upsertSc
     },
   });
 
-  await audit(c, "server_config.upsert", "server_config", body.server, { label: body.label });
+  await audit(c, "server_config.upsert", "server_config", body.server, {
+    label: body.label,
+    server: body.server,
+    sftpHost: body.sftpHost,
+    sftpPath: body.sftpPath,
+    syncEnabled: body.syncEnabled,
+  });
 
   return success(c, toConfig(config), existing ? 200 : 201);
 });

@@ -6,43 +6,44 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePermissions } from "@/lib/permission-context";
 import { DataTable, type Column } from "@/components/data-table";
 import { SearchInput } from "@/components/search-input";
+import { AuditLogDetail, FilterNameButton } from "@/components/audit-log-detail";
 import { formatDateTime } from "@/lib/format";
-import { formatWhitelistActionSummary } from "@/lib/whitelist-audit-detail";
+import { formatActionLabel, formatAuditSummary, formatResourceLabel } from "@/lib/audit-inspect";
 import type { AuditLogEntry } from "shared";
 
 const RESOURCE_OPTIONS = [
-  "whitelist",
-  "role",
-  "user",
-  "admin_group",
-  "clan",
-  "server_config",
-  "match",
-  "squadjs",
-  "discord_bot",
-  "prospect",
-  "live_server",
+  { value: "WhitelistEntry", label: "Whitelist" },
+  { value: "DiscordRole", label: "Role" },
+  { value: "user", label: "Member" },
+  { value: "admin_group", label: "Admin group" },
+  { value: "clan", label: "Clan" },
+  { value: "server_config", label: "Server config" },
+  { value: "match", label: "Match" },
+  { value: "SquadJSConfig", label: "SquadJS" },
+  { value: "discord_bot", label: "Discord bot" },
+  { value: "prospect", label: "Prospect" },
+  { value: "LiveServer", label: "Live server" },
+  { value: "giveaway", label: "Giveaway" },
+  { value: "seeding", label: "Seeding" },
+  { value: "ticket_timeout", label: "Ticket timeout" },
 ];
 
 const ACTION_PREFIXES = [
-  "whitelist",
-  "role",
-  "member",
-  "admin_group",
-  "clan",
-  "server_config",
-  "match",
-  "squadjs",
-  "discord_bot",
-  "prospect",
-  "rcon",
+  { value: "whitelist", label: "Whitelist" },
+  { value: "role", label: "Role" },
+  { value: "member", label: "Member" },
+  { value: "admin_group", label: "Admin group" },
+  { value: "clan", label: "Clan" },
+  { value: "server_config", label: "Server config" },
+  { value: "match", label: "Match" },
+  { value: "squadjs", label: "SquadJS" },
+  { value: "discord_bot", label: "Discord bot" },
+  { value: "prospect", label: "Prospect" },
+  { value: "rcon", label: "RCON" },
+  { value: "giveaway", label: "Giveaway" },
 ];
 
 const PAGE_SIZE = 50;
-
-function formatAction(action: string): string {
-  return action.replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 function ActionBadge({ action }: { action: string }) {
   const prefix = action.split(".")[0];
@@ -57,80 +58,14 @@ function ActionBadge({ action }: { action: string }) {
     squadjs: "bg-pink-500/15 text-pink-400",
     discord_bot: "bg-indigo-500/15 text-indigo-400",
     rcon: "bg-rose-500/15 text-rose-400",
+    giveaway: "bg-emerald-500/15 text-emerald-400",
+    prospect: "bg-teal-500/15 text-teal-400",
   };
   const cls = colorMap[prefix] || "bg-gray-500/15 text-gray-400";
   return (
     <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${cls}`}>
-      {formatAction(action)}
+      {formatActionLabel(action)}
     </span>
-  );
-}
-
-function formatDetailSummary(action: string, detail: Record<string, unknown> | null): string | null {
-  if (!detail) return null;
-  const name = detail.playerName as string | undefined;
-  const names = detail.playerNames as string[] | undefined;
-  switch (action) {
-    case "rcon.warn":
-      return name
-        ? `Warned ${name}${detail.message ? ` -- "${detail.message}"` : ""}`
-        : null;
-    case "rcon.kick":
-      return name
-        ? `Kicked ${name}${detail.reason ? ` -- ${detail.reason}` : ""}`
-        : null;
-    case "rcon.switchteam":
-      return name ? `Moved ${name} to other team` : null;
-    case "rcon.switchsquad":
-      return names?.length
-        ? `Moved ${detail.count} players (${names.join(", ")})`
-        : detail.count
-          ? `Moved ${detail.count} players`
-          : null;
-    case "rcon.switchclan":
-      return `Moved ${detail.count || 0} clan members${detail.clanTag ? ` [${detail.clanTag}]` : ""}${names?.length ? ` (${names.join(", ")})` : ""} to Team ${detail.targetTeam || "?"}`;
-    case "rcon.demotecommander":
-      return name ? `Demoted ${name}` : null;
-    case "rcon.broadcast":
-      return detail.message ? `"${detail.message}"` : null;
-    case "rcon.disband":
-      return `Disbanded squad ${detail.squadID || "?"} on team ${detail.teamID || "?"}`;
-    case "rcon.setnextlayer":
-      return detail.layer ? `Set next layer: ${detail.layer}` : null;
-    case "rcon.endmatch":
-      return "Ended current match";
-    case "whitelist.add":
-    case "whitelist.update":
-    case "whitelist.delete":
-    case "whitelist.comment.add":
-    case "whitelist.comment.delete":
-    case "whitelist.bulk_add":
-    case "whitelist.bulk_update":
-    case "whitelist.bulk_delete":
-    case "whitelist.deactivate":
-    case "whitelist.reactivate":
-      return formatWhitelistActionSummary(action, detail);
-    default:
-      return null;
-  }
-}
-
-function DetailView({ detail }: { detail: Record<string, unknown> | null }) {
-  if (!detail || Object.keys(detail).length === 0) {
-    return <span className="text-text-muted">--</span>;
-  }
-
-  return (
-    <div className="max-h-40 overflow-auto rounded bg-bg-primary p-2 text-xs">
-      {Object.entries(detail).map(([key, value]) => (
-        <div key={key} className="mb-1 last:mb-0">
-          <span className="text-text-muted">{key}: </span>
-          <span className="text-text-secondary">
-            {typeof value === "object" ? JSON.stringify(value) : String(value ?? "")}
-          </span>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -143,14 +78,11 @@ export default function AuditLogsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters
   const [actionFilter, setActionFilter] = useState("");
   const [resourceFilter, setResourceFilter] = useState("");
   const [userSearch, setUserSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-
-  // Expanded row
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   async function handleDelete(id: string, e: React.MouseEvent) {
@@ -164,19 +96,28 @@ export default function AuditLogsPage() {
     }
   }
 
+  function filterByName(name: string) {
+    const next = userSearch === name ? "" : name;
+    setUserSearch(next);
+    setPage(1);
+  }
+
+  const query = useMemo(() => ({
+    page,
+    limit: PAGE_SIZE,
+    action: actionFilter || undefined,
+    resource: resourceFilter || undefined,
+    q: userSearch.trim() || undefined,
+    from: fromDate || undefined,
+    to: toDate ? toDate + "T23:59:59.999Z" : undefined,
+  }), [page, actionFilter, resourceFilter, userSearch, fromDate, toDate]);
+
   const fetchLogs = useCallback(async () => {
     if (!apiToken) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await getAuditLogs(apiToken, {
-        page,
-        limit: PAGE_SIZE,
-        action: actionFilter || undefined,
-        resource: resourceFilter || undefined,
-        from: fromDate || undefined,
-        to: toDate ? toDate + "T23:59:59.999Z" : undefined,
-      });
+      const res = await getAuditLogs(apiToken, query);
       if (res.success && res.data) {
         setLogs(res.data.items);
         setTotal(res.data.total);
@@ -188,7 +129,7 @@ export default function AuditLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [apiToken, page, actionFilter, resourceFilter, fromDate, toDate]);
+  }, [apiToken, query]);
 
   useEffect(() => {
     fetchLogs();
@@ -197,28 +138,17 @@ export default function AuditLogsPage() {
   const silentRefreshLogs = useCallback(async () => {
     if (!apiToken) return;
     try {
-      const res = await getAuditLogs(apiToken, {
-        page,
-        limit: PAGE_SIZE,
-        action: actionFilter || undefined,
-        resource: resourceFilter || undefined,
-        from: fromDate || undefined,
-        to: toDate ? toDate + "T23:59:59.999Z" : undefined,
-      });
+      const res = await getAuditLogs(apiToken, query);
       if (res.success && res.data) {
         setLogs(res.data.items);
         setTotal(res.data.total);
       }
     } catch { /* silent */ }
-  }, [apiToken, page, actionFilter, resourceFilter, fromDate, toDate]);
+  }, [apiToken, query]);
 
   useAutoRefresh(silentRefreshLogs, 20_000, !!apiToken);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-  const filteredLogs = userSearch
-    ? logs.filter((l) => l.userName.toLowerCase().includes(userSearch.toLowerCase()))
-    : logs;
 
   function resetFilters() {
     setActionFilter("");
@@ -245,7 +175,11 @@ export default function AuditLogsPage() {
       key: "user",
       header: "User",
       render: (log) => (
-        <span className="font-medium text-text-primary">{log.userName}</span>
+        <FilterNameButton
+          name={log.userName}
+          active={userSearch === log.userName}
+          onFilter={filterByName}
+        />
       ),
     },
     {
@@ -257,7 +191,7 @@ export default function AuditLogsPage() {
       key: "resource",
       header: "Resource",
       render: (log) => (
-        <span className="text-text-secondary">{log.resource.replace(/_/g, " ")}</span>
+        <span className="text-text-secondary">{formatResourceLabel(log.resource)}</span>
       ),
     },
     {
@@ -276,20 +210,12 @@ export default function AuditLogsPage() {
       key: "details",
       header: "Details",
       render: (log) => {
-        const isExpanded = expandedId === log.id;
-        if (isExpanded) return <DetailView detail={log.detail} />;
-        const summary = formatDetailSummary(log.action, log.detail);
-        if (summary) {
-          return (
-            <span className="text-xs text-text-secondary" title="Click for full details">
-              {summary}
-            </span>
-          );
-        }
-        if (log.detail && Object.keys(log.detail).length > 0) {
-          return <span className="text-xs text-accent">Click to expand</span>;
-        }
-        return <span className="text-text-muted">--</span>;
+        const summary = formatAuditSummary(log.action, log.detail);
+        return (
+          <span className="text-xs text-text-secondary" title="Click row for full details">
+            {summary}
+          </span>
+        );
       },
     },
     ...(canDelete
@@ -307,7 +233,7 @@ export default function AuditLogsPage() {
           ),
         }]
       : []),
-  ], [expandedId, canDelete]);
+  ], [canDelete, userSearch]);
 
   return (
     <div>
@@ -325,7 +251,6 @@ export default function AuditLogsPage() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div>
           <label className="mb-1 block text-xs text-text-muted">Action</label>
@@ -336,7 +261,7 @@ export default function AuditLogsPage() {
           >
             <option value="">All actions</option>
             {ACTION_PREFIXES.map((a) => (
-              <option key={a} value={a}>{a.replace(/_/g, " ")}</option>
+              <option key={a.value} value={a.value}>{a.label}</option>
             ))}
           </select>
         </div>
@@ -349,17 +274,17 @@ export default function AuditLogsPage() {
           >
             <option value="">All resources</option>
             {RESOURCE_OPTIONS.map((r) => (
-              <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
+              <option key={r.value} value={r.value}>{r.label}</option>
             ))}
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs text-text-muted">User</label>
+          <label className="mb-1 block text-xs text-text-muted">Person</label>
           <SearchInput
             value={userSearch}
-            onChange={setUserSearch}
-            placeholder="Search by name..."
-            className="w-40"
+            onChange={(value) => { setUserSearch(value); setPage(1); }}
+            placeholder="Name, Steam ID, or staff..."
+            className="w-56"
           />
         </div>
         <div>
@@ -388,30 +313,41 @@ export default function AuditLogsPage() {
             Clear filters
           </button>
         )}
+        <span className="pb-1 text-[11px] text-text-muted">
+          Click a name to filter by that person.
+        </span>
       </div>
 
-      {/* Error */}
       {error && (
         <div className="mb-4 rounded-sm border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
           {error}
         </div>
       )}
 
-      {/* Table */}
       <div className="rounded-sm border border-border">
         <DataTable<AuditLogEntry>
           columns={auditColumns}
-          data={filteredLogs}
+          data={logs}
           keyExtractor={(log) => log.id}
-          emptyMessage="No audit log entries found"
+          emptyMessage={hasFilters ? "No audit log entries match these filters" : "No audit log entries found"}
           loading={loading && logs.length === 0}
           skeletonRows={8}
-          onRowClick={(log) => setExpandedId(expandedId === log.id ? null : log.id)}
+          onRowClick={(log) => {
+            if (window.getSelection()?.toString()) return;
+            setExpandedId(expandedId === log.id ? null : log.id);
+          }}
           rowClassName="group"
+          isExpanded={(log) => expandedId === log.id}
+          renderExpanded={(log) => (
+            <AuditLogDetail
+              log={log}
+              filterName={userSearch}
+              onFilterName={filterByName}
+            />
+          )}
         />
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between">
           <div className="text-xs text-text-muted">

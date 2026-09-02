@@ -112,6 +112,14 @@ timeouts.delete(
 
       // Only an active (not-yet-expired) timeout can be ended; scoping the UPDATE
       // by expires_at > NOW() lets a 0-row result signal a genuine 404.
+      const existing: any[] = await db.$queryRaw(Prisma.sql`
+        SELECT id, user_id, timed_out_by, expires_at
+         FROM ticket_timeouts WHERE id = ${id} AND expires_at > NOW()`
+      );
+      if (existing.length === 0) {
+        return fail(c, "Active timeout not found", 404);
+      }
+
       const affected = await db.$executeRaw(Prisma.sql`
         UPDATE ticket_timeouts SET expires_at = NOW()
          WHERE id = ${id} AND expires_at > NOW()`
@@ -121,7 +129,10 @@ timeouts.delete(
         return fail(c, "Active timeout not found", 404);
       }
 
-      await audit(c, "discord_bot.expire_ticket_timeout", "ticket_timeout", String(id));
+      await audit(c, "discord_bot.expire_ticket_timeout", "ticket_timeout", String(id), {
+        userId: existing[0].user_id,
+        timedOutBy: existing[0].timed_out_by,
+      });
       return c.body(null, 204);
     } catch (err: unknown) {
       resetSecretaryDb();

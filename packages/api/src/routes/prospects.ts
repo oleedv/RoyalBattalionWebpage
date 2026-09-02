@@ -456,7 +456,11 @@ prospects.patch(
         SELECT id, user_id, expires_at, created_by, reason, prospect_id, created_at
          FROM prospect_cooldowns WHERE id = ${id}`
       );
-      await audit(c, "prospect.cooldown_update", "prospect", String(id), { days });
+      await audit(c, "prospect.cooldown_update", "prospect", String(id), {
+        days,
+        userId: rows[0]?.user_id,
+        reason: rows[0]?.reason,
+      });
       return success(c, mapCooldownRow(rows[0]));
     } catch (err) {
       resetSecretaryDb();
@@ -477,11 +481,15 @@ prospects.delete(
     try {
       const db = getSecretaryDb();
       const existing: any[] = await db.$queryRaw(Prisma.sql`
-        SELECT id FROM prospect_cooldowns WHERE id = ${id}`
+        SELECT id, user_id, reason, created_by FROM prospect_cooldowns WHERE id = ${id}`
       );
       if (existing.length === 0) return fail(c, "Cooldown not found", 404);
       await db.$queryRaw(Prisma.sql`DELETE FROM prospect_cooldowns WHERE id = ${id}`);
-      await audit(c, "prospect.cooldown_delete", "prospect", String(id));
+      await audit(c, "prospect.cooldown_delete", "prospect", String(id), {
+        userId: existing[0].user_id,
+        reason: existing[0].reason,
+        createdBy: existing[0].created_by,
+      });
       return success(c, { deleted: true as const });
     } catch (err) {
       resetSecretaryDb();
@@ -709,7 +717,7 @@ prospects.patch(
 
       // 404 if the prospect doesn't exist (don't report a 0-row update as success)
       const existing: any[] = await db.$queryRaw(Prisma.sql`
-        SELECT id FROM prospects WHERE id = ${id}`
+        SELECT id, user_id, alias, steam_id, mentor_id, status FROM prospects WHERE id = ${id}`
       );
       if (existing.length === 0) {
         return fail(c, "Prospect not found", 404);
@@ -722,14 +730,22 @@ prospects.patch(
             INSERT INTO prospect_events (prospect_id, event_type, actor_id, detail, created_at)
              VALUES (${id}, 'paused', ${userId}, 'Period paused via dashboard', NOW())`
           );
-          await audit(c, "discord_bot.pause_prospect", "prospect", String(id));
+          await audit(c, "discord_bot.pause_prospect", "prospect", String(id), {
+            userId: existing[0].user_id,
+            alias: existing[0].alias,
+            steamId: existing[0].steam_id,
+          });
         } else {
           await db.$queryRaw(Prisma.sql`UPDATE prospects SET paused_at = NULL WHERE id = ${id}`);
           await db.$queryRaw(Prisma.sql`
             INSERT INTO prospect_events (prospect_id, event_type, actor_id, detail, created_at)
              VALUES (${id}, 'unpaused', ${userId}, 'Period unpaused via dashboard', NOW())`
           );
-          await audit(c, "discord_bot.unpause_prospect", "prospect", String(id));
+          await audit(c, "discord_bot.unpause_prospect", "prospect", String(id), {
+            userId: existing[0].user_id,
+            alias: existing[0].alias,
+            steamId: existing[0].steam_id,
+          });
         }
       }
 
@@ -741,7 +757,12 @@ prospects.patch(
           INSERT INTO prospect_events (prospect_id, event_type, actor_id, detail, created_at)
            VALUES (${id}, 'extended', ${userId}, ${`Period extended by ${extendDays} day(s) via dashboard`}, NOW())`
         );
-        await audit(c, "discord_bot.extend_prospect", "prospect", String(id), { days: extendDays });
+        await audit(c, "discord_bot.extend_prospect", "prospect", String(id), {
+          days: extendDays,
+          userId: existing[0].user_id,
+          alias: existing[0].alias,
+          steamId: existing[0].steam_id,
+        });
       }
 
       return success(c, { updated: true as const });
@@ -768,7 +789,7 @@ prospects.post(
 
       const db = getSecretaryDb();
       const rows: any[] = await db.$queryRaw(Prisma.sql`
-        SELECT id, status, mentor_id FROM prospects WHERE id = ${id}`);
+        SELECT id, status, mentor_id, user_id, alias FROM prospects WHERE id = ${id}`);
       if (rows.length === 0) return fail(c, "Prospect not found", 404);
       if (rows[0].status !== "open") return fail(c, "Prospect is not open");
       if (rows[0].mentor_id === mentorId) return fail(c, "Prospect is already assigned to this mentor");
@@ -777,7 +798,12 @@ prospects.post(
         INSERT INTO pending_actions (action_type, target_type, target_id, payload, actor_id)
         VALUES ('reassign_mentor', 'prospect', ${id}, ${JSON.stringify({ newMentorId: mentorId })}, ${userId})`
       );
-      await audit(c, "discord_bot.reassign_mentor_queued", "prospect", String(id), { mentorId });
+      await audit(c, "discord_bot.reassign_mentor_queued", "prospect", String(id), {
+        mentorId,
+        previousMentorId: rows[0].mentor_id,
+        userId: rows[0].user_id,
+        alias: rows[0].alias,
+      });
       return success(c, { queued: true as const }, 202);
     } catch (err) {
       resetSecretaryDb();

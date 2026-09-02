@@ -610,7 +610,10 @@ class SquadJSSocketManager {
           state.balanceStatus = null;
         }
         if (bqe.action === "executed") {
+          const snap = this.getSnapshot(key);
           auditDirect("system", "SquadJS", "rcon.balanceexecuted", "LiveServer", key, {
+            server: key,
+            layer: snap?.serverInfo?.currentLayer ?? null,
             originalRequester: bqe.requestedBy ?? null,
             team1Count: bqe.team1Count ?? null,
             team2Count: bqe.team2Count ?? null,
@@ -618,6 +621,7 @@ class SquadJSSocketManager {
           });
         } else if (bqe.action === "failed") {
           auditDirect("system", "SquadJS", "rcon.balancefailed", "LiveServer", key, {
+            server: key,
             originalRequester: bqe.requestedBy ?? null,
             error: bqe.error ?? null,
           });

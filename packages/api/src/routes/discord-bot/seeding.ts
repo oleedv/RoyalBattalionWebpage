@@ -117,7 +117,7 @@ seeding.patch(
         UPDATE seeding_config SET ${Prisma.join(sets)} WHERE id = 1`
       );
 
-      await audit(c, "discord_bot.update_seeding_config", "discord_bot");
+      await audit(c, "discord_bot.update_seeding_config", "discord_bot", null, body as Record<string, unknown>);
       return success(c, { updated: true as const });
     } catch (err) {
       resetSecretaryDb();
@@ -279,7 +279,7 @@ seeding.post(
         INSERT INTO pending_actions (action_type, target_type, target_id, payload, actor_id)
         VALUES ('send_seeding_call', 'seeding', 0, '{}', ${userId})`
       );
-      await audit(c, "discord_bot.send_seeding_call", "seeding");
+      await audit(c, "discord_bot.send_seeding_call", "seeding", undefined, { queued: true });
       return success(c, { queued: true as const }, 202);
     } catch (err) {
       resetSecretaryDb();

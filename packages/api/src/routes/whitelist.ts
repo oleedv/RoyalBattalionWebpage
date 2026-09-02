@@ -256,7 +256,16 @@ whitelist.post("/", requirePermission("manage:whitelist"), rateLimit(30), valida
     });
 
     deployInBackground(server);
-    audit(c, "whitelist.add", "WhitelistEntry", entry.id, { steamId, server, name, role });
+    audit(c, "whitelist.add", "WhitelistEntry", entry.id, {
+      steamId,
+      server,
+      name,
+      role,
+      clan: entry.clan,
+      groupId: entry.groupId,
+      reason: entry.reason,
+      expiresAt: entry.expiresAt?.toISOString() ?? null,
+    });
 
     const result = toEntry(entry);
     const warnings = duplicates.length > 0

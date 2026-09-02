@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { SkeletonTableRows } from "./skeleton";
 
 export interface Column<T> {
@@ -21,6 +21,8 @@ interface DataTableProps<T> {
   loading?: boolean;
   /** Number of skeleton rows to render while loading (default 6). */
   skeletonRows?: number;
+  isExpanded?: (item: T) => boolean;
+  renderExpanded?: (item: T) => ReactNode;
 }
 
 export function DataTable<T>({
@@ -32,6 +34,8 @@ export function DataTable<T>({
   rowClassName,
   loading = false,
   skeletonRows = 6,
+  isExpanded,
+  renderExpanded,
 }: DataTableProps<T>) {
   return (
     <div className="overflow-x-auto" aria-busy={loading || undefined}>
@@ -66,21 +70,30 @@ export function DataTable<T>({
                 typeof rowClassName === "function"
                   ? rowClassName(item)
                   : rowClassName;
+              const expanded = Boolean(isExpanded?.(item));
               return (
-                <tr
-                  key={keyExtractor(item)}
-                  onClick={onRowClick ? () => onRowClick(item) : undefined}
-                  className={`border-b border-border/50 transition-colors hover:bg-bg-secondary/50 ${onRowClick ? "cursor-pointer" : ""} ${className || ""}`}
-                >
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={`px-4 py-3 ${col.className || ""}`}
-                    >
-                      {col.render(item)}
-                    </td>
-                  ))}
-                </tr>
+                <Fragment key={keyExtractor(item)}>
+                  <tr
+                    onClick={onRowClick ? () => onRowClick(item) : undefined}
+                    className={`${expanded ? "border-b-0 bg-bg-secondary/40" : "border-b border-border/50"} transition-colors hover:bg-bg-secondary/50 ${onRowClick ? "cursor-pointer" : ""} ${className || ""}`}
+                  >
+                    {columns.map((col) => (
+                      <td
+                        key={col.key}
+                        className={`px-4 py-3 ${col.className || ""}`}
+                      >
+                        {col.render(item)}
+                      </td>
+                    ))}
+                  </tr>
+                  {expanded && renderExpanded && (
+                    <tr className="border-b border-border/50">
+                      <td colSpan={columns.length} className="bg-bg-secondary/20 px-4 pb-4 pt-1">
+                        {renderExpanded(item)}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })
           )}

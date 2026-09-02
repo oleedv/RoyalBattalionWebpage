@@ -393,7 +393,15 @@ users.post("/bulk-update", authMiddleware, requirePermission("manage:members"), 
     data: updateData,
   });
 
-  await audit(c, "member.bulk_update", "user", null, { count: result.count, changes: data });
+  const targets = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { discordName: true },
+  });
+  await audit(c, "member.bulk_update", "user", null, {
+    count: result.count,
+    changes: data,
+    names: targets.map((u) => u.discordName),
+  });
   return success(c, { updated: result.count });
 });
 
@@ -443,7 +451,15 @@ users.post("/bulk-comment", authMiddleware, requirePermission("manage:members"),
     })),
   });
 
-  await audit(c, "member.bulk_comment", "user", null, { count: ids.length });
+  const commented = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { discordName: true },
+  });
+  await audit(c, "member.bulk_comment", "user", null, {
+    count: ids.length,
+    names: commented.map((u) => u.discordName),
+    textPreview: text.slice(0, 200),
+  });
   return success(c, { commented: ids.length });
 });
 
@@ -489,7 +505,12 @@ users.patch("/:id/status", authMiddleware, requirePermission("developer"), valid
     clearSyncCache(target.discordId);
     if (wl.count > 0) deployInBackground();
 
-    await audit(c, "member.disable", "user", id, { reason, targetName: target.discordName });
+    await audit(c, "member.disable", "user", id, {
+      reason,
+      targetName: target.discordName,
+      discordId: target.discordId,
+      steamId: target.steamId,
+    });
     if (wl.count > 0) {
       await audit(c, "whitelist.deactivate", "WhitelistEntry", id, {
         count: wl.count,
@@ -514,7 +535,11 @@ users.patch("/:id/status", authMiddleware, requirePermission("developer"), valid
 
   if (wl.count > 0) deployInBackground();
 
-  await audit(c, "member.enable", "user", id, { targetName: target.discordName });
+  await audit(c, "member.enable", "user", id, {
+    targetName: target.discordName,
+    discordId: target.discordId,
+    steamId: target.steamId,
+  });
   if (wl.count > 0) {
     await audit(c, "whitelist.reactivate", "WhitelistEntry", id, {
       count: wl.count,
@@ -571,6 +596,7 @@ users.post("/bulk-disable", authMiddleware, requirePermission("developer"), rate
     count: userResult.count,
     reason,
     names: safeTargets.map((t) => t.discordName),
+    discordIds: safeTargets.map((t) => t.discordId),
   });
   if (wl.count > 0) {
     await audit(c, "whitelist.deactivate", "WhitelistEntry", null, {
@@ -718,7 +744,12 @@ users.patch("/:id", authMiddleware, requirePermission("manage:members"), validat
       await relinkWhitelistEntries(id, existing.steamId, updated.steamId);
     }
 
-    await audit(c, "member.update", "user", id, { changes: body });
+    await audit(c, "member.update", "user", id, {
+      targetName: existing.discordName,
+      discordId: existing.discordId,
+      steamId: existing.steamId,
+      changes: body,
+    });
 
     const activityMap = await fetchActivityMap();
     return success(c, mapUserWithComments(updated, activityMap));
@@ -754,7 +785,11 @@ users.delete("/:id", authMiddleware, requirePermission("manage:members"), async 
   const existing = await findOrThrow(prisma.user, { id }, "User");
 
   await prisma.user.delete({ where: { id } });
-  await audit(c, "member.delete", "user", id, { discordName: existing.discordName });
+  await audit(c, "member.delete", "user", id, {
+    discordName: existing.discordName,
+    discordId: existing.discordId,
+    steamId: existing.steamId,
+  });
 
   return c.body(null, 204);
 });
@@ -854,7 +889,7 @@ users.post("/:id/comments", authMiddleware, requirePermission("manage:members"),
   const authorId = c.get("userId") as string;
   const { text } = c.req.valid("json");
 
-  await findOrThrow(prisma.user, { id: userId }, "User");
+  const target = await findOrThrow(prisma.user, { id: userId }, "User");
 
   const author = await prisma.user.findUnique({
     where: { id: authorId },
@@ -870,7 +905,12 @@ users.post("/:id/comments", authMiddleware, requirePermission("manage:members"),
     },
   });
 
-  await audit(c, "member.comment.add", "user", userId, { commentId: comment.id });
+  await audit(c, "member.comment.add", "user", userId, {
+    commentId: comment.id,
+    targetName: target.discordName,
+    discordId: target.discordId,
+    textPreview: text.slice(0, 200),
+  });
 
   return success(c, mapComment(comment), 201);
 });
@@ -884,8 +924,17 @@ users.delete("/:id/comments/:commentId", authMiddleware, requirePermission("mana
     return fail(c, "Comment not found", 404);
   }
 
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { discordName: true, discordId: true },
+  });
   await prisma.memberComment.delete({ where: { id: commentId } });
-  await audit(c, "member.comment.delete", "user", userId, { commentId });
+  await audit(c, "member.comment.delete", "user", userId, {
+    commentId,
+    targetName: target?.discordName,
+    discordId: target?.discordId,
+    textPreview: comment.text?.slice(0, 200),
+  });
 
   return c.body(null, 204);
 });

@@ -8,6 +8,28 @@ import type { Permission } from "shared";
 
 export const wsClients = new Set<ServerWebSocket<WSData>>();
 
+function rconContext(serverKey: string): Record<string, unknown> {
+  const snap = squadjsSocket.getSnapshot(serverKey);
+  const info = snap?.serverInfo;
+  const ctx: Record<string, unknown> = { server: serverKey };
+  if (info?.currentLayer) ctx.layer = info.currentLayer;
+  if (info?.playerCount != null) ctx.playerCount = info.playerCount;
+  else if (snap?.players) ctx.playerCount = snap.players.length;
+  return ctx;
+}
+
+function rconAudit(
+  ws: ServerWebSocket<WSData>,
+  action: string,
+  extra: Record<string, unknown> = {},
+) {
+  const serverKey = ws.data.serverKey;
+  auditDirect(ws.data.userId, ws.data.userName, action, "LiveServer", serverKey, {
+    ...rconContext(serverKey),
+    ...extra,
+  });
+}
+
 /** Set up the SquadJS event relay to all subscribed live-server WebSocket clients. */
 export function initLiveServerRelay() {
   // Clear previous listeners first (handles bun --watch re-evaluation)
@@ -150,7 +172,7 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "warn", playerId, msg.message);
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.warn", "LiveServer", serverKey, { playerId, playerName: msg.playerName, message: msg.message });
+        rconAudit(ws, "rcon.warn", { playerId, playerName: msg.playerName, message: msg.message, steamId: msg.steamId, eosId: msg.eosId });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "warn" }));
         break;
       }
@@ -162,7 +184,7 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "kick", playerId, msg.reason || "Kicked by admin");
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.kick", "LiveServer", serverKey, { playerId, playerName: msg.playerName, reason: msg.reason });
+        rconAudit(ws, "rcon.kick", { playerId, playerName: msg.playerName, reason: msg.reason, steamId: msg.steamId, eosId: msg.eosId });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "kick" }));
         setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
         break;
@@ -174,7 +196,7 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "broadcast", msg.message);
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.broadcast", "LiveServer", serverKey, { message: msg.message });
+        rconAudit(ws, "rcon.broadcast", { message: msg.message });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "broadcast" }));
         break;
 
@@ -189,7 +211,7 @@ async function handleAdminAction(
           await squadjsSocket.executeRcon(serverKey, "execute", `AdminForceTeamChangeById ${msg.eosId}`);
         }
         const playerId = msg.steamId || msg.eosId;
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchteam", "LiveServer", serverKey, { playerId, playerName: msg.playerName });
+        rconAudit(ws, "rcon.switchteam", { playerId, playerName: msg.playerName, steamId: msg.steamId, eosId: msg.eosId });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchteam" }));
         setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
         break;
@@ -217,7 +239,11 @@ async function handleAdminAction(
             await new Promise((r) => setTimeout(r, 500));
           }
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchsquad", "LiveServer", serverKey, { count: switched, playerNames: msg.players!.map((p) => p.name).filter(Boolean) });
+        rconAudit(ws, "rcon.switchsquad", {
+          count: switched,
+          playerNames: msg.players!.map((p) => p.name).filter(Boolean),
+          playerIds: msg.players!.map((p) => p.steamId || p.eosId).filter(Boolean),
+        });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchsquad" }));
         setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
         break;
@@ -229,7 +255,7 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "execute", `AdminDisbandSquad ${msg.teamID} ${msg.squadID}`);
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.disband", "LiveServer", serverKey, { teamID: msg.teamID, squadID: msg.squadID });
+        rconAudit(ws, "rcon.disband", { teamID: msg.teamID, squadID: msg.squadID });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "disband" }));
         setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
         break;
@@ -237,7 +263,7 @@ async function handleAdminAction(
 
       case "endmatch": {
         await squadjsSocket.executeRcon(serverKey, "execute", "AdminEndMatch");
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.endmatch", "LiveServer", serverKey, {});
+        rconAudit(ws, "rcon.endmatch");
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "endmatch" }));
         break;
       }
@@ -248,7 +274,7 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "execute", `AdminSetNextLayer ${msg.message}`);
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.setnextlayer", "LiveServer", serverKey, { layer: msg.message });
+        rconAudit(ws, "rcon.setnextlayer", { layer: msg.message });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "setnextlayer" }));
         break;
       }
@@ -264,7 +290,7 @@ async function handleAdminAction(
           await squadjsSocket.executeRcon(serverKey, "execute", `AdminDemoteCommander ${msg.eosId}`);
         }
         const playerId = msg.steamId || msg.eosId;
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.demotecommander", "LiveServer", serverKey, { playerId, playerName: msg.playerName });
+        rconAudit(ws, "rcon.demotecommander", { playerId, playerName: msg.playerName, steamId: msg.steamId, eosId: msg.eosId });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "demotecommander" }));
         break;
       }
@@ -318,7 +344,7 @@ async function handleAdminAction(
             await new Promise((r) => setTimeout(r, 500));
           }
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.switchclan", "LiveServer", serverKey, { clanId: msg.clanId, clanTag: msg.clanTag, targetTeam: msg.targetTeam, count: switched, playerNames: toSwitch.map((p) => p.name) });
+        rconAudit(ws, "rcon.switchclan", { clanId: msg.clanId, clanTag: msg.clanTag, targetTeam: msg.targetTeam, count: switched, playerNames: toSwitch.map((p) => p.name) });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "switchclan" }));
         setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
         break;
@@ -415,7 +441,7 @@ async function handleAdminAction(
           ws.send(JSON.stringify({ type: "action_result", success: false, error: qcResult.error || "Queue failed" }));
           return;
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.queueclan", "LiveServer", serverKey, {
+        rconAudit(ws, "rcon.queueclan", {
           clanId: msg.clanId, clanTag: msg.clanTag, targetTeam: msg.targetTeam,
           count: toQueue.length, playerNames: toQueue.map((p) => p.name),
         });
@@ -437,7 +463,7 @@ async function handleAdminAction(
           ws.send(JSON.stringify({ type: "action_result", success: false, error: qrResult.error || "Queue failed" }));
           return;
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.queuerandomize", "LiveServer", serverKey, { mode: msg.message });
+        rconAudit(ws, "rcon.queuerandomize", { mode: msg.message });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "queuerandomize", data: qrResult }));
         break;
       }
@@ -456,7 +482,7 @@ async function handleAdminAction(
           ws.send(JSON.stringify({ type: "action_result", success: false, error: rrResult.error || "Run failed" }));
           return;
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.runrandomize", "LiveServer", serverKey, { mode: msg.message });
+        rconAudit(ws, "rcon.runrandomize", { mode: msg.message });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "runrandomize", data: rrResult }));
         break;
       }
@@ -471,7 +497,7 @@ async function handleAdminAction(
           ws.send(JSON.stringify({ type: "action_result", success: false, error: crResult.error || "Cancel failed" }));
           return;
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.cancelrandomize", "LiveServer", serverKey, {});
+        rconAudit(ws, "rcon.cancelrandomize");
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "cancelrandomize", data: crResult }));
         break;
       }
@@ -497,7 +523,7 @@ async function handleAdminAction(
           ws.send(JSON.stringify({ type: "action_result", success: false, error: qbResult.error || "Queue failed" }));
           return;
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.queuebalance", "LiveServer", serverKey, { displayName: actor });
+        rconAudit(ws, "rcon.queuebalance", { displayName: actor });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "queuebalance", data: qbResult }));
         break;
       }
@@ -513,7 +539,7 @@ async function handleAdminAction(
           ws.send(JSON.stringify({ type: "action_result", success: false, error: cbResult.error || "Cancel failed" }));
           return;
         }
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.cancelbalance", "LiveServer", serverKey, { displayName: actor, originalRequester: cbResult.originalRequester ?? null });
+        rconAudit(ws, "rcon.cancelbalance", { displayName: actor, originalRequester: cbResult.originalRequester ?? null });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "cancelbalance", data: cbResult }));
         break;
       }
@@ -540,7 +566,7 @@ async function handleAdminAction(
         }
         const reason = msg.reason || "Banned by admin";
         await squadjsSocket.executeRcon(serverKey, "ban", playerId, msg.banLength, reason);
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.ban", "LiveServer", serverKey, { playerId, playerName: msg.playerName, banLength: msg.banLength, reason });
+        rconAudit(ws, "rcon.ban", { playerId, playerName: msg.playerName, banLength: msg.banLength, reason, steamId: msg.steamId, eosId: msg.eosId });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "ban" }));
         setTimeout(() => squadjsSocket.refreshPlayers(serverKey), 500);
         break;
@@ -552,14 +578,14 @@ async function handleAdminAction(
           return;
         }
         await squadjsSocket.executeRcon(serverKey, "execute", `AdminChangeLayer ${msg.message}`);
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.changelayer", "LiveServer", serverKey, { layer: msg.message });
+        rconAudit(ws, "rcon.changelayer", { layer: msg.message });
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "changelayer" }));
         break;
       }
 
       case "restartmatch": {
         await squadjsSocket.executeRcon(serverKey, "execute", "AdminRestartMatch");
-        auditDirect(ws.data.userId, ws.data.userName, "rcon.restartmatch", "LiveServer", serverKey, {});
+        rconAudit(ws, "rcon.restartmatch");
         ws.send(JSON.stringify({ type: "action_result", success: true, action: "restartmatch" }));
         break;
       }
@@ -577,7 +603,7 @@ async function handleListDisconnected(ws: ServerWebSocket<WSData>) {
   const serverKey = ws.data.serverKey;
   try {
     const output = await squadjsSocket.executeRcon(serverKey, "execute", "AdminListDisconnectedPlayers", { dedupe: false });
-    auditDirect(ws.data.userId, ws.data.userName, "rcon.listdisconnected", "LiveServer", serverKey, {});
+    rconAudit(ws, "rcon.listdisconnected");
     ws.send(JSON.stringify({ type: "rcon_response", command: "AdminListDisconnectedPlayers", output: typeof output === "string" ? output : JSON.stringify(output), success: true }));
   } catch (err) {
     const error = err instanceof Error ? err.message : "Command failed";
@@ -598,7 +624,7 @@ async function handleRconConsole(
   logger.info("live-server", `RCON console from user ${ws.data.userId} on ${serverKey}: ${command}`);
   try {
     const output = await squadjsSocket.executeRcon(serverKey, "execute", command, { dedupe: false });
-    auditDirect(ws.data.userId, ws.data.userName, "rcon.console", "LiveServer", serverKey, { command });
+    rconAudit(ws, "rcon.console", { command });
     ws.send(JSON.stringify({
       type: "rcon_response",
       command,

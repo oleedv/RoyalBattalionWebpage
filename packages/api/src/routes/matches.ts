@@ -92,7 +92,7 @@ matches.patch("/:id", requirePermission("manage:matches"), validate("json", upda
   const id = c.req.param("id");
   const body = c.req.valid("json");
 
-  await findOrThrow(prisma.match, { id }, "Match");
+  const existing = await findOrThrow(prisma.match, { id }, "Match");
 
   try {
     const entry = await prisma.match.update({
@@ -108,7 +108,12 @@ matches.patch("/:id", requirePermission("manage:matches"), validate("json", upda
       },
     });
 
-    await audit(c, "match.update", "match", id, { changes: body });
+    await audit(c, "match.update", "match", id, {
+      map: existing.map,
+      layer: existing.layer,
+      server: existing.server,
+      changes: body,
+    });
     return success(c, toMatch(entry));
   } catch (err) {
     logger.error("matches", "Failed to update match", { id, err });
@@ -119,7 +124,7 @@ matches.patch("/:id", requirePermission("manage:matches"), validate("json", upda
 matches.post("/resync", requirePermission("manage:matches"), async (c) => {
   try {
     const result = await resyncAllMatches();
-    await audit(c, "match.resync", "match");
+    await audit(c, "match.resync", "match", undefined, { resynced: result.resynced });
     return success(c, result);
   } catch (err) {
     logger.error("matches", "Failed to resync matches", { err });

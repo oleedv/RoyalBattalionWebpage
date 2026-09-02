@@ -26,6 +26,8 @@ const ACTION_LABELS: Record<string, string> = {
   "whitelist.comment.delete": "Delete comment",
   "whitelist.deactivate": "Deactivate",
   "whitelist.reactivate": "Reactivate",
+  "whitelist.request.dismiss": "Dismiss request",
+  "whitelist.request.restore": "Restore request",
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -137,6 +139,10 @@ export function formatWhitelistActionSummary(
       return whitelistSubject(d)
         ? onPlayer("Reactivated entry", d)
         : bulkSummary("Reactivated", d.count ?? 1, d);
+    case "whitelist.request.dismiss":
+      return onPlayer("Dismissed request", d, serverExtra(d));
+    case "whitelist.request.restore":
+      return onPlayer("Restored request", d, serverExtra(d));
     default:
       if (action.startsWith("whitelist.")) {
         const label = action.split(".").slice(1).join(" ").replace(/_/g, " ");

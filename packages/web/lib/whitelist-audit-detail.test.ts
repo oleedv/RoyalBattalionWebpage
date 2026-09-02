@@ -109,6 +109,22 @@ describe("formatWhitelistActionSummary", () => {
     })).toBe("Deactivated entry on Lind (76561198819769429)");
   });
 
+  test("dismiss request names the player and server", () => {
+    expect(formatWhitelistActionSummary("whitelist.request.dismiss", {
+      name: "Lind",
+      steamId: "76561198819769429",
+      server: "main",
+    })).toBe("Dismissed request on Lind (76561198819769429) · main");
+  });
+
+  test("restore request names the player and server", () => {
+    expect(formatWhitelistActionSummary("whitelist.request.restore", {
+      name: "Lind",
+      steamId: "76561198819769429",
+      server: "battle",
+    })).toBe("Restored request on Lind (76561198819769429) · battle");
+  });
+
   test("bulk delete lists who was removed", () => {
     expect(formatWhitelistActionSummary("whitelist.bulk_delete", {
       count: 3,
@@ -130,6 +146,8 @@ describe("formatWhitelistActionLabel", () => {
     expect(formatWhitelistActionLabel("whitelist.comment.delete")).toBe("Delete comment");
     expect(formatWhitelistActionLabel("whitelist.deactivate")).toBe("Deactivate");
     expect(formatWhitelistActionLabel("whitelist.reactivate")).toBe("Reactivate");
+    expect(formatWhitelistActionLabel("whitelist.request.dismiss")).toBe("Dismiss request");
+    expect(formatWhitelistActionLabel("whitelist.request.restore")).toBe("Restore request");
   });
 });
 

@@ -7,7 +7,11 @@ import Link from "next/link";
 import Image from "next/image";
 import type { ReactNode } from "react";
 import type { Permission, UserWithRoles } from "shared";
-import { syncAuth, getWhitelistCandidates } from "@/lib/api-client";
+import {
+  syncAuth,
+  getWhitelistCandidateSummary,
+  WHITELIST_CANDIDATES_CHANGED,
+} from "@/lib/api-client";
 import { PermissionProvider } from "@/lib/permission-context";
 import { usePresence } from "@/hooks/use-presence";
 import { AppSidebar } from "@/components/shell/app-sidebar";
@@ -60,9 +64,8 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
           // Fetch whitelist candidate count for nav badge
           const perms = res.data.permissions;
           if (perms.includes("developer") || perms.includes("manage:whitelist")) {
-            // Count candidates across all servers (no server filter)
-            getWhitelistCandidates(res.data.token).then((r) => {
-              if (r.success && r.data) setCandidateCount(r.data.length);
+            getWhitelistCandidateSummary(res.data.token).then((r) => {
+              if (r.success && r.data) setCandidateCount(r.data.totalPending);
             }).catch(() => {});
           }
         } else if (!res.success) {
@@ -80,6 +83,23 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
     }
     init();
   }, [session, retryCount]);
+
+  useEffect(() => {
+    if (!apiToken || (!permissions.includes("developer") && !permissions.includes("manage:whitelist"))) {
+      return;
+    }
+    function refreshBadge() {
+      getWhitelistCandidateSummary(apiToken).then((r) => {
+        if (r.success && r.data) setCandidateCount(r.data.totalPending);
+      }).catch(() => {});
+    }
+    window.addEventListener(WHITELIST_CANDIDATES_CHANGED, refreshBadge);
+    const interval = setInterval(refreshBadge, 60_000);
+    return () => {
+      window.removeEventListener(WHITELIST_CANDIDATES_CHANGED, refreshBadge);
+      clearInterval(interval);
+    };
+  }, [apiToken, permissions]);
 
   // Periodically re-sync to keep the API token fresh (expires after 4h)
   useEffect(() => {

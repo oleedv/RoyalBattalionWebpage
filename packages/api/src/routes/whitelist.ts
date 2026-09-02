@@ -1,7 +1,22 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { validate } from "../lib/validate";
-import type { WhitelistEntry, WhitelistEntryWithComments, WhitelistComment, WhitelistCandidate } from "shared";
+import type {
+  WhitelistEntry,
+  WhitelistEntryWithComments,
+  WhitelistComment,
+  WhitelistCandidate,
+  DismissedWhitelistCandidate,
+  WhitelistCandidateList,
+  WhitelistCandidateSummary,
+} from "shared";
+import {
+  WHITELIST_CANDIDATE_QUERY_LIMIT,
+  dismissExpiresAt,
+  isActiveDismissal,
+  partitionCandidatesForServer,
+  pendingCountsByServer,
+} from "shared";
 import prisma from "../lib/db";
 import { findOrThrow, success, fail } from "../lib/crud-helpers";
 import { authMiddleware } from "../middleware/auth";
@@ -155,6 +170,78 @@ const bulkDeleteSchema = z.object({
   ids: z.array(z.string()).min(1).max(200),
 });
 
+const dismissCandidateSchema = z.object({
+  server: z.string().min(1),
+  reason: z.string().max(500).optional(),
+});
+
+const restoreCandidateSchema = z.object({
+  server: z.string().min(1),
+});
+
+type UserWithGrantingRoles = {
+  id: string;
+  discordName: string;
+  displayName: string | null;
+  steamId: string | null;
+  avatarUrl: string | null;
+  membershipDate: Date | null;
+  roles: { role: { name: string; grantsWhitelist: boolean } }[];
+};
+
+function grantingRoleNames(user: UserWithGrantingRoles): string[] {
+  return user.roles.filter((r) => r.role.grantsWhitelist).map((r) => r.role.name);
+}
+
+function toCandidate(user: UserWithGrantingRoles & { steamId: string }): WhitelistCandidate {
+  const roleNames = grantingRoleNames(user);
+  return {
+    userId: user.id,
+    discordName: user.discordName,
+    displayName: user.displayName,
+    steamId: user.steamId,
+    avatarUrl: user.avatarUrl,
+    roleName: roleNames[0] || "",
+    roleNames,
+    membershipDate: user.membershipDate?.toISOString() ?? null,
+  };
+}
+
+async function loadEligibleUsers() {
+  const users = await prisma.user.findMany({
+    where: {
+      disabled: false,
+      steamId: { not: null },
+      roles: { some: { role: { grantsWhitelist: true } } },
+    },
+    include: { roles: { include: { role: true } } },
+    take: WHITELIST_CANDIDATE_QUERY_LIMIT,
+  });
+  return users.filter((u): u is typeof u & { steamId: string } => !!u.steamId);
+}
+
+async function loadActiveEntries(server?: string) {
+  const now = new Date();
+  return prisma.whitelistEntry.findMany({
+    where: {
+      ...(server ? { server } : {}),
+      deactivatedAt: null,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    },
+    select: { steamId: true, server: true },
+  });
+}
+
+async function loadActiveDismissals(now: Date, server?: string) {
+  return prisma.whitelistRequestDismissal.findMany({
+    where: {
+      ...(server ? { server } : {}),
+      restoredAt: null,
+      expiresAt: { gt: now },
+    },
+  });
+}
+
 // ── List entries ──────────────────────────────────────────────
 
 whitelist.get("/", requirePermission("view:whitelist"), async (c) => {
@@ -174,40 +261,238 @@ whitelist.get("/", requirePermission("view:whitelist"), async (c) => {
 
 whitelist.get("/candidates", requirePermission("manage:whitelist"), async (c) => {
   const server = c.req.query("server") || "main";
+  const started = performance.now();
+  const now = new Date();
 
-  const existingSteamIds = await prisma.whitelistEntry.findMany({
-    where: { server },
-    select: { steamId: true },
-  });
-  const existingSet = new Set(existingSteamIds.map((e) => e.steamId));
+  const [users, activeEntries, dismissalRows] = await Promise.all([
+    loadEligibleUsers(),
+    loadActiveEntries(server),
+    loadActiveDismissals(now, server),
+  ]);
 
-  const candidates = await prisma.user.findMany({
-    where: {
-      disabled: false,
-      steamId: { not: null },
-      roles: {
-        some: {
-          role: { grantsWhitelist: true },
-        },
-      },
+  const truncated = users.length >= WHITELIST_CANDIDATE_QUERY_LIMIT;
+  const eligible = users.map((u) => ({ userId: u.id, steamId: u.steamId, user: u }));
+  const part = partitionCandidatesForServer(
+    eligible,
+    server,
+    activeEntries,
+    dismissalRows.map((d) => ({ userId: d.userId, server: d.server })),
+  );
+
+  const dismissalByUser = new Map(dismissalRows.map((d) => [d.userId, d]));
+  const byName = (a: WhitelistCandidate, b: WhitelistCandidate) =>
+    a.discordName.localeCompare(b.discordName, undefined, { sensitivity: "base" });
+
+  const pending = part.pending.map((e) => toCandidate(e.user)).sort(byName);
+  const dismissed: DismissedWhitelistCandidate[] = part.dismissed
+    .map((e) => {
+      const d = dismissalByUser.get(e.userId);
+      if (!d) return null;
+      return {
+        ...toCandidate(e.user),
+        dismissedAt: d.dismissedAt.toISOString(),
+        dismissedBy: d.dismissedBy,
+        dismissedByName: d.dismissedByName,
+        expiresAt: d.expiresAt.toISOString(),
+        reason: d.reason,
+      };
+    })
+    .filter((row): row is DismissedWhitelistCandidate => row !== null)
+    .sort((a, b) => b.dismissedAt.localeCompare(a.dismissedAt));
+
+  const result: WhitelistCandidateList = {
+    pending,
+    dismissed,
+    meta: {
+      server,
+      pendingCount: pending.length,
+      dismissedCount: dismissed.length,
+      eligibleCount: users.length,
+      alreadyWhitelistedCount: part.alreadyWhitelisted.length,
+      truncated,
     },
-    include: {
-      roles: { include: { role: true } },
-    },
-    take: 1000,
-  });
+  };
 
-  const result: WhitelistCandidate[] = candidates
-    .filter((u) => u.steamId && !existingSet.has(u.steamId))
-    .map((u) => ({
-      userId: u.id,
-      discordName: u.discordName,
-      steamId: u.steamId!,
-      roleName: u.roles.find((r) => r.role.grantsWhitelist)?.role.name || "",
-    }));
+  const duration_ms = Math.round((performance.now() - started) * 10) / 10;
+  logger.info("whitelist.candidates", "Listed whitelist candidates", {
+    server,
+    pendingCount: result.meta.pendingCount,
+    dismissedCount: result.meta.dismissedCount,
+    eligibleCount: result.meta.eligibleCount,
+    alreadyWhitelistedCount: result.meta.alreadyWhitelistedCount,
+    truncated,
+    duration_ms,
+  });
+  if (truncated) {
+    logger.warn("whitelist.candidates", "Eligible user query hit cap; candidate list may be incomplete", {
+      server,
+      limit: WHITELIST_CANDIDATE_QUERY_LIMIT,
+    });
+  }
 
   return success(c, result);
 });
+
+whitelist.get("/candidates/summary", requirePermission("manage:whitelist"), async (c) => {
+  const started = performance.now();
+  const now = new Date();
+
+  const configs = await prisma.serverConfig.findMany({ select: { server: true } });
+  const servers = configs.length > 0 ? configs.map((s) => s.server) : ["main"];
+
+  const [users, activeEntries, dismissalRows] = await Promise.all([
+    loadEligibleUsers(),
+    loadActiveEntries(),
+    loadActiveDismissals(now),
+  ]);
+
+  const byServer = pendingCountsByServer(
+    users.map((u) => ({ userId: u.id, steamId: u.steamId })),
+    servers,
+    activeEntries,
+    dismissalRows.map((d) => ({ userId: d.userId, server: d.server })),
+  );
+  const totalPending = byServer.reduce((sum, s) => sum + s.pending, 0);
+  const truncated = users.length >= WHITELIST_CANDIDATE_QUERY_LIMIT;
+
+  logger.info("whitelist.candidates", "Summarized whitelist candidates", {
+    totalPending,
+    byServer,
+    eligibleCount: users.length,
+    truncated,
+    duration_ms: Math.round((performance.now() - started) * 10) / 10,
+  });
+  if (truncated) {
+    logger.warn("whitelist.candidates", "Eligible user query hit cap; summary may be incomplete", {
+      limit: WHITELIST_CANDIDATE_QUERY_LIMIT,
+    });
+  }
+
+  const result: WhitelistCandidateSummary = { totalPending, byServer };
+  return success(c, result);
+});
+
+whitelist.post(
+  "/candidates/:userId/dismiss",
+  requirePermission("manage:whitelist"),
+  rateLimit(30),
+  validate("json", dismissCandidateSchema),
+  async (c) => {
+    const targetUserId = c.req.param("userId");
+    const actorId = c.get("userId");
+    const { server, reason } = c.req.valid("json");
+    const now = new Date();
+
+    const target = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, discordName: true, steamId: true },
+    });
+    if (!target) return fail(c, "User not found", 404);
+    if (!target.steamId) return fail(c, "User has no linked Steam ID", 400);
+
+    const actor = await prisma.user.findUnique({
+      where: { id: actorId },
+      select: { discordName: true },
+    });
+    const dismissedByName = actor?.discordName ?? "Unknown";
+    const expiresAt = dismissExpiresAt(now);
+
+    const row = await prisma.whitelistRequestDismissal.upsert({
+      where: { userId_server: { userId: targetUserId, server } },
+      create: {
+        userId: targetUserId,
+        server,
+        dismissedBy: actorId,
+        dismissedByName,
+        reason: reason ?? null,
+        dismissedAt: now,
+        expiresAt,
+        restoredAt: null,
+      },
+      update: {
+        dismissedBy: actorId,
+        dismissedByName,
+        reason: reason ?? null,
+        dismissedAt: now,
+        expiresAt,
+        restoredAt: null,
+      },
+    });
+
+    audit(c, "whitelist.request.dismiss", "WhitelistRequestDismissal", row.id, {
+      name: target.discordName,
+      steamId: target.steamId,
+      server,
+      expiresAt: expiresAt.toISOString(),
+      reason: reason ?? null,
+      userId: targetUserId,
+    });
+    logger.info("whitelist.candidates", "Dismissed whitelist request", {
+      targetUserId,
+      steamId: target.steamId,
+      discordName: target.discordName,
+      server,
+      expiresAt: expiresAt.toISOString(),
+      reason: reason ?? null,
+      actorId,
+    });
+
+    return success(c, {
+      id: row.id,
+      userId: targetUserId,
+      server,
+      dismissedAt: row.dismissedAt.toISOString(),
+      dismissedBy: row.dismissedBy,
+      dismissedByName: row.dismissedByName,
+      expiresAt: row.expiresAt.toISOString(),
+      reason: row.reason,
+    }, 201);
+  },
+);
+
+whitelist.post(
+  "/candidates/:userId/restore",
+  requirePermission("manage:whitelist"),
+  rateLimit(30),
+  validate("json", restoreCandidateSchema),
+  async (c) => {
+    const targetUserId = c.req.param("userId");
+    const { server } = c.req.valid("json");
+    const now = new Date();
+
+    const existing = await prisma.whitelistRequestDismissal.findUnique({
+      where: { userId_server: { userId: targetUserId, server } },
+    });
+    if (!existing || !isActiveDismissal(existing, now)) {
+      return fail(c, "No active dismissal found", 404);
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { discordName: true, steamId: true },
+    });
+
+    await prisma.whitelistRequestDismissal.update({
+      where: { id: existing.id },
+      data: { restoredAt: now },
+    });
+
+    audit(c, "whitelist.request.restore", "WhitelistRequestDismissal", existing.id, {
+      name: target?.discordName ?? null,
+      steamId: target?.steamId ?? null,
+      server,
+      userId: targetUserId,
+    });
+    logger.info("whitelist.candidates", "Restored dismissed whitelist request", {
+      targetUserId,
+      steamId: target?.steamId ?? null,
+      discordName: target?.discordName ?? null,
+      server,
+    });
+
+    return success(c, { restored: true, userId: targetUserId, server });
+  },
+);
 
 // ── Add entry (with duplicate warning) ───────────────────────
 

@@ -9,6 +9,9 @@ import {
   deleteWhitelistEntry,
   bulkAddWhitelist,
   getWhitelistCandidates,
+  dismissWhitelistCandidate,
+  restoreWhitelistCandidate,
+  notifyWhitelistCandidatesChanged,
   getWhitelistEntry,
   addWhitelistComment,
   deleteWhitelistComment,
@@ -39,7 +42,8 @@ import {
   formatWhitelistActionSummary,
 } from "@/lib/whitelist-audit-detail";
 import { AuditLogDetail, FilterNameButton } from "@/components/audit-log-detail";
-import type { WhitelistEntry, WhitelistEntryWithComments, WhitelistComment, WhitelistCandidate, AdminGroup, Clan, ServerConfig, AuditLogEntry, PlaytimeStats } from "shared";
+import type { WhitelistEntry, WhitelistEntryWithComments, WhitelistComment, WhitelistCandidate, DismissedWhitelistCandidate, AdminGroup, Clan, ServerConfig, AuditLogEntry, PlaytimeStats } from "shared";
+import { formatDismissRemaining } from "shared";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -128,6 +132,7 @@ export default function WhitelistPage() {
   const [tab, setTab] = useState<Tab>("entries");
   const [entries, setEntries] = useState<WhitelistEntry[]>([]);
   const [candidates, setCandidates] = useState<WhitelistCandidate[]>([]);
+  const [dismissedCandidates, setDismissedCandidates] = useState<DismissedWhitelistCandidate[]>([]);
   const [groups, setGroups] = useState<AdminGroup[]>([]);
   const [clans, setClans] = useState<Clan[]>([]);
   const [serverConfigs, setServerConfigs] = useState<ServerConfig[]>([]);
@@ -137,9 +142,6 @@ export default function WhitelistPage() {
   // Server selection
   const [servers, setServers] = useState<{ server: string; label: string }[]>(DEFAULT_SERVERS);
   const [activeServer, setActiveServer] = useState<string>("");
-
-  // Dismissed candidates (client-side only)
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   // Toggling sync
   const [togglingSync, setTogglingSync] = useState(false);
@@ -182,11 +184,19 @@ export default function WhitelistPage() {
     init();
   }, [apiToken]);
 
+  const applyCandidates = useCallback((data: { pending: WhitelistCandidate[]; dismissed: DismissedWhitelistCandidate[] }) => {
+    setCandidates(data.pending);
+    setDismissedCandidates(data.dismissed);
+  }, []);
+
+  const loadCandidates = useCallback(async () => {
+    if (!apiToken || !activeServer || !canManage) return;
+    const candRes = await getWhitelistCandidates(apiToken, activeServer);
+    if (candRes.success && candRes.data) applyCandidates(candRes.data);
+  }, [apiToken, activeServer, canManage, applyCandidates]);
+
   // Fetch entries and candidates when active server changes
   useEffect(() => {
-    // Clear dismissed set so candidates approved on other servers still show
-    setDismissed(new Set());
-
     async function loadServer() {
       if (!apiToken || !activeServer) return;
       try {
@@ -194,16 +204,13 @@ export default function WhitelistPage() {
         if (wlRes.success && wlRes.data) setEntries(wlRes.data);
         else setError(wlRes.error || "Failed to load whitelist");
 
-        if (canManage) {
-          const candRes = await getWhitelistCandidates(apiToken, activeServer);
-          if (candRes.success && candRes.data) setCandidates(candRes.data);
-        }
+        await loadCandidates();
       } catch {
         setError("Failed to load whitelist");
       }
     }
     loadServer();
-  }, [apiToken, activeServer, canManage]);
+  }, [apiToken, activeServer, loadCandidates]);
 
   const refreshWhitelist = useCallback(async () => {
     if (!apiToken || !activeServer) return;
@@ -216,12 +223,9 @@ export default function WhitelistPage() {
       if (wlRes.success && wlRes.data) setEntries(wlRes.data);
       if (grpRes.success && grpRes.data) setGroups(grpRes.data);
       if (clanRes.success && clanRes.data) setClans(clanRes.data);
-      if (canManage) {
-        const candRes = await getWhitelistCandidates(apiToken, activeServer);
-        if (candRes.success && candRes.data) setCandidates(candRes.data);
-      }
+      await loadCandidates();
     } catch { /* silent */ }
-  }, [apiToken, activeServer, canManage]);
+  }, [apiToken, activeServer, loadCandidates]);
 
   useAutoRefresh(refreshWhitelist, 20_000, !!apiToken && !!activeServer);
 
@@ -293,7 +297,7 @@ export default function WhitelistPage() {
     );
   if (error) return <div className="text-danger">{error}</div>;
 
-  const pendingCandidates = candidates.filter((c) => !dismissed.has(c.userId));
+  const pendingCandidates = candidates;
   const currentConfig = serverConfigs.find((c) => c.server === activeServer);
 
   const visibleTabs: Tab[] = canViewAudit
@@ -383,11 +387,10 @@ export default function WhitelistPage() {
       {tab === "requests" && (
         <RequestsTab
           candidates={pendingCandidates}
+          dismissedCandidates={dismissedCandidates}
           groups={groups}
-          entries={entries}
           setEntries={setEntries}
-          dismissed={dismissed}
-          setDismissed={setDismissed}
+          onCandidatesChanged={loadCandidates}
           apiToken={apiToken}
           canManage={canManage}
           activeServer={activeServer}
@@ -1843,99 +1846,235 @@ function EntriesTab({
 
 function RequestsTab({
   candidates,
+  dismissedCandidates,
   groups,
-  entries,
   setEntries,
-  dismissed,
-  setDismissed,
+  onCandidatesChanged,
   apiToken,
   canManage,
   activeServer,
 }: {
   candidates: WhitelistCandidate[];
+  dismissedCandidates: DismissedWhitelistCandidate[];
   groups: AdminGroup[];
-  entries: WhitelistEntry[];
   setEntries: React.Dispatch<React.SetStateAction<WhitelistEntry[]>>;
-  dismissed: Set<string>;
-  setDismissed: React.Dispatch<React.SetStateAction<Set<string>>>;
+  onCandidatesChanged: () => Promise<void>;
   apiToken: string | null;
   canManage: boolean;
   activeServer: string;
 }) {
   const [approving, setApproving] = useState<string | null>(null);
+  const [dismissing, setDismissing] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState<string | null>(null);
   const [approveGroupId, setApproveGroupId] = useState<Record<string, string>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [showDismissed, setShowDismissed] = useState(false);
 
   async function handleApprove(candidate: WhitelistCandidate) {
     if (!apiToken) return;
     setApproving(candidate.userId);
+    setActionError(null);
 
     const groupId = approveGroupId[candidate.userId] || undefined;
     const res = await addWhitelistEntry(apiToken, candidate.steamId, {
       name: candidate.discordName,
       groupId,
       server: activeServer,
+      reason: "Approved from requests",
     });
 
     if (res.success && res.data) {
       setEntries((prev) => [res.data!, ...prev]);
-      setDismissed((prev) => new Set(prev).add(candidate.userId));
+      await onCandidatesChanged();
+      notifyWhitelistCandidatesChanged();
+    } else {
+      setActionError(res.error || `Failed to approve ${candidate.discordName}`);
     }
     setApproving(null);
   }
 
-  function handleDismiss(userId: string) {
-    setDismissed((prev) => new Set(prev).add(userId));
+  async function handleDismiss(candidate: WhitelistCandidate) {
+    if (!apiToken) return;
+    setDismissing(candidate.userId);
+    setActionError(null);
+    const res = await dismissWhitelistCandidate(apiToken, candidate.userId, activeServer);
+    if (res.success) {
+      await onCandidatesChanged();
+      notifyWhitelistCandidatesChanged();
+    } else {
+      setActionError(res.error || `Failed to dismiss ${candidate.discordName}`);
+    }
+    setDismissing(null);
+  }
+
+  async function handleRestore(candidate: DismissedWhitelistCandidate) {
+    if (!apiToken) return;
+    setRestoring(candidate.userId);
+    setActionError(null);
+    const res = await restoreWhitelistCandidate(apiToken, candidate.userId, activeServer);
+    if (res.success) {
+      await onCandidatesChanged();
+      notifyWhitelistCandidatesChanged();
+    } else {
+      setActionError(res.error || `Failed to restore ${candidate.discordName}`);
+    }
+    setRestoring(null);
   }
 
   if (!canManage) {
     return <div className="text-text-muted py-8 text-center">You need manage:whitelist permission to view requests.</div>;
   }
 
-  if (candidates.length === 0) {
-    return (
-      <div className="facet-border rounded-sm bg-bg-card px-6 py-12 text-center text-text-muted">
-        No pending whitelist requests. Users with a qualifying Discord role and linked Steam ID will appear here.
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-3">
-      {candidates.map((c) => (
-        <div key={c.userId} className="facet-border flex items-center justify-between rounded-sm bg-bg-card p-4">
-          <div>
-            <div className="mb-1 font-medium text-text-primary">{c.discordName}</div>
-            <div className="flex items-center gap-3 text-xs text-text-secondary">
-              <code className="text-accent">{c.steamId}</code>
-              <span className="h-1 w-1 rounded-full bg-text-muted" />
-              <span>Role: {c.roleName}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <select
-              value={approveGroupId[c.userId] || ""}
-              onChange={(e) => setApproveGroupId((prev) => ({ ...prev, [c.userId]: e.target.value }))}
-              className="rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
-            >
-              <option value="">Whitelist (default)</option>
-              {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-            <button
-              onClick={() => handleApprove(c)}
-              disabled={approving === c.userId}
-              className="rounded-sm bg-success/15 px-4 py-1.5 text-xs font-semibold text-success transition-colors hover:bg-success/25 disabled:opacity-50"
-            >
-              {approving === c.userId ? "Approving..." : "Approve"}
-            </button>
-            <button
-              onClick={() => handleDismiss(c.userId)}
-              className="text-xs text-text-muted transition-colors hover:text-text-secondary"
-            >
-              Dismiss
-            </button>
-          </div>
+    <div className="space-y-6">
+      {actionError && (
+        <div className="rounded-sm border border-danger/30 bg-danger/10 px-4 py-2 text-sm text-danger">
+          {actionError}
         </div>
-      ))}
+      )}
+
+      {candidates.length === 0 && dismissedCandidates.length === 0 ? (
+        <div className="facet-border rounded-sm bg-bg-card px-6 py-12 text-center text-text-muted">
+          No pending whitelist requests. Users with a qualifying Discord role and linked Steam ID will appear here.
+        </div>
+      ) : candidates.length === 0 ? null : (
+        <div className="space-y-3">
+          {candidates.map((c) => (
+            <CandidateCard
+              key={c.userId}
+              candidate={c}
+              groups={groups}
+              groupId={approveGroupId[c.userId] || ""}
+              onGroupChange={(value) => setApproveGroupId((prev) => ({ ...prev, [c.userId]: value }))}
+              onApprove={() => handleApprove(c)}
+              onDismiss={() => handleDismiss(c)}
+              approving={approving === c.userId}
+              dismissing={dismissing === c.userId}
+            />
+          ))}
+        </div>
+      )}
+
+      {dismissedCandidates.length > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowDismissed((open) => !open)}
+            className="mb-3 flex items-center gap-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
+          >
+            <span className="text-text-muted">{showDismissed ? "Hide" : "Show"}</span>
+            dismissed for 30 days
+            <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold text-text-muted">
+              {dismissedCandidates.length}
+            </span>
+          </button>
+          {showDismissed && (
+            <div className="space-y-3">
+              {dismissedCandidates.map((c) => (
+                <div key={c.userId} className="facet-border flex items-center justify-between rounded-sm bg-bg-card/60 p-4">
+                  <CandidateIdentity candidate={c} />
+                  <div className="flex items-center gap-3">
+                    <div className="text-right text-xs text-text-muted">
+                      <div>Dismissed by {c.dismissedByName}</div>
+                      <div>{formatDismissRemaining(c.expiresAt, new Date())}</div>
+                    </div>
+                    <button
+                      onClick={() => handleRestore(c)}
+                      disabled={restoring === c.userId}
+                      className="rounded-sm border border-border px-3 py-1.5 text-xs text-text-secondary transition-colors hover:border-accent/30 hover:text-accent disabled:opacity-50"
+                    >
+                      {restoring === c.userId ? "Restoring..." : "Restore"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CandidateIdentity({ candidate }: { candidate: WhitelistCandidate }) {
+  const roles = candidate.roleNames.length > 0 ? candidate.roleNames : [candidate.roleName].filter(Boolean);
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      {candidate.avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={candidate.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-sm object-cover" />
+      ) : (
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-bg-tertiary text-xs font-semibold text-text-muted">
+          {(candidate.displayName || candidate.discordName).slice(0, 1).toUpperCase()}
+        </div>
+      )}
+      <div className="min-w-0">
+        <div className="mb-1 truncate font-medium text-text-primary">
+          {candidate.displayName || candidate.discordName}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
+          <code className="text-accent">{candidate.steamId}</code>
+          {roles.map((role) => (
+            <span key={role} className="rounded-sm border border-border bg-bg-tertiary px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-muted">
+              {role}
+            </span>
+          ))}
+          {candidate.membershipDate && (
+            <span className="text-text-muted">Joined {formatDate(candidate.membershipDate)}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CandidateCard({
+  candidate,
+  groups,
+  groupId,
+  onGroupChange,
+  onApprove,
+  onDismiss,
+  approving,
+  dismissing,
+}: {
+  candidate: WhitelistCandidate;
+  groups: AdminGroup[];
+  groupId: string;
+  onGroupChange: (value: string) => void;
+  onApprove: () => void;
+  onDismiss: () => void;
+  approving: boolean;
+  dismissing: boolean;
+}) {
+  return (
+    <div className="facet-border flex flex-wrap items-center justify-between gap-3 rounded-sm bg-bg-card p-4">
+      <CandidateIdentity candidate={candidate} />
+      <div className="flex items-center gap-3">
+        <select
+          value={groupId}
+          onChange={(e) => onGroupChange(e.target.value)}
+          className="rounded-sm border border-border bg-bg-tertiary px-3 py-1.5 text-xs text-text-primary focus:border-accent focus:outline-none"
+        >
+          <option value="">Whitelist (default)</option>
+          {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+        <button
+          onClick={onApprove}
+          disabled={approving || dismissing}
+          className="rounded-sm bg-success/15 px-4 py-1.5 text-xs font-semibold text-success transition-colors hover:bg-success/25 disabled:opacity-50"
+        >
+          {approving ? "Approving..." : "Approve"}
+        </button>
+        <button
+          onClick={onDismiss}
+          disabled={approving || dismissing}
+          title="Hide this request for 30 days"
+          className="text-xs text-text-muted transition-colors hover:text-text-secondary disabled:opacity-50"
+        >
+          {dismissing ? "Dismissing..." : "Dismiss"}
+        </button>
+      </div>
     </div>
   );
 }

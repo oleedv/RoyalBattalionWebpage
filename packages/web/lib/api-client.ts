@@ -5,7 +5,9 @@ import type {
   WhitelistEntry,
   WhitelistEntryWithComments,
   WhitelistComment,
-  WhitelistCandidate,
+  WhitelistCandidateList,
+  WhitelistCandidateSummary,
+  DismissedWhitelistCandidate,
   AdminGroup,
   Clan,
   ServerConfig,
@@ -206,14 +208,58 @@ export function bulkAddWhitelist(
   });
 }
 
+export const WHITELIST_CANDIDATES_CHANGED = "rb:whitelist-candidates-changed";
+
+export function notifyWhitelistCandidatesChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(WHITELIST_CANDIDATES_CHANGED));
+  }
+}
+
 export function getWhitelistCandidates(
   token: string,
   server?: string
-): Promise<ApiResponse<WhitelistCandidate[]>> {
+): Promise<ApiResponse<WhitelistCandidateList>> {
   const qs = server ? `?server=${encodeURIComponent(server)}` : "";
-  return request<WhitelistCandidate[]>(`/whitelist/candidates${qs}`, {
+  return request<WhitelistCandidateList>(`/whitelist/candidates${qs}`, {
     headers: authHeaders(token),
   });
+}
+
+export function getWhitelistCandidateSummary(
+  token: string,
+): Promise<ApiResponse<WhitelistCandidateSummary>> {
+  return request<WhitelistCandidateSummary>("/whitelist/candidates/summary", {
+    headers: authHeaders(token),
+  });
+}
+
+export function dismissWhitelistCandidate(
+  token: string,
+  userId: string,
+  server: string,
+  reason?: string,
+): Promise<ApiResponse<DismissedWhitelistCandidate>> {
+  return request<DismissedWhitelistCandidate>(`/whitelist/candidates/${encodeURIComponent(userId)}/dismiss`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ server, reason }),
+  });
+}
+
+export function restoreWhitelistCandidate(
+  token: string,
+  userId: string,
+  server: string,
+): Promise<ApiResponse<{ restored: true; userId: string; server: string }>> {
+  return request<{ restored: true; userId: string; server: string }>(
+    `/whitelist/candidates/${encodeURIComponent(userId)}/restore`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ server }),
+    },
+  );
 }
 
 export function getWhitelistEntry(

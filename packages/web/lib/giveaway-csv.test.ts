@@ -10,6 +10,7 @@ test("builds a csv with header and one row per entrant", () => {
       seed: 12,
       votes: 2,
       tickets: 86,
+      bonusTickets: 5,
       manual: false,
     },
     {
@@ -19,11 +20,12 @@ test("builds a csv with header and one row per entrant", () => {
       seed: 0,
       votes: 0,
       tickets: 10,
+      bonusTickets: 0,
       manual: true,
     },
   ]);
   const lines = csv.trim().split("\n");
-  expect(lines[0]).toBe("rank,userId,steamId,hours,seed,votes,tickets,manual");
-  expect(lines[1]).toBe("1,111,76561198000000000,40.5,12,2,86,false");
-  expect(lines[2]).toBe("2,222,,10,0,0,10,true");
+  expect(lines[0]).toBe("rank,userId,steamId,hours,seed,votes,tickets,bonusTickets,manual");
+  expect(lines[1]).toBe("1,111,76561198000000000,40.5,12,2,86,5,false");
+  expect(lines[2]).toBe("2,222,,10,0,0,10,0,true");
 });

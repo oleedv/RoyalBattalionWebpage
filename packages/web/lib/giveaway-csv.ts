@@ -5,11 +5,12 @@ export interface LeaderboardCsvRow {
   seed: number;
   votes: number;
   tickets: number;
+  bonusTickets?: number;
   manual: boolean;
 }
 
 export function buildLeaderboardCsv(rows: LeaderboardCsvRow[]): string {
-  const header = "rank,userId,steamId,hours,seed,votes,tickets,manual";
+  const header = "rank,userId,steamId,hours,seed,votes,tickets,bonusTickets,manual";
   const lines = rows.map((r, i) =>
     [
       i + 1,
@@ -19,6 +20,7 @@ export function buildLeaderboardCsv(rows: LeaderboardCsvRow[]): string {
       r.seed,
       r.votes,
       r.tickets,
+      r.bonusTickets ?? 0,
       r.manual,
     ].join(","),
   );

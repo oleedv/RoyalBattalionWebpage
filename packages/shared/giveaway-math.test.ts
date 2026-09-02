@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { computeTickets, windowStartIso } from "./giveaway-math";
+import { computeTickets, nextTicketBonus, windowStartIso } from "./giveaway-math";
 
 describe("computeTickets", () => {
   test("uses manual hours when entry is a manual entry", () => {
@@ -44,6 +44,57 @@ describe("computeTickets", () => {
         { hours: 1, seed: 2, vote: 1 },
       ),
     ).toBe(0);
+  });
+
+  test("adds a staff bonus after flooring earned tickets", () => {
+    expect(
+      computeTickets(
+        { manualHours: 5.7, manualSeed: 1.4 },
+        null,
+        0,
+        { hours: 1, seed: 2, vote: 1 },
+        3,
+      ),
+    ).toBe(11);
+  });
+
+  test("subtracts a staff penalty and never goes below zero", () => {
+    expect(
+      computeTickets(
+        { manualHours: 10, manualSeed: 0 },
+        null,
+        0,
+        { hours: 1, seed: 2, vote: 1 },
+        -4,
+      ),
+    ).toBe(6);
+    expect(
+      computeTickets(
+        { manualHours: 10, manualSeed: 0 },
+        null,
+        0,
+        { hours: 1, seed: 2, vote: 1 },
+        -50,
+      ),
+    ).toBe(0);
+  });
+});
+
+describe("nextTicketBonus", () => {
+  test("gives tickets by increasing bonus", () => {
+    expect(nextTicketBonus(40, 0, 5)).toBe(5);
+    expect(nextTicketBonus(40, 5, 2)).toBe(7);
+  });
+
+  test("takes tickets by decreasing bonus", () => {
+    expect(nextTicketBonus(40, 0, -5)).toBe(-5);
+    expect(nextTicketBonus(40, 5, -2)).toBe(3);
+  });
+
+  test("cannot take more tickets than the person currently has", () => {
+    expect(nextTicketBonus(10, 0, -50)).toBe(-10);
+    expect(nextTicketBonus(10, -8, -50)).toBe(-10);
+    expect(nextTicketBonus(0, 0, -5)).toBe(0);
   });
 });
 

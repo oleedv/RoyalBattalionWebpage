@@ -11,6 +11,7 @@ import {
   drawGiveaway,
   cancelGiveaway,
   addGiveawayEntry,
+  adjustGiveawayTickets,
 } from "@/lib/api-client";
 
 const MONTHS = [
@@ -62,11 +63,15 @@ export function GiveawayManage({
   config,
   snapshot,
   onChanged,
+  canManage,
+  canAdjustTickets,
 }: {
   apiToken: string;
   config: GiveawayConfig | null;
   snapshot: GiveawaySnapshot | null;
   onChanged: () => Promise<void>;
+  canManage: boolean;
+  canAdjustTickets: boolean;
 }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -111,6 +116,8 @@ export function GiveawayManage({
   const [entryUserId, setEntryUserId] = useState("");
   const [entryHours, setEntryHours] = useState("0");
   const [entrySeed, setEntrySeed] = useState("0");
+  const [ticketUserId, setTicketUserId] = useState("");
+  const [ticketAmount, setTicketAmount] = useState("1");
   const [voteChannelId, setVoteChannelId] = useState(config?.defaultVoteChannelId || "");
   const [confirm, setConfirm] = useState<"draw" | "cancel" | null>(null);
 
@@ -138,7 +145,7 @@ export function GiveawayManage({
 
       {msg && <p className="text-sm text-text-secondary">{msg}</p>}
 
-      {!snapshot && (
+      {!snapshot && canManage && (
         <div className="facet-border rounded-sm bg-bg-card p-5 space-y-4">
           <div className="text-sm font-medium text-text-primary">Start giveaway</div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -180,7 +187,7 @@ export function GiveawayManage({
         </div>
       )}
 
-      {snapshot && (
+      {snapshot && canManage && (
         <div className="facet-border rounded-sm bg-bg-card p-5 space-y-4">
           <div className="text-sm font-medium text-text-primary">Actions</div>
           <div className="flex flex-wrap gap-2">
@@ -304,7 +311,72 @@ export function GiveawayManage({
         </div>
       )}
 
-      {defaults && (
+      {snapshot && canAdjustTickets && (
+        <div className="facet-border rounded-sm bg-bg-card p-5 space-y-4">
+          <div className="text-sm font-medium text-text-primary">Give or take tickets</div>
+          <p className="text-xs text-text-muted">
+            Adds or subtracts from their current total. Playtime is left alone. Cannot go below zero.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Discord user ID">
+              <input
+                className={inputClass}
+                value={ticketUserId}
+                onChange={(e) => setTicketUserId(e.target.value)}
+                placeholder="17–19 digit ID"
+              />
+            </Field>
+            <Field label="Tickets">
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className={inputClass}
+                value={ticketAmount}
+                onChange={(e) => setTicketAmount(e.target.value)}
+              />
+            </Field>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={busy || !ticketUserId.trim()}
+              onClick={() => {
+                const n = Math.trunc(Number(ticketAmount));
+                if (!Number.isFinite(n) || n < 1) {
+                  setMsg("Amount must be a whole number of 1 or more");
+                  return;
+                }
+                run(`Gave ${n} ticket${n === 1 ? "" : "s"}.`, () =>
+                  adjustGiveawayTickets(apiToken, { userId: ticketUserId.trim(), delta: n }),
+                );
+              }}
+              className="rounded-sm border border-border px-4 py-2 text-sm text-text-primary hover:border-accent/50 disabled:opacity-50"
+            >
+              Give tickets
+            </button>
+            <button
+              type="button"
+              disabled={busy || !ticketUserId.trim()}
+              onClick={() => {
+                const n = Math.trunc(Number(ticketAmount));
+                if (!Number.isFinite(n) || n < 1) {
+                  setMsg("Amount must be a whole number of 1 or more");
+                  return;
+                }
+                run(`Took ${n} ticket${n === 1 ? "" : "s"}.`, () =>
+                  adjustGiveawayTickets(apiToken, { userId: ticketUserId.trim(), delta: -n }),
+                );
+              }}
+              className="rounded-sm border border-border px-4 py-2 text-sm text-text-primary hover:border-accent/50 disabled:opacity-50"
+            >
+              Take tickets
+            </button>
+          </div>
+        </div>
+      )}
+
+      {defaults && canManage && (
         <div className="facet-border rounded-sm bg-bg-card p-5 space-y-4">
           <div className="text-sm font-medium text-text-primary">Defaults for next giveaway</div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -2,6 +2,7 @@ export const DISCORD_MESSAGE_LIMIT = 2000;
 
 export interface GiveawayCopyRow {
   userId: string;
+  displayName?: string | null;
   tickets: number;
   hours: number;
   seed: number;
@@ -26,6 +27,12 @@ function mention(id: string): string {
   return `<@${id}>`;
 }
 
+function namedMention(id: string, displayName?: string | null): string {
+  const name = displayName?.trim();
+  if (!name || name === id) return mention(id);
+  return `${name} ${mention(id)}`;
+}
+
 function fmtInt(n: number): string {
   return Math.round(n).toLocaleString("en-US");
 }
@@ -37,7 +44,7 @@ function drawStamp(iso: string): string {
 }
 
 function leaderLine(row: GiveawayCopyRow, i: number): string {
-  return `${i + 1}. ${mention(row.userId)} — ${fmtInt(row.tickets)} (${row.hours}h + ${row.seed}h seed + ${row.votes} votes)`;
+  return `${i + 1}. ${namedMention(row.userId, row.displayName)} — ${fmtInt(row.tickets)} (${row.hours}h + ${row.seed}h seed + ${row.votes} votes)`;
 }
 
 function fit(text: string): string {
@@ -81,17 +88,18 @@ export function buildVoteReminderCopy(input: GiveawayCopyInput, limit = 10): str
   );
 }
 
-export function buildWinnerCopy(input: GiveawayCopyInput): string {
+export function buildWinnerCopy(input: GiveawayCopyInput, limit = 5): string {
   if (!input.winnerUserId) return "";
   const tickets = input.winnerTickets ?? 0;
+  const winner = input.top.find((r) => r.userId === input.winnerUserId);
   return withLeaders(
     [
       `**Winner: ${input.monthLabel}** — ${input.prize}`,
-      `Winner: ${mention(input.winnerUserId)} with **${fmtInt(tickets)}** of ${fmtInt(input.totalTickets)} tickets (${fmtInt(input.entries)} entries)`,
+      `Winner: ${namedMention(input.winnerUserId, winner?.displayName)} with **${fmtInt(tickets)}** of ${fmtInt(input.totalTickets)} tickets (${fmtInt(input.entries)} entries)`,
       "",
-      "**Top 5**",
+      `**Top ${limit}**`,
     ],
     input.top,
-    5,
+    limit,
   );
 }

@@ -45,6 +45,7 @@ export interface GiveawayLeaderboardRow {
   seed: number;
   votes: number;
   tickets: number;
+  bonusTickets: number;
   enteredAt: string | null;
 }
 
@@ -91,4 +92,9 @@ export interface GiveawayAddEntryRequest {
   userId: string;
   hours: number;
   seed: number;
+}
+
+export interface GiveawayAdjustTicketsRequest {
+  userId: string;
+  delta: number;
 }

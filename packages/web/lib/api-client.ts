@@ -45,6 +45,7 @@ import type {
   GiveawayHistoryItem,
   GiveawayStartRequest,
   GiveawayAddEntryRequest,
+  GiveawayAdjustTicketsRequest,
 } from "shared";
 
 const API_ORIGIN =
@@ -1081,6 +1082,17 @@ export function addGiveawayEntry(
   data: GiveawayAddEntryRequest,
 ): Promise<ApiResponse<{ queued: true }>> {
   return request<{ queued: true }>("/giveaway/entries", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function adjustGiveawayTickets(
+  token: string,
+  data: GiveawayAdjustTicketsRequest,
+): Promise<ApiResponse<GiveawaySnapshot | null>> {
+  return request<GiveawaySnapshot | null>("/giveaway/tickets", {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(data),

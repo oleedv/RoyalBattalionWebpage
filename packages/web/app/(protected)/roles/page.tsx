@@ -288,6 +288,11 @@ const PERMISSION_GROUPS: PermGroup[] = [
         label: "Manage Giveaway",
         description: "Start, draw, cancel, add entries, and edit giveaway settings",
       },
+      {
+        perm: "manage:giveaway-tickets",
+        label: "Adjust Giveaway Tickets",
+        description: "Give or take raffle tickets from someone",
+      },
     ],
   },
   {

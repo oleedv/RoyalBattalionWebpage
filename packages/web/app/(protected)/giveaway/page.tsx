@@ -6,7 +6,13 @@ import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useDiscordNameMap } from "@/hooks/use-discord-names";
 import { formatDateTime, formatNumber } from "@/lib/format";
-import { getActiveGiveaway, getGiveawayById, getGiveawayConfig, getGiveawayHistory } from "@/lib/api-client";
+import {
+  adjustGiveawayTickets,
+  getActiveGiveaway,
+  getGiveawayById,
+  getGiveawayConfig,
+  getGiveawayHistory,
+} from "@/lib/api-client";
 import { GiveawayCharts } from "./components/GiveawayCharts";
 import { GiveawayBoard } from "./components/GiveawayBoard";
 import { GiveawayManage } from "./components/GiveawayManage";
@@ -30,8 +36,12 @@ function daysUntil(iso: string): string {
 
 export default function GiveawayPage() {
   const { apiToken, hasPermission } = usePermissions();
-  const canView = hasPermission("view:giveaway") || hasPermission("manage:giveaway");
+  const canView =
+    hasPermission("view:giveaway") ||
+    hasPermission("manage:giveaway") ||
+    hasPermission("manage:giveaway-tickets");
   const canManage = hasPermission("manage:giveaway");
+  const canAdjustTickets = hasPermission("manage:giveaway-tickets");
   const { resolveNames, displayName } = useDiscordNameMap(apiToken);
 
   const [snapshot, setSnapshot] = useState<GiveawaySnapshot | null>(null);
@@ -134,7 +144,19 @@ export default function GiveawayPage() {
           )}
 
           <GiveawayCharts snapshot={snapshot} history={history} displayName={displayName} />
-          <GiveawayBoard snapshot={snapshot} displayName={displayName} />
+          <GiveawayBoard
+            snapshot={snapshot}
+            displayName={displayName}
+            onAdjustTickets={
+              canAdjustTickets && !viewingPast
+                ? async (userId, delta) => {
+                    const res = await adjustGiveawayTickets(apiToken, { userId, delta });
+                    if (res.success) await load();
+                    return res;
+                  }
+                : undefined
+            }
+          />
         </>
       )}
 
@@ -142,12 +164,14 @@ export default function GiveawayPage() {
         <GiveawayCharts snapshot={null} history={history} displayName={displayName} />
       )}
 
-      {canManage && (
+      {(canManage || (canAdjustTickets && snapshot && !viewingPast)) && (
         <GiveawayManage
           apiToken={apiToken}
           config={config}
           snapshot={viewingPast ? null : snapshot}
           onChanged={load}
+          canManage={canManage}
+          canAdjustTickets={canAdjustTickets}
         />
       )}
 

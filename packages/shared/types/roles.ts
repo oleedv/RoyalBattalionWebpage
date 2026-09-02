@@ -26,6 +26,7 @@ export const PERMISSIONS = [
   "view:seeding-tracker",
   "view:giveaway",
   "manage:giveaway",
+  "manage:giveaway-tickets",
   "view:api-docs",
   "manage:clan-move",
   "manage:randomize",

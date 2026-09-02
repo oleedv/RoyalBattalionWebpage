@@ -90,7 +90,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Giveaway",
         href: "/giveaway",
         icon: Gift,
-        requiredPermissions: ["view:giveaway", "manage:giveaway"],
+        requiredPermissions: ["view:giveaway", "manage:giveaway", "manage:giveaway-tickets"],
       },
       {
         label: "Match Manager",

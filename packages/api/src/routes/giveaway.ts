@@ -9,7 +9,7 @@ import type {
   GiveawayLeaderboardRow,
   GiveawayVoteEvent,
 } from "shared";
-import { computeTickets, windowStartIso } from "shared";
+import { computeTickets, nextTicketBonus, windowStartIso } from "shared";
 import getSecretaryDb, { resetSecretaryDb } from "../lib/secretary-db";
 import { getSquadJSPool } from "../lib/squadjs-db";
 import prisma from "../lib/db";
@@ -62,6 +62,16 @@ const addEntrySchema = z.object({
   userId: snowflake,
   hours: z.number().min(0).max(10000),
   seed: z.number().min(0).max(10000),
+});
+
+const adjustTicketsSchema = z.object({
+  userId: snowflake,
+  delta: z
+    .number()
+    .int()
+    .min(-10000)
+    .max(10000)
+    .refine((n) => n !== 0, "delta must not be 0"),
 });
 
 function iso(v: unknown): string {
@@ -140,6 +150,12 @@ async function ensureConfigTable() {
   await db.$executeRaw(Prisma.sql`INSERT IGNORE INTO giveaway_config (id) VALUES (1)`);
 }
 
+async function ensureBonusColumn() {
+  await getSecretaryDb().$executeRaw(Prisma.sql`
+    ALTER TABLE giveaway_entries ADD COLUMN IF NOT EXISTS bonus_tickets INT NOT NULL DEFAULT 0
+  `);
+}
+
 async function loadConfig(): Promise<GiveawayConfig> {
   await ensureConfigTable();
   const rows = await getSecretaryDb().$queryRaw<Record<string, unknown>[]>(Prisma.sql`
@@ -207,6 +223,7 @@ async function batchPlaytime(
 
 async function buildSnapshot(giveawayRow: GiveawayRecord): Promise<GiveawaySnapshot> {
   const db = getSecretaryDb();
+  await ensureBonusColumn();
   const entries = await db.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
     SELECT * FROM giveaway_entries WHERE giveaway_id = ${giveawayRow.id} ORDER BY entered_at ASC
   `);
@@ -247,11 +264,13 @@ async function buildSnapshot(giveawayRow: GiveawayRecord): Promise<GiveawaySnaps
     const voteN = voteCounts.get(String(e.user_id)) || 0;
     const hours = manual ? num(e.manual_hours) : num(play?.playtimeHours);
     const seed = manual ? num(e.manual_seed) : num(play?.seedHours);
+    const bonusTickets = num(e.bonus_tickets);
     const tickets = computeTickets(
       { manualHours: manual ? num(e.manual_hours) : null, manualSeed: manual ? num(e.manual_seed) : null },
       play,
       voteN,
       weights,
+      bonusTickets,
     );
     return {
       userId: String(e.user_id),
@@ -261,6 +280,7 @@ async function buildSnapshot(giveawayRow: GiveawayRecord): Promise<GiveawaySnaps
       seed,
       votes: voteN,
       tickets,
+      bonusTickets,
       enteredAt: isoOrNull(e.entered_at),
     };
   });
@@ -297,7 +317,7 @@ async function discordIdFor(userId: string): Promise<string> {
 
 giveaway.get(
   "/config",
-  requirePermission("view:giveaway", "manage:giveaway"),
+  requirePermission("view:giveaway", "manage:giveaway", "manage:giveaway-tickets"),
   async (c) => {
     try {
       return success(c, await loadConfig());
@@ -347,7 +367,7 @@ giveaway.patch(
 
 giveaway.get(
   "/active",
-  requirePermission("view:giveaway", "manage:giveaway"),
+  requirePermission("view:giveaway", "manage:giveaway", "manage:giveaway-tickets"),
   async (c) => {
     try {
       const active = await loadActiveGiveaway();
@@ -399,7 +419,7 @@ giveaway.patch(
 
 giveaway.get(
   "/history",
-  requirePermission("view:giveaway", "manage:giveaway"),
+  requirePermission("view:giveaway", "manage:giveaway", "manage:giveaway-tickets"),
   async (c) => {
     try {
       const rows = await getSecretaryDb().$queryRaw<Record<string, unknown>[]>(Prisma.sql`
@@ -432,7 +452,7 @@ giveaway.get(
 
 giveaway.get(
   "/:id",
-  requirePermission("view:giveaway", "manage:giveaway"),
+  requirePermission("view:giveaway", "manage:giveaway", "manage:giveaway-tickets"),
   async (c) => {
     const id = Number(c.req.param("id"));
     if (!Number.isInteger(id) || id < 1) return fail(c, "Invalid giveaway id");
@@ -571,6 +591,98 @@ giveaway.post(
       resetSecretaryDb();
       logger.error("giveaway", "Failed to queue add-entry", err);
       return fail(c, "Failed to queue manual entry", 500);
+    }
+  },
+);
+
+giveaway.post(
+  "/tickets",
+  requirePermission("manage:giveaway-tickets"),
+  validate("json", adjustTicketsSchema),
+  async (c) => {
+    try {
+      const active = await loadActiveGiveaway();
+      if (!active) return fail(c, "No active giveaway", 404);
+      if (active.status === "drawn" || active.status === "cancelled") {
+        return fail(c, `Giveaway is ${active.status}; cannot adjust tickets`);
+      }
+      await ensureBonusColumn();
+      const body = c.req.valid("json");
+      const db = getSecretaryDb();
+      const rows = await db.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+        SELECT * FROM giveaway_entries
+         WHERE giveaway_id = ${active.id} AND user_id = ${body.userId}
+      `);
+      const entry = rows[0];
+      if (!entry && body.delta < 0) {
+        return fail(c, "That person is not in this giveaway");
+      }
+
+      const weights = {
+        hours: active.hoursWeight,
+        seed: active.seedWeight,
+        vote: active.voteWeight,
+      };
+      const voteRows = await db.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+        SELECT COUNT(*) AS n FROM giveaway_votes
+         WHERE giveaway_id = ${active.id} AND target_id = ${body.userId}
+      `);
+      const voteN = num(voteRows[0]?.n);
+      let play: { playtimeHours: number; seedHours: number } | null = null;
+      if (entry?.steam_id && entry.manual_hours == null) {
+        const live = await batchPlaytime(
+          [String(entry.steam_id)],
+          windowStartIso(active.windowDays),
+        );
+        play = live.get(String(entry.steam_id)) ?? null;
+      }
+      const manual = entry != null && entry.manual_hours != null;
+      const earned = entry
+        ? computeTickets(
+            {
+              manualHours: manual ? num(entry.manual_hours) : null,
+              manualSeed: manual ? num(entry.manual_seed) : null,
+            },
+            play,
+            voteN,
+            weights,
+            0,
+          )
+        : 0;
+      const currentBonus = entry ? num(entry.bonus_tickets) : 0;
+      const currentTickets = Math.max(0, earned + currentBonus);
+      if (body.delta < 0 && currentTickets === 0) {
+        return fail(c, "They have no tickets to take");
+      }
+      const nextBonus = nextTicketBonus(earned, currentBonus, body.delta);
+      const actorId = c.get("userId") as string;
+      const discordUserId = await discordIdFor(actorId);
+
+      if (!entry) {
+        await db.$executeRaw(Prisma.sql`
+          INSERT INTO giveaway_entries (giveaway_id, user_id, bonus_tickets, added_by)
+          VALUES (${active.id}, ${body.userId}, ${nextBonus}, ${discordUserId})
+        `);
+      } else {
+        await db.$executeRaw(Prisma.sql`
+          UPDATE giveaway_entries
+             SET bonus_tickets = ${nextBonus}
+           WHERE giveaway_id = ${active.id} AND user_id = ${body.userId}
+        `);
+      }
+
+      await queueAction("giveaway_refresh_entry", {}, actorId, active.id);
+      await audit(c, "giveaway.adjust_tickets", "giveaway", String(active.id), {
+        userId: body.userId,
+        delta: body.delta,
+        bonusTickets: nextBonus,
+      });
+      const updated = await loadGiveawayById(active.id);
+      return success(c, updated ? await buildSnapshot(updated) : null);
+    } catch (err) {
+      resetSecretaryDb();
+      logger.error("giveaway", "Failed to adjust tickets", err);
+      return fail(c, "Failed to adjust tickets", 500);
     }
   },
 );

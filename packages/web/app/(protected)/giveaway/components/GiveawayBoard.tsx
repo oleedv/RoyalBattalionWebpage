@@ -12,6 +12,8 @@ import {
 
 type SortKey = "tickets" | "hours" | "seed" | "votes" | "name";
 
+const COPY_COUNTS = [5, 10, 15, 20, 25, 50] as const;
+
 function CopyButton({ label, text, disabled }: { label: string; text: string; disabled?: boolean }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
@@ -35,13 +37,19 @@ function CopyButton({ label, text, disabled }: { label: string; text: string; di
 export function GiveawayBoard({
   snapshot,
   displayName,
+  onAdjustTickets,
 }: {
   snapshot: GiveawaySnapshot;
   displayName: (id: string) => string;
+  onAdjustTickets?: (userId: string, delta: number) => Promise<{ success: boolean; error?: string }>;
 }) {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("tickets");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [amount, setAmount] = useState("1");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [adjustMsg, setAdjustMsg] = useState<string | null>(null);
+  const [copyCount, setCopyCount] = useState<number | "all">(10);
 
   function toggle(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -66,6 +74,7 @@ export function GiveawayBoard({
     return list;
   }, [snapshot.leaderboard, search, sortKey, sortDir, displayName]);
 
+  const copyLimit = copyCount === "all" ? snapshot.leaderboard.length : copyCount;
   const copyInput = {
     prize: snapshot.giveaway.prize,
     monthLabel: snapshot.giveaway.monthLabel,
@@ -77,8 +86,37 @@ export function GiveawayBoard({
     voteWeight: snapshot.giveaway.voteWeight,
     winnerUserId: snapshot.giveaway.winnerUserId,
     winnerTickets: snapshot.leaderboard.find((r) => r.userId === snapshot.giveaway.winnerUserId)?.tickets ?? null,
-    top: snapshot.leaderboard,
+    top: snapshot.leaderboard.map((r) => ({
+      userId: r.userId,
+      displayName: displayName(r.userId),
+      tickets: r.tickets,
+      hours: r.hours,
+      seed: r.seed,
+      votes: r.votes,
+    })),
   };
+
+  async function adjust(userId: string, sign: 1 | -1) {
+    if (!onAdjustTickets) return;
+    const n = Math.trunc(Number(amount));
+    if (!Number.isFinite(n) || n < 1) {
+      setAdjustMsg("Amount must be a whole number of 1 or more");
+      return;
+    }
+    setBusyId(userId);
+    setAdjustMsg(null);
+    try {
+      const res = await onAdjustTickets(userId, sign * n);
+      if (res.success) {
+        const noun = n === 1 ? "ticket" : "tickets";
+        setAdjustMsg(sign > 0 ? `Gave ${n} ${noun}.` : `Took ${n} ${noun}.`);
+      } else {
+        setAdjustMsg(res.error || "Request failed");
+      }
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   function downloadCsv() {
     const csv = buildLeaderboardCsv(snapshot.leaderboard);
@@ -107,15 +145,46 @@ export function GiveawayBoard({
           Leaderboard
         </h2>
         <div className="flex flex-wrap items-center gap-2">
-          <CopyButton label="Copy progress" text={buildProgressCopy(copyInput)} />
+          {onAdjustTickets && (
+            <label className="flex items-center gap-2 text-xs text-text-secondary">
+              Adjust by
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="w-16 rounded-sm border border-border bg-bg-tertiary/50 px-2 py-1 text-sm text-text-primary focus:border-accent/50 focus:outline-none"
+              />
+            </label>
+          )}
+          <label className="flex items-center gap-2 text-xs text-text-secondary">
+            Copy
+            <select
+              value={copyCount === "all" ? "all" : String(copyCount)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setCopyCount(v === "all" ? "all" : Number(v));
+              }}
+              className="rounded-sm border border-border bg-bg-secondary px-2 py-1.5 text-xs text-text-primary"
+            >
+              {COPY_COUNTS.map((n) => (
+                <option key={n} value={n}>
+                  Top {n}
+                </option>
+              ))}
+              <option value="all">All</option>
+            </select>
+          </label>
+          <CopyButton label="Copy progress" text={buildProgressCopy(copyInput, copyLimit)} />
           <CopyButton
             label="Copy vote reminder"
-            text={buildVoteReminderCopy(copyInput)}
+            text={buildVoteReminderCopy(copyInput, copyLimit)}
             disabled={snapshot.giveaway.status === "open"}
           />
           <CopyButton
             label="Copy winner"
-            text={buildWinnerCopy(copyInput)}
+            text={buildWinnerCopy(copyInput, copyLimit)}
             disabled={!snapshot.giveaway.winnerUserId}
           />
           <button
@@ -129,6 +198,7 @@ export function GiveawayBoard({
       </div>
 
       <SearchInput value={search} onChange={setSearch} placeholder="Search name or ID" className="max-w-sm" />
+      {adjustMsg && <p className="text-sm text-text-secondary">{adjustMsg}</p>}
 
       <div className="facet-border overflow-x-auto rounded-sm bg-bg-card">
         <table className="w-full min-w-[640px] text-left text-sm">
@@ -162,7 +232,34 @@ export function GiveawayBoard({
                   <td className="px-3 py-2">{r.hours}</td>
                   <td className="px-3 py-2">{r.seed}</td>
                   <td className="px-3 py-2">{r.votes}</td>
-                  <td className="px-3 py-2 font-medium text-accent">{r.tickets}</td>
+                  <td className="px-3 py-2">
+                    <div className="font-medium text-accent">{r.tickets}</div>
+                    {(r.bonusTickets ?? 0) !== 0 && (
+                      <div className="text-[10px] uppercase tracking-wider text-text-muted">
+                        {(r.bonusTickets ?? 0) > 0 ? `+${r.bonusTickets} staff` : `${r.bonusTickets} staff`}
+                      </div>
+                    )}
+                    {onAdjustTickets && (
+                      <div className="mt-1 flex gap-1">
+                        <button
+                          type="button"
+                          disabled={busyId != null}
+                          onClick={() => adjust(r.userId, 1)}
+                          className="rounded-sm border border-border px-2 py-0.5 text-[11px] text-text-secondary hover:border-accent/50 hover:text-text-primary disabled:opacity-40"
+                        >
+                          Give
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId != null || r.tickets <= 0}
+                          onClick={() => adjust(r.userId, -1)}
+                          className="rounded-sm border border-border px-2 py-0.5 text-[11px] text-text-secondary hover:border-accent/50 hover:text-text-primary disabled:opacity-40"
+                        >
+                          Take
+                        </button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))
             )}

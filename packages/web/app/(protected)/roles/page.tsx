@@ -274,6 +274,23 @@ const PERMISSION_GROUPS: PermGroup[] = [
     ],
   },
   {
+    id: "giveaway",
+    label: "Giveaway",
+    description: "Monthly Discord game giveaway",
+    entries: [
+      {
+        perm: "view:giveaway",
+        label: "View Giveaway",
+        description: "See status, leaderboard, history, and copy Discord posts",
+      },
+      {
+        perm: "manage:giveaway",
+        label: "Manage Giveaway",
+        description: "Start, draw, cancel, add entries, and edit giveaway settings",
+      },
+    ],
+  },
+  {
     id: "api-docs",
     label: "API Docs",
     description: "Interactive OpenAPI / Swagger documentation",

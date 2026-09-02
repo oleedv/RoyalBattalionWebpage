@@ -5,6 +5,7 @@ import {
   Ticket,
   UserPlus,
   Sprout,
+  Gift,
   Swords,
   Users,
   MessageSquare,
@@ -84,6 +85,12 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/seeding",
         icon: Sprout,
         requiredPermissions: ["view:seeding-tracker", "manage:discord-bot"],
+      },
+      {
+        label: "Giveaway",
+        href: "/giveaway",
+        icon: Gift,
+        requiredPermissions: ["view:giveaway", "manage:giveaway"],
       },
       {
         label: "Match Manager",

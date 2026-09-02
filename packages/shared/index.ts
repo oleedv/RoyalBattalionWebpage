@@ -5,5 +5,7 @@ export * from "./types/tickets";
 export * from "./types/prospects";
 export * from "./types/match";
 export * from "./types/discord-bot";
+export * from "./types/giveaway";
+export * from "./giveaway-math";
 export { COUNTRIES, validateCountry } from "./countries";
 export * from "./squad-commands";

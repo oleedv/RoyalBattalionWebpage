@@ -40,6 +40,11 @@ import type {
   SquadServerOption,
   SeedingLiveStatus,
   BirthdayConfig,
+  GiveawayConfig,
+  GiveawaySnapshot,
+  GiveawayHistoryItem,
+  GiveawayStartRequest,
+  GiveawayAddEntryRequest,
 } from "shared";
 
 const API_ORIGIN =
@@ -994,6 +999,94 @@ export function expireTicketTimeout(
 }
 
 // Prospect Mentor Management
+export function getGiveawayConfig(token: string): Promise<ApiResponse<GiveawayConfig>> {
+  return request<GiveawayConfig>("/giveaway/config", { headers: authHeaders(token) });
+}
+
+export function updateGiveawayConfig(
+  token: string,
+  data: Partial<GiveawayConfig>,
+): Promise<ApiResponse<GiveawayConfig>> {
+  return request<GiveawayConfig>("/giveaway/config", {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function getActiveGiveaway(token: string): Promise<ApiResponse<GiveawaySnapshot | null>> {
+  return request<GiveawaySnapshot | null>("/giveaway/active", { headers: authHeaders(token) });
+}
+
+export function updateActiveGiveaway(
+  token: string,
+  data: Partial<GiveawayConfig> & { prize?: string; drawAt?: string },
+): Promise<ApiResponse<GiveawaySnapshot | null>> {
+  return request<GiveawaySnapshot | null>("/giveaway/active", {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function getGiveawayHistory(token: string): Promise<ApiResponse<GiveawayHistoryItem[]>> {
+  return request<GiveawayHistoryItem[]>("/giveaway/history", { headers: authHeaders(token) });
+}
+
+export function getGiveawayById(
+  token: string,
+  id: number,
+): Promise<ApiResponse<GiveawaySnapshot>> {
+  return request<GiveawaySnapshot>(`/giveaway/${id}`, { headers: authHeaders(token) });
+}
+
+export function startGiveaway(
+  token: string,
+  data: GiveawayStartRequest,
+): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>("/giveaway/start", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function openGiveawayVote(
+  token: string,
+  channelId?: string,
+): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>("/giveaway/open-vote", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(channelId ? { channelId } : {}),
+  });
+}
+
+export function drawGiveaway(token: string): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>("/giveaway/draw", {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export function cancelGiveaway(token: string): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>("/giveaway/cancel", {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export function addGiveawayEntry(
+  token: string,
+  data: GiveawayAddEntryRequest,
+): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>("/giveaway/entries", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
 export function reassignMentor(
   token: string,
   prospectId: number,

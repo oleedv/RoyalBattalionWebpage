@@ -16,6 +16,7 @@ const PROTECTED_PATHS = [
   "/live-server",
   "/audit-logs",
   "/lobby-monitor",
+  "/giveaway",
 ];
 
 export function middleware(request: NextRequest) {
@@ -59,5 +60,7 @@ export const config = {
     "/live-server/:path*",
     "/audit-logs/:path*",
     "/lobby-monitor/:path*",
+    "/giveaway",
+    "/giveaway/:path*",
   ],
 };

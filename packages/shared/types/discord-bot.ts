@@ -147,6 +147,119 @@ export interface MentorGroup {
   prospects: MentorProspect[];
 }
 
+export type TempVoiceEventType =
+  | "created"
+  | "deleted"
+  | "renamed"
+  | "privacy"
+  | "dnd"
+  | "region"
+  | "bitrate"
+  | "limit"
+  | "trust"
+  | "untrust"
+  | "block"
+  | "unblock"
+  | "invite"
+  | "kick"
+  | "transfer"
+  | "claim"
+  | "blocked_name"
+  | "config"
+  | "other";
+
+export type TempVoiceManageOp =
+  | "rename"
+  | "limit"
+  | "lock"
+  | "unlock"
+  | "invisible"
+  | "visible"
+  | "closechat"
+  | "openchat"
+  | "dnd"
+  | "bitrate"
+  | "region"
+  | "delete"
+  | "transfer"
+  | "kick";
+
+export interface TempVoiceConfig {
+  triggerChannelId: string | null;
+  categoryId: string | null;
+  logChannelId: string | null;
+  maxChannelsPerUser: number;
+  defaultAllowVad: boolean;
+  guildId: string | null;
+}
+
+export interface TempVoiceChannel {
+  id: number;
+  channelId: string;
+  ownerId: string;
+  guildId: string;
+  panelMessageId: string | null;
+  name: string;
+  userLimit: number;
+  bitrate: number | null;
+  region: string | null;
+  isLocked: boolean;
+  isInvisible: boolean;
+  isChatClosed: boolean;
+  isDnd: boolean;
+  memberCount: number;
+  memberIds: string[];
+  trustedIds: string[];
+  blockedIds: string[];
+  createdAt: string;
+  lastActivity: string;
+  snapshotAt: string | null;
+}
+
+export interface TempVoiceStats {
+  activeChannels: number;
+  peopleInVoice: number;
+  lockedChannels: number;
+  invisibleChannels: number;
+  dndChannels: number;
+  createdToday: number;
+  deletedToday: number;
+  uniqueOwners: number;
+  oldestCreatedAt: string | null;
+  hourlyCreated: number[];
+}
+
+export interface TempVoiceOverview {
+  config: TempVoiceConfig | null;
+  stats: TempVoiceStats;
+  channels: TempVoiceChannel[];
+}
+
+export interface TempVoiceEvent {
+  id: number;
+  eventType: TempVoiceEventType;
+  channelId: string | null;
+  channelName: string | null;
+  actorId: string | null;
+  ownerId: string | null;
+  details: unknown;
+  createdAt: string;
+}
+
+export interface TempVoicePreset {
+  userId: string;
+  guildId: string;
+  channelName: string | null;
+  bitrate: number | null;
+  region: string | null;
+  userLimit: number | null;
+  isLocked: boolean;
+  isInvisible: boolean;
+  isChatClosed: boolean;
+  isDnd: boolean;
+  updatedAt: string;
+}
+
 export interface DiscordBotOverview {
   tickets: {
     openByTier: { normal: number; community_officer: number; admin_officer: number };

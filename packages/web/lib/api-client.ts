@@ -42,6 +42,11 @@ import type {
   SquadServerOption,
   SeedingLiveStatus,
   BirthdayConfig,
+  TempVoiceOverview,
+  TempVoiceEvent,
+  TempVoicePreset,
+  TempVoiceConfig,
+  TempVoiceManageOp,
   GiveawayConfig,
   GiveawaySnapshot,
   GiveawayHistoryItem,
@@ -1042,6 +1047,60 @@ export function expireTicketTimeout(
   return request<null>(`/discord-bot/timeouts/${id}`, {
     method: "DELETE",
     headers: authHeaders(token),
+  });
+}
+
+export function getTempVoiceOverview(
+  token: string
+): Promise<ApiResponse<TempVoiceOverview>> {
+  return request<TempVoiceOverview>("/discord-bot/tempvoice", {
+    headers: authHeaders(token),
+  });
+}
+
+export function getTempVoiceEvents(
+  token: string,
+  params: { limit?: number; page?: number; type?: string; search?: string } = {}
+): Promise<ApiResponse<Paginated<TempVoiceEvent>>> {
+  const qs = new URLSearchParams();
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.page != null) qs.set("page", String(params.page));
+  if (params.type) qs.set("type", params.type);
+  if (params.search) qs.set("search", params.search);
+  const q = qs.toString();
+  return request<Paginated<TempVoiceEvent>>(`/discord-bot/tempvoice/events${q ? `?${q}` : ""}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function getTempVoicePresets(
+  token: string
+): Promise<ApiResponse<TempVoicePreset[]>> {
+  return request<TempVoicePreset[]>("/discord-bot/tempvoice/presets", {
+    headers: authHeaders(token),
+  });
+}
+
+export function updateTempVoiceConfig(
+  token: string,
+  data: Partial<TempVoiceConfig>
+): Promise<ApiResponse<TempVoiceConfig | null>> {
+  return request<TempVoiceConfig | null>("/discord-bot/tempvoice/config", {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function queueTempVoiceAction(
+  token: string,
+  channelId: string,
+  body: { op: TempVoiceManageOp } & Record<string, unknown>
+): Promise<ApiResponse<{ queued: true }>> {
+  return request<{ queued: true }>(`/discord-bot/tempvoice/channels/${channelId}`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
   });
 }
 

@@ -119,7 +119,7 @@ Routes are grouped under `packages/api/src/routes/`. All require a valid JWT unl
 | `/stats` | `stats.ts` | Aggregated player stats and playtime |
 | `/squadjs-config` | `squadjs-config.ts` | SquadJS config editor (GitHub-backed) |
 | `/server-config` | `server-config.ts` | Per-server SFTP settings (encrypted) |
-| `/discord-bot` | `discord-bot/` | Bot overview, messages, prospects, seeding, timeouts, ticket actions, logs |
+| `/discord-bot` | `discord-bot/` | Bot overview, messages, prospects, seeding, timeouts, ticket actions, logs, temp voice |
 | `/audit-logs` | `audit-logs.ts` | Audit trail with user/resource/date filters |
 | `/playtime` | `playtime.ts` | Per-player playtime from the SquadJS DB |
 | `/seeding-tracker` | `seeding-tracker.ts` | Seeding event tracking + whitelist rewards |

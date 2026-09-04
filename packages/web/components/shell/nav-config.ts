@@ -10,6 +10,7 @@ import {
   Users,
   MessageSquare,
   Bot,
+  Mic,
   Cog,
   KeyRound,
   ScrollText,
@@ -124,6 +125,12 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Discord Bot",
         href: "/discord-bot",
         icon: Bot,
+        requiredPermissions: ["view:discord-bot", "manage:discord-bot"],
+      },
+      {
+        label: "Temp Voice",
+        href: "/temp-voice",
+        icon: Mic,
         requiredPermissions: ["view:discord-bot", "manage:discord-bot"],
       },
       {

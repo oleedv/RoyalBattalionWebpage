@@ -17,6 +17,8 @@ export const PERMISSIONS = [
   "manage:whitelist-sync",
   "view:discord-bot",
   "manage:discord-bot",
+  "view:temp-voice",
+  "manage:temp-voice",
   "view:tickets:normal",
   "view:tickets:community_officer",
   "view:tickets:admin_officer",

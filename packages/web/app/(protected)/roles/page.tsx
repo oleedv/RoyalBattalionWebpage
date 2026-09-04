@@ -250,6 +250,23 @@ const PERMISSION_GROUPS: PermGroup[] = [
     ],
   },
   {
+    id: "temp-voice",
+    label: "Temp Voice",
+    description: "Join-to-create Discord voice channels",
+    entries: [
+      {
+        perm: "view:temp-voice",
+        label: "View Temp Voice",
+        description: "See live temp channels, occupancy, defaults, and activity",
+      },
+      {
+        perm: "manage:temp-voice",
+        label: "Manage Temp Voice",
+        description: "Edit live channels, saved defaults, and Temp Voice setup",
+      },
+    ],
+  },
+  {
     id: "audit-logs",
     label: "Audit Logs",
     description: "Activity and change history",

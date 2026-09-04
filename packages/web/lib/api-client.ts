@@ -47,6 +47,7 @@ import type {
   TempVoicePreset,
   TempVoiceConfig,
   TempVoiceManageOp,
+  TempVoicePresetPatch,
   GiveawayConfig,
   GiveawaySnapshot,
   GiveawayHistoryItem,
@@ -1101,6 +1102,46 @@ export function queueTempVoiceAction(
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify(body),
+  });
+}
+
+export function updateTempVoicePreset(
+  token: string,
+  userId: string,
+  data: TempVoicePresetPatch
+): Promise<ApiResponse<{ preset: TempVoicePreset | null; liveQueued: number }>> {
+  return request<{ preset: TempVoicePreset | null; liveQueued: number }>(
+    `/discord-bot/tempvoice/presets/${userId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify(data),
+    }
+  );
+}
+
+export function createTempVoicePreset(
+  token: string,
+  userId: string,
+  data: TempVoicePresetPatch
+): Promise<ApiResponse<{ preset: TempVoicePreset | null; liveQueued: number }>> {
+  return request<{ preset: TempVoicePreset | null; liveQueued: number }>(
+    "/discord-bot/tempvoice/presets",
+    {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ userId, ...data }),
+    }
+  );
+}
+
+export function clearTempVoicePreset(
+  token: string,
+  userId: string
+): Promise<ApiResponse<{ cleared: true }>> {
+  return request<{ cleared: true }>(`/discord-bot/tempvoice/presets/${userId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
   });
 }
 

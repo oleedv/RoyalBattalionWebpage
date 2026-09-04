@@ -39,6 +39,20 @@ test("mapChannel flattens a secretary DB row", () => {
   expect(ch.blockedIds).toEqual([]);
 });
 
+test("mapEvent keeps preset events", () => {
+  const ev = mapEvent({
+    id: 2,
+    event_type: "preset",
+    channel_id: null,
+    channel_name: "Raid VC",
+    actor_id: "111",
+    owner_id: "222",
+    details: null,
+    created_at: "2026-09-04T10:00:00.000Z",
+  });
+  expect(ev.eventType).toBe("preset");
+});
+
 test("mapEvent falls back to other for unknown types", () => {
   const ev = mapEvent({
     id: 1,

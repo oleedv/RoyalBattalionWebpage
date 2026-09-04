@@ -19,6 +19,7 @@ export const EVENT_LABELS: Record<TempVoiceEventType, string> = {
   claim: "Claimed",
   blocked_name: "Name blocked",
   config: "Config",
+  preset: "Default",
   other: "Event",
 };
 

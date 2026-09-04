@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { z } from "zod";
 import { Prisma } from "../../generated/prisma/client";
 import type {
@@ -54,6 +55,29 @@ const configSchema = z.object({
 
 const EVENT_FILTER = z.string().max(40).optional();
 
+const BITRATES = new Set([32000, 48000, 64000, 80000, 96000, 128000, 256000, 384000]);
+const REGIONS = new Set([
+  "auto", "us-east", "us-west", "us-central", "us-south", "brazil",
+  "singapore", "sydney", "russia", "south-africa", "hongkong",
+  "india", "japan", "rotterdam", "south-korea",
+]);
+
+const presetPatchSchema = z.object({
+  channelName: z.string().min(2).max(100).nullable().optional(),
+  userLimit: z.number().int().min(0).max(99).nullable().optional(),
+  bitrate: z.number().int().nullable().optional(),
+  region: z.string().min(1).max(20).nullable().optional(),
+  isLocked: z.boolean().optional(),
+  isInvisible: z.boolean().optional(),
+  isChatClosed: z.boolean().optional(),
+  isDnd: z.boolean().optional(),
+  applyLive: z.boolean().optional(),
+});
+
+const presetCreateSchema = presetPatchSchema.extend({
+  userId: z.string().regex(SNOWFLAKE),
+});
+
 function isMissingTable(err: unknown): boolean {
   const code = (err as { code?: unknown })?.code;
   const msg = err instanceof Error ? err.message : String(err);
@@ -83,7 +107,7 @@ async function enqueue(
 // GET /tempvoice — live board + stats + config
 tempvoice.get(
   "/tempvoice",
-  requirePermission("view:discord-bot", "manage:discord-bot"),
+  requirePermission("view:temp-voice", "manage:temp-voice", "view:discord-bot", "manage:discord-bot"),
   async (c) => {
     try {
       const db = getSecretaryDb();
@@ -146,7 +170,7 @@ tempvoice.get(
 // GET /tempvoice/events
 tempvoice.get(
   "/tempvoice/events",
-  requirePermission("view:discord-bot", "manage:discord-bot"),
+  requirePermission("view:temp-voice", "manage:temp-voice", "view:discord-bot", "manage:discord-bot"),
   async (c) => {
     const { page, limit, skip } = parsePageParams(c, 50, 100);
     const type = EVENT_FILTER.parse(c.req.query("type") || undefined);
@@ -187,10 +211,143 @@ tempvoice.get(
   },
 );
 
+async function fetchPreset(db: ReturnType<typeof getSecretaryDb>, userId: string): Promise<TempVoicePreset | null> {
+  const rows: Record<string, unknown>[] = await db.$queryRaw(Prisma.sql`
+    SELECT * FROM temp_voice_presets WHERE user_id = ${userId} LIMIT 1
+  `);
+  return rows[0] ? mapPreset(rows[0]) : null;
+}
+
+async function liveChannelsForOwner(db: ReturnType<typeof getSecretaryDb>, userId: string) {
+  return db.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    SELECT channel_id FROM temp_channels WHERE owner_id = ${userId}
+  `);
+}
+
+async function recordPresetEvent(
+  db: ReturnType<typeof getSecretaryDb>,
+  opts: { actorId: string | null; ownerId: string; channelName: string | null; details: Record<string, unknown> },
+) {
+  const json = JSON.stringify(opts.details);
+  await db.$executeRaw(Prisma.sql`
+    INSERT INTO temp_voice_events (event_type, channel_id, channel_name, actor_id, owner_id, details)
+    VALUES ('preset', NULL, ${opts.channelName}, ${opts.actorId}, ${opts.ownerId}, ${json})
+  `).catch(() => null);
+}
+
+type PresetBody = z.infer<typeof presetPatchSchema>;
+
+async function upsertPreset(
+  c: Context,
+  userId: string,
+  body: PresetBody,
+  creating: boolean,
+) {
+  const actorId = c.get("userId") as string;
+  const guildId = env.DISCORD_GUILD_ID;
+  if (!guildId) return fail(c, "DISCORD_GUILD_ID is not configured", 503);
+
+  if (body.bitrate != null && !BITRATES.has(body.bitrate)) {
+    return fail(c, "Unsupported bitrate");
+  }
+  if (body.region != null && !REGIONS.has(body.region)) {
+    return fail(c, "Unsupported region");
+  }
+
+  const hasField =
+    body.channelName !== undefined
+    || body.userLimit !== undefined
+    || body.bitrate !== undefined
+    || body.region !== undefined
+    || body.isLocked !== undefined
+    || body.isInvisible !== undefined
+    || body.isChatClosed !== undefined
+    || body.isDnd !== undefined;
+  if (!hasField && !creating) return fail(c, "No updatable fields provided");
+
+  try {
+    const db = getSecretaryDb();
+    const existing = await fetchPreset(db, userId);
+    if (!creating && !existing) return fail(c, "Preset not found", 404);
+    const presetGuildId = existing?.guildId || guildId;
+
+    const next = {
+      channelName: body.channelName !== undefined ? body.channelName : existing?.channelName ?? null,
+      userLimit: body.userLimit !== undefined ? body.userLimit : existing?.userLimit ?? null,
+      bitrate: body.bitrate !== undefined ? body.bitrate : existing?.bitrate ?? null,
+      region: body.region !== undefined ? body.region : existing?.region ?? null,
+      isLocked: body.isLocked !== undefined ? body.isLocked : existing?.isLocked ?? false,
+      isInvisible: body.isInvisible !== undefined ? body.isInvisible : existing?.isInvisible ?? false,
+      isChatClosed: body.isChatClosed !== undefined ? body.isChatClosed : existing?.isChatClosed ?? false,
+      isDnd: body.isDnd !== undefined ? body.isDnd : existing?.isDnd ?? false,
+    };
+
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO temp_voice_presets (
+        user_id, guild_id, channel_name, bitrate, region, user_limit,
+        is_locked, is_invisible, is_chat_closed, is_dnd
+      ) VALUES (
+        ${userId}, ${presetGuildId}, ${next.channelName}, ${next.bitrate}, ${next.region}, ${next.userLimit},
+        ${next.isLocked ? 1 : 0}, ${next.isInvisible ? 1 : 0}, ${next.isChatClosed ? 1 : 0}, ${next.isDnd ? 1 : 0}
+      )
+      ON DUPLICATE KEY UPDATE
+        channel_name = VALUES(channel_name),
+        bitrate = VALUES(bitrate),
+        region = VALUES(region),
+        user_limit = VALUES(user_limit),
+        is_locked = VALUES(is_locked),
+        is_invisible = VALUES(is_invisible),
+        is_chat_closed = VALUES(is_chat_closed),
+        is_dnd = VALUES(is_dnd)
+    `);
+
+    const discordUserId = await actorDiscordId(actorId);
+    await recordPresetEvent(db, {
+      actorId: discordUserId,
+      ownerId: userId,
+      channelName: next.channelName,
+      details: { title: creating && !existing ? "Preset Created" : "Preset Updated", kind: "update", patch: body },
+    });
+
+    const applyLive = body.applyLive !== false;
+    let liveQueued = 0;
+    if (applyLive) {
+      const live = await liveChannelsForOwner(db, userId);
+      for (const row of live) {
+        const channelId = String(row.channel_id);
+        const ops: Array<Record<string, unknown>> = [];
+        if (body.channelName) ops.push({ op: "rename", name: body.channelName });
+        if (body.userLimit !== undefined && body.userLimit !== null) {
+          ops.push({ op: "limit", userLimit: body.userLimit });
+        }
+        if (body.isLocked !== undefined) ops.push({ op: body.isLocked ? "lock" : "unlock" });
+        if (body.isInvisible !== undefined) ops.push({ op: body.isInvisible ? "invisible" : "visible" });
+        if (body.isChatClosed !== undefined) ops.push({ op: body.isChatClosed ? "closechat" : "openchat" });
+        if (body.isDnd !== undefined) ops.push({ op: "dnd", enabled: body.isDnd });
+        if (body.bitrate != null) ops.push({ op: "bitrate", bitrate: body.bitrate });
+        if (body.region) ops.push({ op: "region", region: body.region });
+        for (const op of ops) {
+          await enqueue("tempvoice_manage", { channelId, ...op, discordUserId }, actorId);
+          liveQueued++;
+        }
+      }
+    }
+
+    await audit(c, creating ? "discord_bot.tempvoice_preset_create" : "discord_bot.tempvoice_preset_update", "tempvoice", userId, body as Record<string, unknown>);
+
+    const saved = await fetchPreset(db, userId);
+    return success(c, { preset: saved, liveQueued }, creating && !existing ? 201 : 200);
+  } catch (err: unknown) {
+    resetSecretaryDb();
+    logger.error("discord-bot", "Temp voice preset upsert error", err);
+    return fail(c, "Failed to save temp voice preset", 500);
+  }
+}
+
 // GET /tempvoice/presets
 tempvoice.get(
   "/tempvoice/presets",
-  requirePermission("view:discord-bot", "manage:discord-bot"),
+  requirePermission("view:temp-voice", "manage:temp-voice", "view:discord-bot", "manage:discord-bot"),
   async (c) => {
     try {
       const rows: Record<string, unknown>[] = await getSecretaryDb().$queryRaw(Prisma.sql`
@@ -207,10 +364,68 @@ tempvoice.get(
   },
 );
 
+// POST /tempvoice/presets — create or overwrite a user's saved defaults
+tempvoice.post(
+  "/tempvoice/presets",
+  requirePermission("manage:temp-voice", "manage:discord-bot"),
+  validate("json", presetCreateSchema),
+  async (c) => {
+    const body = c.req.valid("json");
+    return upsertPreset(c, body.userId, body, true);
+  },
+);
+
+// PATCH /tempvoice/presets/:userId
+tempvoice.patch(
+  "/tempvoice/presets/:userId",
+  requirePermission("manage:temp-voice", "manage:discord-bot"),
+  validate("json", presetPatchSchema),
+  async (c) => {
+    const userId = c.req.param("userId");
+    if (!SNOWFLAKE.test(userId)) return fail(c, "Invalid user id", 400);
+    const body = c.req.valid("json");
+    return upsertPreset(c, userId, body, false);
+  },
+);
+
+// DELETE /tempvoice/presets/:userId
+tempvoice.delete(
+  "/tempvoice/presets/:userId",
+  requirePermission("manage:temp-voice", "manage:discord-bot"),
+  async (c) => {
+    const userId = c.req.param("userId");
+    if (!SNOWFLAKE.test(userId)) return fail(c, "Invalid user id", 400);
+    const actorId = c.get("userId") as string;
+
+    try {
+      const db = getSecretaryDb();
+      const existing = await fetchPreset(db, userId);
+      if (!existing) return fail(c, "Preset not found", 404);
+
+      await db.$executeRaw(Prisma.sql`
+        DELETE FROM temp_voice_presets WHERE user_id = ${userId}
+      `);
+      const discordUserId = await actorDiscordId(actorId);
+      await recordPresetEvent(db, {
+        actorId: discordUserId,
+        ownerId: userId,
+        channelName: existing.channelName,
+        details: { title: "Preset Cleared", kind: "destroy" },
+      });
+      await audit(c, "discord_bot.tempvoice_preset_clear", "tempvoice", userId, {});
+      return success(c, { cleared: true as const });
+    } catch (err: unknown) {
+      resetSecretaryDb();
+      logger.error("discord-bot", "Temp voice preset delete error", err);
+      return fail(c, "Failed to clear temp voice preset", 500);
+    }
+  },
+);
+
 // PATCH /tempvoice/config
 tempvoice.patch(
   "/tempvoice/config",
-  requirePermission("manage:discord-bot"),
+  requirePermission("manage:temp-voice", "manage:discord-bot"),
   validate("json", configSchema),
   async (c) => {
     const body = c.req.valid("json");
@@ -273,7 +488,7 @@ tempvoice.patch(
 // POST /tempvoice/channels/:channelId — queue a staff op (202)
 tempvoice.post(
   "/tempvoice/channels/:channelId",
-  requirePermission("manage:discord-bot"),
+  requirePermission("manage:temp-voice", "manage:discord-bot"),
   validate("json", manageSchema),
   async (c) => {
     const channelId = c.req.param("channelId");

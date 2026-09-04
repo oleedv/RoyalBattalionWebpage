@@ -7,6 +7,9 @@ import {
   getTempVoicePresets,
   updateTempVoiceConfig,
   queueTempVoiceAction,
+  updateTempVoicePreset,
+  createTempVoicePreset,
+  clearTempVoicePreset,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useDiscordNameMap } from "@/hooks/use-discord-names";
@@ -21,6 +24,7 @@ import type {
   TempVoiceManageOp,
   TempVoiceOverview,
   TempVoicePreset,
+  TempVoicePresetPatch,
 } from "shared";
 import {
   BITRATE_OPTIONS,
@@ -31,7 +35,25 @@ import {
   occupancyLabel,
 } from "./labels";
 
-type Filter = "all" | "locked" | "invisible" | "dnd";
+type Filter = "all" | "live" | "idle" | "locked" | "invisible" | "dnd";
+
+type FloorItem = {
+  key: string;
+  kind: "live" | "idle";
+  ownerId: string;
+  name: string;
+  userLimit: number;
+  bitrate: number | null;
+  region: string | null;
+  isLocked: boolean;
+  isInvisible: boolean;
+  isChatClosed: boolean;
+  isDnd: boolean;
+  memberCount: number;
+  updatedAt: string;
+  channel?: TempVoiceChannel;
+  preset?: TempVoicePreset;
+};
 
 function OccupancyTrack({ count, limit }: { count: number; limit: number }) {
   const slots = limit > 0 ? Math.min(limit, 16) : Math.min(Math.max(count, 4), 12);
@@ -116,7 +138,7 @@ export function TempVoiceView({
   const [presets, setPresets] = useState<TempVoicePreset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [eventType, setEventType] = useState("");
@@ -170,11 +192,11 @@ export function TempVoiceView({
 
   const silentRefresh = useCallback(async () => {
     try {
-      await Promise.all([loadOverview(), loadEvents()]);
+      await Promise.all([loadOverview(), loadEvents(), loadPresets()]);
     } catch {
       /* keep stale */
     }
-  }, [loadOverview, loadEvents]);
+  }, [loadOverview, loadEvents, loadPresets]);
 
   useAutoRefresh(silentRefresh, 10_000, !busy);
 
@@ -183,23 +205,90 @@ export function TempVoiceView({
   const config = overview?.config ?? null;
   const now = Date.now();
 
+  const floorItems = useMemo<FloorItem[]>(() => {
+    const liveOwners = new Set(channels.map((ch) => ch.ownerId));
+    const live: FloorItem[] = channels.map((ch) => ({
+      key: `live:${ch.channelId}`,
+      kind: "live",
+      ownerId: ch.ownerId,
+      name: ch.name,
+      userLimit: ch.userLimit,
+      bitrate: ch.bitrate,
+      region: ch.region,
+      isLocked: ch.isLocked,
+      isInvisible: ch.isInvisible,
+      isChatClosed: ch.isChatClosed,
+      isDnd: ch.isDnd,
+      memberCount: ch.memberCount,
+      updatedAt: ch.lastActivity,
+      channel: ch,
+    }));
+    const idle: FloorItem[] = presets
+      .filter((p) => !liveOwners.has(p.userId))
+      .map((p) => ({
+        key: `idle:${p.userId}`,
+        kind: "idle" as const,
+        ownerId: p.userId,
+        name: p.channelName || "Saved default",
+        userLimit: p.userLimit ?? 0,
+        bitrate: p.bitrate,
+        region: p.region,
+        isLocked: p.isLocked,
+        isInvisible: p.isInvisible,
+        isChatClosed: p.isChatClosed,
+        isDnd: p.isDnd,
+        memberCount: 0,
+        updatedAt: p.updatedAt,
+        preset: p,
+      }));
+    return [...live, ...idle];
+  }, [channels, presets]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return channels.filter((ch) => {
-      if (filter === "locked" && !ch.isLocked) return false;
-      if (filter === "invisible" && !ch.isInvisible) return false;
-      if (filter === "dnd" && !ch.isDnd) return false;
+    return floorItems.filter((item) => {
+      if (filter === "live" && item.kind !== "live") return false;
+      if (filter === "idle" && item.kind !== "idle") return false;
+      if (filter === "locked" && !item.isLocked) return false;
+      if (filter === "invisible" && !item.isInvisible) return false;
+      if (filter === "dnd" && !item.isDnd) return false;
       if (!q) return true;
-      const owner = displayName(ch.ownerId).toLowerCase();
-      return ch.name.toLowerCase().includes(q) || owner.includes(q) || ch.channelId.includes(q);
+      const owner = displayName(item.ownerId).toLowerCase();
+      return item.name.toLowerCase().includes(q) || owner.includes(q) || item.ownerId.includes(q);
     });
-  }, [channels, filter, search, displayName]);
+  }, [floorItems, filter, search, displayName]);
 
-  const selected = filtered.find((c) => c.channelId === selectedId) || channels.find((c) => c.channelId === selectedId) || null;
+  const selected = useMemo(() => {
+    const fromFloor = filtered.find((item) => item.key === selectedKey)
+      || floorItems.find((item) => item.key === selectedKey);
+    if (fromFloor) return fromFloor;
+    if (selectedKey?.startsWith("idle:")) {
+      const userId = selectedKey.slice(5);
+      const p = presets.find((preset) => preset.userId === userId);
+      if (!p) return null;
+      return {
+        key: `idle:${p.userId}`,
+        kind: "idle" as const,
+        ownerId: p.userId,
+        name: p.channelName || "Saved default",
+        userLimit: p.userLimit ?? 0,
+        bitrate: p.bitrate,
+        region: p.region,
+        isLocked: p.isLocked,
+        isInvisible: p.isInvisible,
+        isChatClosed: p.isChatClosed,
+        isDnd: p.isDnd,
+        memberCount: 0,
+        updatedAt: p.updatedAt,
+        preset: p,
+      } satisfies FloorItem;
+    }
+    return null;
+  }, [filtered, floorItems, selectedKey, presets]);
 
   useEffect(() => {
-    if (!selectedId && filtered[0]) setSelectedId(filtered[0].channelId);
-  }, [filtered, selectedId]);
+    if (!selectedKey && filtered[0]) setSelectedKey(filtered[0].key);
+  }, [filtered, selectedKey]);
 
   async function queue(channelId: string, body: { op: TempVoiceManageOp } & Record<string, unknown>) {
     setBusy(true);
@@ -211,6 +300,45 @@ export function TempVoiceView({
       setTimeout(() => silentRefresh(), 2500);
     } else {
       setFlash(res.error || "Failed to queue action");
+    }
+  }
+
+  async function savePreset(userId: string, patch: TempVoicePresetPatch, create = false) {
+    setBusy(true);
+    setFlash(null);
+    const res = create
+      ? await createTempVoicePreset(apiToken, userId, patch)
+      : await updateTempVoicePreset(apiToken, userId, patch);
+    setBusy(false);
+    if (res.success && res.data?.preset) {
+      const saved = res.data.preset;
+      setPresets((prev) => {
+        const rest = prev.filter((p) => p.userId !== saved.userId);
+        return [saved, ...rest];
+      });
+      const liveN = res.data.liveQueued;
+      setFlash(
+        liveN > 0
+          ? "Default saved. Live channel updates are queued (~10s)."
+          : "Default saved. It applies the next time they create a channel.",
+      );
+      if (liveN > 0) setTimeout(() => silentRefresh(), 2500);
+    } else {
+      setFlash(res.error || "Failed to save default");
+    }
+  }
+
+  async function clearPreset(userId: string) {
+    setBusy(true);
+    setFlash(null);
+    const res = await clearTempVoicePreset(apiToken, userId);
+    setBusy(false);
+    if (res.success) {
+      setPresets((prev) => prev.filter((p) => p.userId !== userId));
+      if (selectedKey === `idle:${userId}`) setSelectedKey(null);
+      setFlash("Saved default cleared.");
+    } else {
+      setFlash(res.error || "Failed to clear default");
     }
   }
 
@@ -241,7 +369,7 @@ export function TempVoiceView({
       <div>
         <h1 className="font-display text-3xl font-bold tracking-wide">Temp Voice</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Live floor of join-to-create channels. Staff can rename, lock, kick, and tear down from here.
+          Live channels and idle saved defaults. Staff can edit either — idle changes apply the next time that person creates a channel.
         </p>
       </div>
 
@@ -280,7 +408,7 @@ export function TempVoiceView({
               placeholder="Search name or owner"
               className="rounded-sm border border-border bg-bg-secondary px-3 py-1.5 text-sm"
             />
-            {(["all", "locked", "invisible", "dnd"] as Filter[]).map((f) => (
+            {(["all", "live", "idle", "locked", "invisible", "dnd"] as Filter[]).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -298,19 +426,19 @@ export function TempVoiceView({
 
         {filtered.length === 0 ? (
           <div className="facet-border rounded-sm bg-bg-card px-4 py-10 text-center text-sm text-text-muted">
-            {channels.length === 0
-              ? "No temp channels right now. They appear when someone joins the trigger VC."
+            {floorItems.length === 0
+              ? "No live channels or saved defaults yet."
               : "No channels match that filter."}
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,28rem)]">
             <div className="space-y-2">
-              {filtered.map((ch) => {
-                const active = selected?.channelId === ch.channelId;
+              {filtered.map((item) => {
+                const active = selected?.key === item.key;
                 return (
                   <button
-                    key={ch.channelId}
-                    onClick={() => setSelectedId(ch.channelId)}
+                    key={item.key}
+                    onClick={() => setSelectedKey(item.key)}
                     className={`w-full rounded-sm border p-3 text-left transition-colors ${
                       active
                         ? "border-accent/50 bg-bg-card"
@@ -319,18 +447,27 @@ export function TempVoiceView({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="truncate font-medium text-text-primary">{ch.name}</div>
+                        <div className="truncate font-medium text-text-primary">{item.name}</div>
                         <div className="mt-0.5 truncate text-xs text-text-muted">
-                          {displayName(ch.ownerId)} · {formatChannelAge(ch.createdAt, now)}
+                          {displayName(item.ownerId)}
+                          {item.kind === "live"
+                            ? ` · ${formatChannelAge(item.channel?.createdAt || item.updatedAt, now)}`
+                            : " · idle default"}
                         </div>
                       </div>
-                      <OccupancyTrack count={ch.memberCount} limit={ch.userLimit} />
+                      {item.kind === "live" ? (
+                        <OccupancyTrack count={item.memberCount} limit={item.userLimit} />
+                      ) : (
+                        <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-text-muted uppercase">
+                          Idle
+                        </span>
+                      )}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1">
-                      <Flag on={ch.isLocked} label="Locked" />
-                      <Flag on={ch.isInvisible} label="Hidden" />
-                      <Flag on={ch.isChatClosed} label="Chat closed" />
-                      <Flag on={ch.isDnd} label="DND" />
+                      <Flag on={item.isLocked} label="Locked" />
+                      <Flag on={item.isInvisible} label="Hidden" />
+                      <Flag on={item.isChatClosed} label="Chat closed" />
+                      <Flag on={item.isDnd} label="DND" />
                     </div>
                   </button>
                 );
@@ -338,12 +475,15 @@ export function TempVoiceView({
             </div>
 
             <ChannelDetail
-              channel={selected}
+              item={selected}
               config={config}
               canManage={canManage}
               busy={busy}
               displayName={displayName}
+              liveOwnerIds={new Set(channels.map((ch) => ch.ownerId))}
               onQueue={queue}
+              onSavePreset={savePreset}
+              onClearPreset={clearPreset}
               onDelete={() => setConfirmDelete(true)}
             />
           </div>
@@ -360,7 +500,16 @@ export function TempVoiceView({
         displayName={displayName}
       />
 
-      <PresetsTable presets={presets} displayName={displayName} />
+      <PresetsTable
+        presets={presets}
+        liveOwnerIds={new Set(channels.map((ch) => ch.ownerId))}
+        selectedKey={selectedKey}
+        canManage={canManage}
+        busy={busy}
+        displayName={displayName}
+        onSelect={(p) => setSelectedKey(`idle:${p.userId}`)}
+        onSave={savePreset}
+      />
 
       {canManage && config && (
         <ConfigPanel
@@ -377,14 +526,14 @@ export function TempVoiceView({
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         title="Delete this temp channel"
-        message={selected ? `Delete “${selected.name}” and disconnect everyone in it?` : ""}
+        message={selected?.channel ? `Delete “${selected.name}” and disconnect everyone in it?` : ""}
         confirmLabel="Delete channel"
         loading={busy}
         onConfirm={async () => {
-          if (!selected) return;
-          await queue(selected.channelId, { op: "delete" });
+          if (!selected?.channel) return;
+          await queue(selected.channel.channelId, { op: "delete" });
           setConfirmDelete(false);
-          setSelectedId(null);
+          setSelectedKey(null);
         }}
       />
     </div>
@@ -392,53 +541,80 @@ export function TempVoiceView({
 }
 
 function ChannelDetail({
-  channel,
+  item,
   config,
   canManage,
   busy,
   displayName,
+  liveOwnerIds,
   onQueue,
+  onSavePreset,
+  onClearPreset,
   onDelete,
 }: {
-  channel: TempVoiceChannel | null;
+  item: FloorItem | null;
   config: TempVoiceConfig | null;
   canManage: boolean;
   busy: boolean;
   displayName: (id: string | null) => string;
+  liveOwnerIds: Set<string>;
   onQueue: (channelId: string, body: { op: TempVoiceManageOp } & Record<string, unknown>) => Promise<void>;
+  onSavePreset: (userId: string, patch: TempVoicePresetPatch) => Promise<void>;
+  onClearPreset: (userId: string) => Promise<void>;
   onDelete: () => void;
 }) {
+  const channel = item?.channel ?? null;
+  const preset = item?.preset ?? null;
   const [name, setName] = useState("");
   const [limit, setLimit] = useState("0");
   const [transferId, setTransferId] = useState("");
+  const [applyLive, setApplyLive] = useState(true);
 
   useEffect(() => {
-    if (!channel) return;
-    setName(channel.name);
-    setLimit(String(channel.userLimit || 0));
+    if (!item) return;
+    setName(item.name === "Saved default" ? "" : item.name);
+    setLimit(String(item.userLimit || 0));
     setTransferId("");
-  }, [channel?.channelId, channel?.name, channel?.userLimit]);
+    setApplyLive(true);
+  }, [item?.key, item?.name, item?.userLimit]);
 
-  if (!channel) {
+  if (!item) {
     return (
       <div className="facet-border rounded-sm bg-bg-card p-6 text-sm text-text-muted">
-        Select a channel to inspect settings, occupancy, and staff controls.
+        Select a live channel or an idle saved default to inspect and edit settings.
       </div>
     );
   }
 
-  const jump = discordChannelUrl(config?.guildId || channel.guildId, channel.channelId);
+  const isIdle = item.kind === "idle";
+  const jump = channel
+    ? discordChannelUrl(config?.guildId || channel.guildId, channel.channelId)
+    : null;
+
+  function patchIdle(patch: TempVoicePresetPatch) {
+    onSavePreset(item.ownerId, { ...patch, applyLive });
+  }
 
   return (
     <div className="facet-border space-y-5 rounded-sm bg-bg-card p-4">
       <div>
         <div className="text-[10px] font-semibold tracking-[0.18em] text-text-muted uppercase">
-          Channel
+          {isIdle ? "Saved default" : "Live channel"}
         </div>
-        <h3 className="font-display mt-1 text-xl font-semibold">{channel.name}</h3>
+        <h3 className="font-display mt-1 text-xl font-semibold">{item.name}</h3>
         <div className="mt-1 text-xs text-text-muted">
-          Owner {displayName(channel.ownerId)} · last activity {formatDateTime(channel.lastActivity)}
+          Owner {displayName(item.ownerId)}
+          {channel
+            ? ` · last activity ${formatDateTime(channel.lastActivity)}`
+            : preset
+              ? ` · updated ${formatDateTime(preset.updatedAt)}`
+              : ""}
         </div>
+        {isIdle && (
+          <p className="mt-2 text-xs text-text-secondary">
+            Not in a temp channel right now. Edits here are their next-create defaults.
+          </p>
+        )}
         {jump && (
           <a
             href={jump}
@@ -451,18 +627,19 @@ function ChannelDetail({
         )}
       </div>
 
-      <OccupancyTrack count={channel.memberCount} limit={channel.userLimit} />
+      {!isIdle && <OccupancyTrack count={item.memberCount} limit={item.userLimit} />}
 
       <div className="flex flex-wrap gap-1">
-        <Flag on={channel.isLocked} label="Locked" />
-        <Flag on={channel.isInvisible} label="Hidden" />
-        <Flag on={channel.isChatClosed} label="Chat closed" />
-        <Flag on={channel.isDnd} label="DND" />
-        {!channel.isLocked && !channel.isInvisible && !channel.isDnd && (
-          <span className="text-xs text-text-muted">Open channel</span>
+        <Flag on={item.isLocked} label="Locked" />
+        <Flag on={item.isInvisible} label="Hidden" />
+        <Flag on={item.isChatClosed} label="Chat closed" />
+        <Flag on={item.isDnd} label="DND" />
+        {!item.isLocked && !item.isInvisible && !item.isDnd && (
+          <span className="text-xs text-text-muted">{isIdle ? "Open default" : "Open channel"}</span>
         )}
       </div>
 
+      {channel && (
       <div>
         <div className="mb-1 text-[10px] font-semibold tracking-[0.18em] text-text-muted uppercase">
           In channel
@@ -491,8 +668,9 @@ function ChannelDetail({
           </ul>
         )}
       </div>
+      )}
 
-      {(channel.trustedIds.length > 0 || channel.blockedIds.length > 0) && (
+      {channel && (channel.trustedIds.length > 0 || channel.blockedIds.length > 0) && (
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <div className="mb-1 text-[10px] font-semibold tracking-[0.18em] text-text-muted uppercase">
@@ -524,7 +702,7 @@ function ChannelDetail({
       {canManage && (
         <div className="space-y-3 border-t border-border pt-4">
           <div className="text-[10px] font-semibold tracking-[0.18em] text-text-muted uppercase">
-            Staff controls
+            {isIdle ? "Edit default" : "Staff controls"}
           </div>
           <div className="flex gap-2">
             <input
@@ -534,8 +712,11 @@ function ChannelDetail({
               className="min-w-0 flex-1 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 text-sm"
             />
             <button
-              disabled={busy || name.trim().length < 2 || name.trim() === channel.name}
-              onClick={() => onQueue(channel.channelId, { op: "rename", name: name.trim() })}
+              disabled={busy || name.trim().length < 2 || name.trim() === item.name}
+              onClick={() => {
+                if (isIdle) patchIdle({ channelName: name.trim() });
+                else if (channel) onQueue(channel.channelId, { op: "rename", name: name.trim() });
+              }}
               className="rounded-sm border border-border px-3 py-1.5 text-xs uppercase tracking-wide text-text-secondary hover:text-accent disabled:opacity-40"
             >
               Rename
@@ -549,7 +730,11 @@ function ChannelDetail({
             />
             <button
               disabled={busy}
-              onClick={() => onQueue(channel.channelId, { op: "limit", userLimit: Number(limit) || 0 })}
+              onClick={() => {
+                const userLimit = Number(limit) || 0;
+                if (isIdle) patchIdle({ userLimit });
+                else if (channel) onQueue(channel.channelId, { op: "limit", userLimit });
+              }}
               className="rounded-sm border border-border px-3 py-1.5 text-xs uppercase tracking-wide text-text-secondary hover:text-accent disabled:opacity-40"
             >
               Set limit
@@ -558,19 +743,23 @@ function ChannelDetail({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <ToggleBtn busy={busy} on={channel.isLocked} onLabel="Unlock" offLabel="Lock" onClick={() => onQueue(channel.channelId, { op: channel.isLocked ? "unlock" : "lock" })} />
-            <ToggleBtn busy={busy} on={channel.isInvisible} onLabel="Show" offLabel="Hide" onClick={() => onQueue(channel.channelId, { op: channel.isInvisible ? "visible" : "invisible" })} />
-            <ToggleBtn busy={busy} on={channel.isChatClosed} onLabel="Open chat" offLabel="Close chat" onClick={() => onQueue(channel.channelId, { op: channel.isChatClosed ? "openchat" : "closechat" })} />
-            <ToggleBtn busy={busy} on={channel.isDnd} onLabel="Clear DND" offLabel="DND" onClick={() => onQueue(channel.channelId, { op: "dnd", enabled: !channel.isDnd })} />
+            <ToggleBtn busy={busy} on={item.isLocked} onLabel="Unlock" offLabel="Lock" onClick={() => isIdle ? patchIdle({ isLocked: !item.isLocked }) : channel && onQueue(channel.channelId, { op: item.isLocked ? "unlock" : "lock" })} />
+            <ToggleBtn busy={busy} on={item.isInvisible} onLabel="Show" offLabel="Hide" onClick={() => isIdle ? patchIdle({ isInvisible: !item.isInvisible }) : channel && onQueue(channel.channelId, { op: item.isInvisible ? "visible" : "invisible" })} />
+            <ToggleBtn busy={busy} on={item.isChatClosed} onLabel="Open chat" offLabel="Close chat" onClick={() => isIdle ? patchIdle({ isChatClosed: !item.isChatClosed }) : channel && onQueue(channel.channelId, { op: item.isChatClosed ? "openchat" : "closechat" })} />
+            <ToggleBtn busy={busy} on={item.isDnd} onLabel="Clear DND" offLabel="DND" onClick={() => isIdle ? patchIdle({ isDnd: !item.isDnd }) : channel && onQueue(channel.channelId, { op: "dnd", enabled: !item.isDnd })} />
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="text-xs text-text-muted">
               Bitrate
               <select
-                value={channel.bitrate || 64000}
+                value={item.bitrate || 64000}
                 disabled={busy}
-                onChange={(e) => onQueue(channel.channelId, { op: "bitrate", bitrate: Number(e.target.value) })}
+                onChange={(e) => {
+                  const bitrate = Number(e.target.value);
+                  if (isIdle) patchIdle({ bitrate });
+                  else if (channel) onQueue(channel.channelId, { op: "bitrate", bitrate });
+                }}
                 className="mt-1 w-full rounded-sm border border-border bg-bg-secondary px-2 py-1.5 text-sm text-text-primary"
               >
                 {BITRATE_OPTIONS.map((b) => (
@@ -581,9 +770,13 @@ function ChannelDetail({
             <label className="text-xs text-text-muted">
               Region
               <select
-                value={channel.region || "auto"}
+                value={item.region || "auto"}
                 disabled={busy}
-                onChange={(e) => onQueue(channel.channelId, { op: "region", region: e.target.value })}
+                onChange={(e) => {
+                  const region = e.target.value;
+                  if (isIdle) patchIdle({ region });
+                  else if (channel) onQueue(channel.channelId, { op: "region", region });
+                }}
                 className="mt-1 w-full rounded-sm border border-border bg-bg-secondary px-2 py-1.5 text-sm text-text-primary"
               >
                 {Object.entries(REGION_LABELS).map(([value, label]) => (
@@ -593,29 +786,49 @@ function ChannelDetail({
             </label>
           </div>
 
-          <div className="flex gap-2">
-            <input
-              value={transferId}
-              onChange={(e) => setTransferId(e.target.value)}
-              placeholder="New owner Discord ID"
-              className="min-w-0 flex-1 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 text-sm"
-            />
-            <button
-              disabled={busy || !/^\d{5,25}$/.test(transferId.trim())}
-              onClick={() => onQueue(channel.channelId, { op: "transfer", newOwnerId: transferId.trim() })}
-              className="rounded-sm border border-border px-3 py-1.5 text-xs uppercase tracking-wide text-text-secondary hover:text-accent disabled:opacity-40"
-            >
-              Transfer
-            </button>
-          </div>
+          {isIdle && liveOwnerIds.has(item.ownerId) && (
+            <label className="flex items-center gap-2 text-xs text-text-secondary">
+              <input type="checkbox" checked={applyLive} onChange={(e) => setApplyLive(e.target.checked)} />
+              Also apply to their live channel
+            </label>
+          )}
 
-          <button
-            disabled={busy}
-            onClick={onDelete}
-            className="rounded-sm border border-danger/40 px-3 py-1.5 text-xs uppercase tracking-wide text-danger hover:bg-danger/10 disabled:opacity-40"
-          >
-            Delete channel
-          </button>
+          {!isIdle && channel && (
+            <>
+              <div className="flex gap-2">
+                <input
+                  value={transferId}
+                  onChange={(e) => setTransferId(e.target.value)}
+                  placeholder="New owner Discord ID"
+                  className="min-w-0 flex-1 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 text-sm"
+                />
+                <button
+                  disabled={busy || !/^\d{5,25}$/.test(transferId.trim())}
+                  onClick={() => onQueue(channel.channelId, { op: "transfer", newOwnerId: transferId.trim() })}
+                  className="rounded-sm border border-border px-3 py-1.5 text-xs uppercase tracking-wide text-text-secondary hover:text-accent disabled:opacity-40"
+                >
+                  Transfer
+                </button>
+              </div>
+              <button
+                disabled={busy}
+                onClick={onDelete}
+                className="rounded-sm border border-danger/40 px-3 py-1.5 text-xs uppercase tracking-wide text-danger hover:bg-danger/10 disabled:opacity-40"
+              >
+                Delete channel
+              </button>
+            </>
+          )}
+
+          {isIdle && (
+            <button
+              disabled={busy}
+              onClick={() => onClearPreset(item.ownerId)}
+              className="rounded-sm border border-danger/40 px-3 py-1.5 text-xs uppercase tracking-wide text-danger hover:bg-danger/10 disabled:opacity-40"
+            >
+              Clear default
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -726,48 +939,128 @@ function ActivityLog({
 
 function PresetsTable({
   presets,
+  liveOwnerIds,
+  selectedKey,
+  canManage,
+  busy,
   displayName,
+  onSelect,
+  onSave,
 }: {
   presets: TempVoicePreset[];
+  liveOwnerIds: Set<string>;
+  selectedKey: string | null;
+  canManage: boolean;
+  busy: boolean;
   displayName: (id: string | null) => string;
+  onSelect: (p: TempVoicePreset) => void;
+  onSave: (userId: string, patch: TempVoicePresetPatch, create?: boolean) => Promise<void>;
 }) {
-  if (presets.length === 0) return null;
+  const [newUserId, setNewUserId] = useState("");
+  const [newName, setNewName] = useState("");
+
   return (
     <section className="space-y-3">
       <h2 className="text-xs font-semibold tracking-[0.15em] text-text-muted uppercase">
         Saved defaults
       </h2>
+      <p className="text-xs text-text-muted">
+        Click a row to edit. Idle users have no live temp channel — changes apply on their next create.
+      </p>
       <div className="facet-border overflow-x-auto rounded-sm bg-bg-card">
-        <table className="w-full text-left text-sm">
-          <thead className="text-[10px] tracking-[0.15em] text-text-muted uppercase">
-            <tr>
-              <th className="px-4 py-2 font-medium">User</th>
-              <th className="px-4 py-2 font-medium">Name</th>
-              <th className="px-4 py-2 font-medium">Limit</th>
-              <th className="px-4 py-2 font-medium">Flags</th>
-              <th className="px-4 py-2 font-medium">Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {presets.map((p) => (
-              <tr key={`${p.userId}-${p.guildId}`} className="border-t border-border">
-                <td className="px-4 py-2">{displayName(p.userId)}</td>
-                <td className="px-4 py-2 text-text-secondary">{p.channelName || "—"}</td>
-                <td className="px-4 py-2 font-mono text-xs">{p.userLimit ?? "—"}</td>
-                <td className="px-4 py-2">
-                  <div className="flex flex-wrap gap-1">
-                    <Flag on={p.isLocked} label="Locked" />
-                    <Flag on={p.isInvisible} label="Hidden" />
-                    <Flag on={p.isChatClosed} label="Chat closed" />
-                    <Flag on={p.isDnd} label="DND" />
-                  </div>
-                </td>
-                <td className="px-4 py-2 text-xs text-text-muted">{formatDateTime(p.updatedAt)}</td>
+        {presets.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-text-muted">
+            No saved defaults yet. They appear when someone sets a name, lock, or limit on their channel.
+          </div>
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead className="text-[10px] tracking-[0.15em] text-text-muted uppercase">
+              <tr>
+                <th className="px-4 py-2 font-medium">User</th>
+                <th className="px-4 py-2 font-medium">Name</th>
+                <th className="px-4 py-2 font-medium">Limit</th>
+                <th className="px-4 py-2 font-medium">Flags</th>
+                <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium">Updated</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {presets.map((p) => {
+                const live = liveOwnerIds.has(p.userId);
+                return (
+                  <tr
+                    key={`${p.userId}-${p.guildId}`}
+                    onClick={() => onSelect(p)}
+                    className={`cursor-pointer border-t border-border hover:bg-bg-card-hover ${
+                      selectedKey === `idle:${p.userId}` ? "bg-accent/5" : ""
+                    }`}
+                  >
+                    <td className="px-4 py-2">{displayName(p.userId)}</td>
+                    <td className="px-4 py-2 text-text-secondary">{p.channelName || "—"}</td>
+                    <td className="px-4 py-2 font-mono text-xs">{p.userLimit ?? "—"}</td>
+                    <td className="px-4 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        <Flag on={p.isLocked} label="Locked" />
+                        <Flag on={p.isInvisible} label="Hidden" />
+                        <Flag on={p.isChatClosed} label="Chat closed" />
+                        <Flag on={p.isDnd} label="DND" />
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 text-xs">
+                      {live ? (
+                        <span className="text-success">Live</span>
+                      ) : (
+                        <span className="text-text-muted">Idle</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-xs text-text-muted">{formatDateTime(p.updatedAt)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
+      {canManage && (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const id = newUserId.trim();
+            if (!/^\d{5,25}$/.test(id)) return;
+            onSave(id, { channelName: newName.trim() || null, applyLive: true }, true);
+            setNewUserId("");
+            setNewName("");
+          }}
+        >
+          <label className="text-xs text-text-muted">
+            Discord user ID
+            <input
+              value={newUserId}
+              onChange={(e) => setNewUserId(e.target.value.trim())}
+              placeholder="17–19 digit id"
+              className="mt-1 block w-52 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 font-mono text-sm text-text-primary"
+            />
+          </label>
+          <label className="text-xs text-text-muted">
+            Default name
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Optional"
+              maxLength={100}
+              className="mt-1 block w-52 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 text-sm text-text-primary"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={busy || !/^\d{5,25}$/.test(newUserId)}
+            className="rounded-sm border border-border px-3 py-1.5 text-xs uppercase tracking-wide text-text-secondary hover:text-accent disabled:opacity-40"
+          >
+            Add default
+          </button>
+        </form>
+      )}
     </section>
   );
 }

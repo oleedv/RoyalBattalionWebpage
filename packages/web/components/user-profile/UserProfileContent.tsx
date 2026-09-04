@@ -192,8 +192,16 @@ export function UserProfileContent({
           )}
         </div>
         <div className="flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-text-primary">{displayName}</h2>
+            {u && (u.roles ?? []).map((r) => (
+              <span
+                key={r.id}
+                className="rounded-sm border border-accent/30 bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent"
+              >
+                {r.name}
+              </span>
+            ))}
           </div>
           {u && (
             <div className="text-xs text-text-muted">
@@ -278,18 +286,22 @@ export function UserProfileContent({
       </Section>
 
       {/* Roles */}
-      {u && u.roles.length > 0 && (
+      {u && (
         <Section title="Roles">
-          <div className="flex flex-wrap gap-1.5">
-            {u.roles.map((r) => (
-              <span
-                key={r.id}
-                className="rounded-sm border border-border bg-bg-tertiary/40 px-2 py-0.5 text-xs text-text-secondary"
-              >
-                {r.name}
-              </span>
-            ))}
-          </div>
+          {(u.roles ?? []).length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {u.roles.map((r) => (
+                <span
+                  key={r.id}
+                  className="rounded-sm border border-border bg-bg-tertiary/40 px-2 py-0.5 text-xs text-text-secondary"
+                >
+                  {r.name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-text-muted">No roles assigned.</div>
+          )}
         </Section>
       )}
 

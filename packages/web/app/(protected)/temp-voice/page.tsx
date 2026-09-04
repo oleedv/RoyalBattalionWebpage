@@ -19,7 +19,11 @@ export default function TempVoicePage() {
     );
   }
 
-  const canView = hasPermission("view:discord-bot") || hasPermission("manage:discord-bot");
+  const canView =
+    hasPermission("view:temp-voice")
+    || hasPermission("manage:temp-voice")
+    || hasPermission("view:discord-bot")
+    || hasPermission("manage:discord-bot");
   if (!canView) {
     return <div className="text-danger">Insufficient permissions.</div>;
   }
@@ -27,7 +31,7 @@ export default function TempVoicePage() {
   return (
     <TempVoiceView
       apiToken={apiToken}
-      canManage={hasPermission("manage:discord-bot")}
+      canManage={hasPermission("manage:temp-voice") || hasPermission("manage:discord-bot")}
     />
   );
 }

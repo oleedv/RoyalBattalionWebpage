@@ -131,7 +131,12 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Temp Voice",
         href: "/temp-voice",
         icon: Mic,
-        requiredPermissions: ["view:discord-bot", "manage:discord-bot"],
+        requiredPermissions: [
+          "view:temp-voice",
+          "manage:temp-voice",
+          "view:discord-bot",
+          "manage:discord-bot",
+        ],
       },
       {
         label: "SquadJS Config",

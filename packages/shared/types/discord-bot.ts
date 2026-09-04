@@ -166,6 +166,7 @@ export type TempVoiceEventType =
   | "claim"
   | "blocked_name"
   | "config"
+  | "preset"
   | "other";
 
 export type TempVoiceManageOp =
@@ -258,6 +259,19 @@ export interface TempVoicePreset {
   isChatClosed: boolean;
   isDnd: boolean;
   updatedAt: string;
+}
+
+export interface TempVoicePresetPatch {
+  channelName?: string | null;
+  bitrate?: number | null;
+  region?: string | null;
+  userLimit?: number | null;
+  isLocked?: boolean;
+  isInvisible?: boolean;
+  isChatClosed?: boolean;
+  isDnd?: boolean;
+  /** When true (default), also queue Discord changes if this user has a live temp channel. */
+  applyLive?: boolean;
 }
 
 export interface DiscordBotOverview {

@@ -26,6 +26,7 @@ const EVENT_TYPES = new Set<TempVoiceEventType>([
   "claim",
   "blocked_name",
   "config",
+  "preset",
   "other",
 ]);
 

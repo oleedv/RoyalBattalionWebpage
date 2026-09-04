@@ -586,13 +586,14 @@ function ChannelDetail({
     );
   }
 
-  const isIdle = item.kind === "idle";
+  const selected = item;
+  const isIdle = selected.kind === "idle";
   const jump = channel
     ? discordChannelUrl(config?.guildId || channel.guildId, channel.channelId)
     : null;
 
   function patchIdle(patch: TempVoicePresetPatch) {
-    onSavePreset(item.ownerId, { ...patch, applyLive });
+    onSavePreset(selected.ownerId, { ...patch, applyLive });
   }
 
   return (
@@ -601,9 +602,9 @@ function ChannelDetail({
         <div className="text-[10px] font-semibold tracking-[0.18em] text-text-muted uppercase">
           {isIdle ? "Saved default" : "Live channel"}
         </div>
-        <h3 className="font-display mt-1 text-xl font-semibold">{item.name}</h3>
+        <h3 className="font-display mt-1 text-xl font-semibold">{selected.name}</h3>
         <div className="mt-1 text-xs text-text-muted">
-          Owner {displayName(item.ownerId)}
+          Owner {displayName(selected.ownerId)}
           {channel
             ? ` · last activity ${formatDateTime(channel.lastActivity)}`
             : preset
@@ -627,14 +628,14 @@ function ChannelDetail({
         )}
       </div>
 
-      {!isIdle && <OccupancyTrack count={item.memberCount} limit={item.userLimit} />}
+      {!isIdle && <OccupancyTrack count={selected.memberCount} limit={selected.userLimit} />}
 
       <div className="flex flex-wrap gap-1">
-        <Flag on={item.isLocked} label="Locked" />
-        <Flag on={item.isInvisible} label="Hidden" />
-        <Flag on={item.isChatClosed} label="Chat closed" />
-        <Flag on={item.isDnd} label="DND" />
-        {!item.isLocked && !item.isInvisible && !item.isDnd && (
+        <Flag on={selected.isLocked} label="Locked" />
+        <Flag on={selected.isInvisible} label="Hidden" />
+        <Flag on={selected.isChatClosed} label="Chat closed" />
+        <Flag on={selected.isDnd} label="DND" />
+        {!selected.isLocked && !selected.isInvisible && !selected.isDnd && (
           <span className="text-xs text-text-muted">{isIdle ? "Open default" : "Open channel"}</span>
         )}
       </div>
@@ -712,7 +713,7 @@ function ChannelDetail({
               className="min-w-0 flex-1 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 text-sm"
             />
             <button
-              disabled={busy || name.trim().length < 2 || name.trim() === item.name}
+              disabled={busy || name.trim().length < 2 || name.trim() === selected.name}
               onClick={() => {
                 if (isIdle) patchIdle({ channelName: name.trim() });
                 else if (channel) onQueue(channel.channelId, { op: "rename", name: name.trim() });
@@ -743,17 +744,17 @@ function ChannelDetail({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <ToggleBtn busy={busy} on={item.isLocked} onLabel="Unlock" offLabel="Lock" onClick={() => isIdle ? patchIdle({ isLocked: !item.isLocked }) : channel && onQueue(channel.channelId, { op: item.isLocked ? "unlock" : "lock" })} />
-            <ToggleBtn busy={busy} on={item.isInvisible} onLabel="Show" offLabel="Hide" onClick={() => isIdle ? patchIdle({ isInvisible: !item.isInvisible }) : channel && onQueue(channel.channelId, { op: item.isInvisible ? "visible" : "invisible" })} />
-            <ToggleBtn busy={busy} on={item.isChatClosed} onLabel="Open chat" offLabel="Close chat" onClick={() => isIdle ? patchIdle({ isChatClosed: !item.isChatClosed }) : channel && onQueue(channel.channelId, { op: item.isChatClosed ? "openchat" : "closechat" })} />
-            <ToggleBtn busy={busy} on={item.isDnd} onLabel="Clear DND" offLabel="DND" onClick={() => isIdle ? patchIdle({ isDnd: !item.isDnd }) : channel && onQueue(channel.channelId, { op: "dnd", enabled: !item.isDnd })} />
+            <ToggleBtn busy={busy} on={selected.isLocked} onLabel="Unlock" offLabel="Lock" onClick={() => isIdle ? patchIdle({ isLocked: !selected.isLocked }) : channel && onQueue(channel.channelId, { op: selected.isLocked ? "unlock" : "lock" })} />
+            <ToggleBtn busy={busy} on={selected.isInvisible} onLabel="Show" offLabel="Hide" onClick={() => isIdle ? patchIdle({ isInvisible: !selected.isInvisible }) : channel && onQueue(channel.channelId, { op: selected.isInvisible ? "visible" : "invisible" })} />
+            <ToggleBtn busy={busy} on={selected.isChatClosed} onLabel="Open chat" offLabel="Close chat" onClick={() => isIdle ? patchIdle({ isChatClosed: !selected.isChatClosed }) : channel && onQueue(channel.channelId, { op: selected.isChatClosed ? "openchat" : "closechat" })} />
+            <ToggleBtn busy={busy} on={selected.isDnd} onLabel="Clear DND" offLabel="DND" onClick={() => isIdle ? patchIdle({ isDnd: !selected.isDnd }) : channel && onQueue(channel.channelId, { op: "dnd", enabled: !selected.isDnd })} />
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="text-xs text-text-muted">
               Bitrate
               <select
-                value={item.bitrate || 64000}
+                value={selected.bitrate || 64000}
                 disabled={busy}
                 onChange={(e) => {
                   const bitrate = Number(e.target.value);
@@ -770,7 +771,7 @@ function ChannelDetail({
             <label className="text-xs text-text-muted">
               Region
               <select
-                value={item.region || "auto"}
+                value={selected.region || "auto"}
                 disabled={busy}
                 onChange={(e) => {
                   const region = e.target.value;
@@ -786,7 +787,7 @@ function ChannelDetail({
             </label>
           </div>
 
-          {isIdle && liveOwnerIds.has(item.ownerId) && (
+          {isIdle && liveOwnerIds.has(selected.ownerId) && (
             <label className="flex items-center gap-2 text-xs text-text-secondary">
               <input type="checkbox" checked={applyLive} onChange={(e) => setApplyLive(e.target.checked)} />
               Also apply to their live channel
@@ -823,7 +824,7 @@ function ChannelDetail({
           {isIdle && (
             <button
               disabled={busy}
-              onClick={() => onClearPreset(item.ownerId)}
+              onClick={() => onClearPreset(selected.ownerId)}
               className="rounded-sm border border-danger/40 px-3 py-1.5 text-xs uppercase tracking-wide text-danger hover:bg-danger/10 disabled:opacity-40"
             >
               Clear default

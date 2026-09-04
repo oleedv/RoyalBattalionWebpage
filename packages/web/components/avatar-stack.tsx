@@ -35,7 +35,7 @@ export function AvatarStack({
         <div
           key={u.id}
           data-slot="avatar-stack-item"
-          className="group relative"
+          className="group/avatar relative"
           style={{ marginLeft: i === 0 ? 0 : -6, zIndex: shown.length - i }}
         >
           {u.avatarUrl ? (
@@ -55,7 +55,7 @@ export function AvatarStack({
             aria-hidden="true"
             className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full bg-success ring-1 ring-bg-secondary"
           />
-          <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-sm border border-border bg-bg-primary px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-sm border border-border bg-bg-primary px-2 py-1 text-xs opacity-0 transition-opacity group-hover/avatar:opacity-100">
             <div className="font-medium text-text-primary">{u.name}</div>
             {u.secondary && (
               <div className="text-text-muted">{u.secondary}</div>

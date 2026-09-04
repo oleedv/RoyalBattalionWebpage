@@ -88,8 +88,9 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
     if (!apiToken || (!permissions.includes("developer") && !permissions.includes("manage:whitelist"))) {
       return;
     }
+    const token = apiToken;
     function refreshBadge() {
-      getWhitelistCandidateSummary(apiToken).then((r) => {
+      getWhitelistCandidateSummary(token).then((r) => {
         if (r.success && r.data) setCandidateCount(r.data.totalPending);
       }).catch(() => {});
     }

@@ -1,23 +1,53 @@
-export function formatDate(date: string | Date): string {
-  return new Date(date).toLocaleDateString("en-GB", {
+/** Site-wide locale: Monday-first week, DD MMM YYYY, 24-hour clock. */
+export const APP_LOCALE = "en-GB";
+
+const DATE_OPTS: Intl.DateTimeFormatOptions = {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+};
+
+const TIME_OPTS: Intl.DateTimeFormatOptions = {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+};
+
+const TIME_WITH_SECONDS_OPTS: Intl.DateTimeFormatOptions = {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+};
+
+export function formatDate(date: string | Date | number): string {
+  return new Date(date).toLocaleDateString(APP_LOCALE, DATE_OPTS);
+}
+
+export function formatDateCompact(date: string | Date | number): string {
+  return new Date(date).toLocaleDateString(APP_LOCALE, {
     day: "2-digit",
     month: "short",
-    year: "numeric",
+    year: "2-digit",
   });
 }
 
-export function formatDateTime(date: string | Date): string {
-  return new Date(date).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+export function formatDateTime(date: string | Date | number): string {
+  return new Date(date).toLocaleString(APP_LOCALE, {
+    ...DATE_OPTS,
+    ...TIME_OPTS,
   });
+}
+
+export function formatTime(date: string | Date | number, opts?: { seconds?: boolean }): string {
+  return new Date(date).toLocaleTimeString(
+    APP_LOCALE,
+    opts?.seconds ? TIME_WITH_SECONDS_OPTS : TIME_OPTS,
+  );
 }
 
 export function formatNumber(n: number): string {
-  return n.toLocaleString("en-GB");
+  return n.toLocaleString(APP_LOCALE);
 }
 
 export function formatRelativeTime(date: string | Date): string {

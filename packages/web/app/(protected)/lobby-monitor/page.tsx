@@ -14,6 +14,7 @@ import {
   SkeletonStatGrid,
   SkeletonTableRows,
 } from "@/components/skeleton";
+import { formatTime } from "@/lib/format";
 
 function StatusDot({ active }: { active: boolean }) {
   return (
@@ -55,11 +56,7 @@ function formatUptime(seconds: number): string {
 }
 
 function formatTimestamp(ts: number): string {
-  return new Date(ts).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  return formatTime(ts, { seconds: true });
 }
 
 function anonymizeIp(ip: string): string {
@@ -330,7 +327,7 @@ export default function LobbyMonitorPage() {
               <span className="text-xs text-text-muted">
                 Last refresh:{" "}
                 {health.discovery.lastRefresh
-                  ? new Date(health.discovery.lastRefresh).toLocaleTimeString("en-GB")
+                  ? formatTime(health.discovery.lastRefresh)
                   : "never"}
               </span>
             </div>

@@ -9,10 +9,11 @@ import {
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { Skeleton, SkeletonList } from "@/components/skeleton";
+import { formatDateTime } from "@/lib/format";
 import type { TicketTimeout } from "shared";
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString();
+  return formatDateTime(iso);
 }
 
 function relativeTime(iso: string): string {

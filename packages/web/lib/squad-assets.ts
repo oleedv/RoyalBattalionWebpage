@@ -89,9 +89,54 @@ const MAP_MINIMAP_FILE: Record<string, string> = {
   yehorivka: "Yehorivka_Minimap.webp",
 };
 
+/** Full faction display names -> short codes used in compact UI. */
+const FACTION_SHORT: Record<string, string> = {
+  "united states army": "USA",
+  "united states marine corps": "USMC",
+  "us marine corps": "USMC",
+  "british army": "BAF",
+  "british armed forces": "BAF",
+  "canadian armed forces": "CAF",
+  "russian ground forces": "RUS",
+  "russian airborne forces": "VDV",
+  "russian airborne": "VDV",
+  "middle eastern alliance": "MEA",
+  "middle eastern insurgents": "INS",
+  "insurgent forces": "INS",
+  "insurgents": "INS",
+  "irregular militia forces": "MIL",
+  "irregular militia": "MIL",
+  "people's liberation army": "PLA",
+  "people's liberation army navy marine corps": "PLANMC",
+  "pla navy marine corps": "PLANMC",
+  "pla naval marine corps": "PLANMC",
+  "pla amphibious ground force": "PLAAGF",
+  "people's liberation army amphibious ground force": "PLAAGF",
+  "australian defence force": "ADF",
+  "turkish land forces": "TLF",
+  "armed forces of ukraine": "AFU",
+  "ground forces of iran": "GFI",
+  "western private military contractors": "WPMC",
+  "canadian resistance forces": "CRF",
+};
+
+/**
+ * Normalize a faction name or code to a short code when known
+ * (e.g. "Armed Forces of Ukraine" -> "AFU", "USA" stays "USA").
+ * Used so compact match headers stay consistent for old stored JSON.
+ */
+export function shortenFactionName(name: string): string {
+  if (!name) return name;
+  const trimmed = name.trim();
+  if (trimmed.length <= 6 && !trimmed.includes(" ")) return trimmed;
+  return FACTION_SHORT[trimmed.toLowerCase()] ?? trimmed;
+}
+
 export function getFactionFlagUrl(code: string): string | null {
   if (!code) return null;
-  return FACTION_FLAG_URL[code.toUpperCase()] ?? null;
+  // Accept full names (historical match JSON) as well as short codes
+  const short = shortenFactionName(code);
+  return FACTION_FLAG_URL[short.toUpperCase()] ?? FACTION_FLAG_URL[code.toUpperCase()] ?? null;
 }
 
 /** Export for live-server meta tables that also need display names. */
@@ -99,12 +144,35 @@ export function getFactionFlagUrls(): Record<string, string> {
   return { ...FACTION_FLAG_URL };
 }
 
+const LAYER_MODE_RE =
+  "aas|raas|invasion|skirmish|seed|tc|ta|insurgency|destruction|training";
+
+/** Tags sometimes appended after layer version (custom / lighting / etc.). */
+const TRAILING_LAYER_TAG_RE = /_(?:cl|night|day)(?=_|$)/gi;
+
 function stripLayerPrefix(layer: string): string {
   return layer.replace(/^SEC_?\d*_?/i, "").trim();
 }
 
+/**
+ * Normalize layer tokens for image lookup:
+ * - strip SEC_ prefixes
+ * - strip trailing tags like _CL / _Night that break version detection
+ *   e.g. Gorodok_Invasion_v4_CL -> Gorodok_Invasion_v4
+ */
+function normalizeLayerName(layer: string): string {
+  let s = stripLayerPrefix(layer);
+  // Peel trailing tags repeatedly (e.g. _CL_Night)
+  let prev = "";
+  while (s !== prev) {
+    prev = s;
+    s = s.replace(TRAILING_LAYER_TAG_RE, "");
+  }
+  return s.replace(/_+/g, "_").replace(/^_|_$/g, "").trim();
+}
+
 function layerNameCandidates(layer: string): string[] {
-  const stripped = stripLayerPrefix(layer);
+  const stripped = normalizeLayerName(layer);
   const parts = stripped.split(/[\s_]+/).filter(Boolean);
   // Ordered: prefer collapsed CamelCase (GooseBay_RAAS_v2) then wiki-style Albasrah, then underscored.
   const ordered: string[] = [];
@@ -115,28 +183,48 @@ function layerNameCandidates(layer: string): string[] {
     ordered.push(name);
   };
 
-  const hasVersion = parts.length >= 3 && /^v\d+$/i.test(parts[parts.length - 1]);
-  if (hasVersion) {
-    const versionPart = parts[parts.length - 1];
-    const modePart = parts[parts.length - 2];
-    const mapWords = parts.slice(0, -2);
-    // GooseBay_RAAS_v2
-    add(`${mapWords.join("")}_${modePart}_${versionPart}`);
-    // Title-case collapse: AlBasrah_RAAS_v1
-    const pascal = mapWords
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-      .join("");
-    add(`${pascal}_${modePart}_${versionPart}`);
-    // Wiki Albasrah (first word capitalized, rest lower): Albasrah_RAAS_v1
-    if (mapWords.length >= 2) {
-      const alt =
-        mapWords[0].charAt(0).toUpperCase() +
-        mapWords[0].slice(1).toLowerCase() +
-        mapWords.slice(1).map((w) => w.toLowerCase()).join("");
-      add(`${alt}_${modePart}_${versionPart}`);
+  // Find version token (v4) — may not be last if tags remain
+  let versionIdx = -1;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (/^v\d+$/i.test(parts[i])) {
+      versionIdx = i;
+      break;
     }
-    // Goose_Bay_RAAS_v2
-    add(`${mapWords.join("_")}_${modePart}_${versionPart}`);
+  }
+
+  const modeRe = new RegExp(`^(?:${LAYER_MODE_RE})$`, "i");
+
+  if (versionIdx >= 2 && modeRe.test(parts[versionIdx - 1])) {
+    const versionPart = parts[versionIdx];
+    const modePart = parts[versionIdx - 1];
+    const mapWords = parts.slice(0, versionIdx - 1);
+    const versionNum = parseInt(versionPart.slice(1), 10) || 1;
+
+    const addModeVersion = (ver: string) => {
+      // GooseBay_RAAS_v2
+      add(`${mapWords.join("")}_${modePart}_${ver}`);
+      // Title-case collapse: AlBasrah_RAAS_v1
+      const pascal = mapWords
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join("");
+      add(`${pascal}_${modePart}_${ver}`);
+      // Wiki Albasrah (first word capitalized, rest lower): Albasrah_RAAS_v1
+      if (mapWords.length >= 2) {
+        const alt =
+          mapWords[0].charAt(0).toUpperCase() +
+          mapWords[0].slice(1).toLowerCase() +
+          mapWords.slice(1).map((w) => w.toLowerCase()).join("");
+        add(`${alt}_${modePart}_${ver}`);
+      }
+      // Goose_Bay_RAAS_v2
+      add(`${mapWords.join("_")}_${modePart}_${ver}`);
+    };
+
+    // Exact version first, then older variants (wiki often only has v1–v2 art)
+    addModeVersion(versionPart);
+    for (let v = versionNum - 1; v >= 1; v--) {
+      addModeVersion(`v${v}`);
+    }
   } else if (parts.length >= 2) {
     const modePart = parts[parts.length - 1];
     const mapWords = parts.slice(0, -1);
@@ -151,26 +239,38 @@ function layerNameCandidates(layer: string): string[] {
 }
 
 function extractMapKey(layer: string): string {
-  const stripped = stripLayerPrefix(layer).toLowerCase();
-  // Drop trailing mode + version tokens
-  const cleaned = stripped
+  let stripped = normalizeLayerName(layer).toLowerCase();
+  // Drop trailing mode + version (+ any leftover junk after version)
+  stripped = stripped
     .replace(
-      /\s+(aas|raas|invasion|skirmish|seed|tc|ta|insurgency|destruction|training)\s+v?\d*$/i,
+      new RegExp(
+        `\\s+(?:${LAYER_MODE_RE})\\s+v?\\d+(?:[\\s_].*)?$`,
+        "i"
+      ),
       ""
     )
     .replace(
-      /_(aas|raas|invasion|skirmish|seed|tc|ta|insurgency|destruction|training)_v?\d*$/i,
+      new RegExp(`_(?:${LAYER_MODE_RE})_v?\\d+(?:_.*)?$`, "i"),
       ""
     )
+    .replace(new RegExp(`_(?:${LAYER_MODE_RE})$`, "i"), "")
     .replace(/\s+/g, "")
     .replace(/[^a-z0-9]/g, "");
-  return cleaned;
+
+  if (MAP_MINIMAP_FILE[stripped]) return stripped;
+
+  // Prefix match: "gorodokinvasionv4cl" / "blackcoast..." -> known map key
+  const keys = Object.keys(MAP_MINIMAP_FILE).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    if (stripped.startsWith(key)) return key;
+  }
+  return stripped;
 }
 
 /**
  * Ordered list of thumbnail URLs to try (MapImg walks on error).
  * 1) Wiki layer-specific JPGs (best art when present)
- * 2) squadmaps-v2 map-level minimaps (modern maps; actively updated)
+ * 2) squadmaps-v2 map-level minimaps (always included as map fallback)
  * 3) Legacy mahtoid layer thumbs (last resort)
  */
 export function getMapThumbnailUrls(layer: string): string[] {
@@ -187,7 +287,7 @@ export function getMapThumbnailUrls(layer: string): string[] {
 
   const names = layerNameCandidates(layer);
   const mapKey = extractMapKey(layer);
-  const lower = layer.toLowerCase();
+  const lower = normalizeLayerName(layer).toLowerCase();
   const minimap = MAP_MINIMAP_FILE[mapKey];
 
   // Maps missing from the wiki pipeline (post-2024) — prefer v2 minimaps first.
@@ -214,6 +314,7 @@ export function getMapThumbnailUrls(layer: string): string[] {
       if (lower.includes("seed")) push(`${V2_THUMB_BASE}/Mutaha_Minimap_Seed_v1.webp`);
       if (lower.includes("skirmish")) push(`${V2_THUMB_BASE}/Mutaha_Minimap_Skirmish_v1.webp`);
     }
+    // Always try the map-level minimap so missing layer art (e.g. _v4_CL) still shows the map
     if (minimap) push(`${V2_THUMB_BASE}/${minimap}`);
   };
 
@@ -221,8 +322,8 @@ export function getMapThumbnailUrls(layer: string): string[] {
     pushV2();
   }
 
-  // Prefer the first 3 wiki name variants only (avoids long 404 chains).
-  for (const name of names.slice(0, 3)) {
+  // Layer-specific wiki variants (exact + older versions); cap to avoid huge 404 chains
+  for (const name of names.slice(0, 6)) {
     push(`${WIKI_LAYER_BASE}/${name}.jpg`);
   }
 
@@ -230,9 +331,12 @@ export function getMapThumbnailUrls(layer: string): string[] {
     pushV2();
   }
 
-  for (const name of names.slice(0, 3)) {
+  for (const name of names.slice(0, 6)) {
     push(`${LEGACY_THUMB_BASE}/${name}.jpg`);
   }
+
+  // Final safety: if map key resolved but pushV2 never ran (no mode-specific art), still add minimap
+  if (minimap) push(`${V2_THUMB_BASE}/${minimap}`);
 
   return urls;
 }

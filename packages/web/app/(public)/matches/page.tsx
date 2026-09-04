@@ -7,13 +7,15 @@ import { NavAuthButton } from "@/components/nav-auth-button";
 import { MapImg } from "@/components/map-img";
 import { SkeletonList } from "@/components/skeleton";
 import { getPublicMatches } from "@/lib/api-client";
-import { getFactionFlagUrl, getMapThumbnailUrls } from "@/lib/squad-assets";
+import { formatDate, formatTime } from "@/lib/format";
+import { getFactionFlagUrl, getMapThumbnailUrls, shortenFactionName } from "@/lib/squad-assets";
 import type { Match, MatchDetail, MatchPlayer } from "shared";
 
 function FactionFlag({ code, className = "h-4 w-4" }: { code: string; className?: string }) {
-  const src = getFactionFlagUrl(code);
+  const short = shortenFactionName(code);
+  const src = getFactionFlagUrl(short);
   if (!src) return null;
-  return <img src={src} alt={code} className={`${className} object-contain`} />;
+  return <img src={src} alt={short} className={`${className} object-contain`} />;
 }
 
 function PlayerTable({ players, teamColor }: { players: MatchPlayer[]; teamColor: string }) {
@@ -179,15 +181,8 @@ function MatchRow({ match }: { match: Match }) {
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
                 <span>
-                  {new Date(match.date).toLocaleDateString("en-GB", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })}{" "}
-                  {new Date(match.date).toLocaleTimeString("en-GB", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  {formatDate(match.date)}{" "}
+                  {formatTime(match.date)}
                 </span>
                 {detail && (
                   <>
@@ -226,7 +221,7 @@ function MatchRow({ match }: { match: Match }) {
               <>
                 <div className="text-right">
                   <div className="mb-0.5 flex items-center justify-end gap-1.5 text-xs font-medium tracking-[0.15em] text-text-secondary uppercase">
-                    {detail.team1.faction}
+                    {shortenFactionName(detail.team1.faction)}
                     <FactionFlag code={detail.team1.faction} className="h-3.5 w-3.5" />
                   </div>
                   <span className={`rounded-sm px-2 py-0.5 text-xs font-semibold ${resultBadge(detail.team1.result)}`}>
@@ -239,7 +234,7 @@ function MatchRow({ match }: { match: Match }) {
                 <div className="text-left">
                   <div className="mb-0.5 flex items-center gap-1.5 text-xs font-medium tracking-[0.15em] text-text-secondary uppercase">
                     <FactionFlag code={detail.team2.faction} className="h-3.5 w-3.5" />
-                    {detail.team2.faction}
+                    {shortenFactionName(detail.team2.faction)}
                   </div>
                   <span className={`rounded-sm px-2 py-0.5 text-xs font-semibold ${resultBadge(detail.team2.result)}`}>
                     {detail.team2.result}

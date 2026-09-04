@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { NavAuthButton } from "@/components/nav-auth-button";
 import { getLegacyTicketByUuid } from "@/lib/api-client";
+import { formatDateTime } from "@/lib/format";
 import type { LegacyTicket, LegacyTicketMessage } from "shared";
 
 const MSG_STYLES: Record<string, { border: string; bg: string; label: string; labelColor: string }> = {
@@ -30,7 +31,7 @@ function LegacyMessageItem({ msg }: { msg: LegacyTicketMessage }) {
           {style.label}
         </span>
         <span className="text-xs text-text-muted">
-          {new Date(msg.createdAt).toLocaleString()}
+          {formatDateTime(msg.createdAt)}
         </span>
       </div>
       {msg.content && (
@@ -144,12 +145,12 @@ export default function LegacyTicketPage({ params }: { params: Promise<{ uuid: s
                 </div>
                 <div>
                   <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Started</span>
-                  <div className="mt-0.5 text-sm text-text-primary">{new Date(ticket.startedAt).toLocaleString()}</div>
+                  <div className="mt-0.5 text-sm text-text-primary">{formatDateTime(ticket.startedAt)}</div>
                 </div>
                 {ticket.closedAt && (
                   <div>
                     <span className="text-xs font-medium tracking-[0.1em] text-text-muted uppercase">Closed</span>
-                    <div className="mt-0.5 text-sm text-text-primary">{new Date(ticket.closedAt).toLocaleString()}</div>
+                    <div className="mt-0.5 text-sm text-text-primary">{formatDateTime(ticket.closedAt)}</div>
                   </div>
                 )}
                 {ticket.threadNumber && (

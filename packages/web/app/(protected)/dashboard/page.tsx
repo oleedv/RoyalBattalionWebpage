@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { linkSteam, getDashboardStats, getBirthdayConfig, updateBirthdayConfig, updateBirthdayPrefs } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDateCompact } from "@/lib/format";
 import type { UserWithRoles, BirthdayConfig } from "shared";
 import type { DashboardStats, ServerStatus } from "@/lib/api-client";
 import PlayerStatsSection from "./player-stats-section";
@@ -523,7 +523,7 @@ export default function DashboardPage() {
       label: "Pending Prospects",
       value: stats.prospects.open,
       accent: stats.prospects.open > 0,
-      href: "/tickets",
+      href: "/prospects",
     });
   }
 
@@ -713,11 +713,7 @@ export default function DashboardPage() {
                   className="flex items-center gap-4 px-5 py-3"
                 >
                   <span className="w-20 shrink-0 text-xs text-text-muted">
-                    {new Date(match.date).toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "2-digit",
-                    })}
+                    {formatDateCompact(match.date)}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm text-text-primary">
                     {match.map}

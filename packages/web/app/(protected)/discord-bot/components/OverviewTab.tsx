@@ -10,6 +10,7 @@ import {
   SkeletonRegion,
   SkeletonStatCard,
 } from "@/components/skeleton";
+import { formatDate } from "@/lib/format";
 import type { DiscordBotOverview, SeedingSession, BotStatus } from "shared";
 
 function StatCard({
@@ -243,7 +244,7 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
                       <td className="px-4 py-2 text-text-primary">#{t.id}</td>
                       <td className="px-4 py-2 capitalize text-text-secondary">{t.tier.replace(/_/g, " ")}</td>
                       <td className="max-w-xs truncate px-4 py-2 text-text-secondary">{t.firstMessage || "-"}</td>
-                      <td className="px-4 py-2 text-text-muted">{t.closedAt ? new Date(t.closedAt).toLocaleDateString() : "-"}</td>
+                      <td className="px-4 py-2 text-text-muted">{t.closedAt ? formatDate(t.closedAt) : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -317,7 +318,7 @@ export default function OverviewTab({ apiToken }: { apiToken: string }) {
                           {p.status}
                         </td>
                         <td className="px-4 py-2 text-text-muted">
-                          {new Date(p.createdAt).toLocaleDateString()}
+                          {formatDate(p.createdAt)}
                         </td>
                       </tr>
                     );

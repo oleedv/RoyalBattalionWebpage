@@ -61,6 +61,15 @@ export function formatExtendedByDays(value: unknown): string | null {
   return `+${n} day${n === 1 ? "" : "s"}`;
 }
 
+export function formatExpiresToDate(value: unknown): string | null {
+  if (!value || typeof value !== "object" || !("to" in value)) return null;
+  const to = asNonEmptyString((value as { to: unknown }).to);
+  if (!to) return null;
+  const d = new Date(to);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
 function onPlayer(verb: string, detail: Record<string, unknown>, extra?: string | null): string {
   const who = whitelistSubject(detail);
   const base = who ? `${verb} on ${who}` : verb;
@@ -74,8 +83,11 @@ function updateChangeText(detail: Record<string, unknown>, changeParts: string[]
   }
   const changes = detail.changes;
   if (changes && typeof changes === "object" && "expiresAt" in changes) {
-    const ext = formatExtendedByDays((changes as Record<string, unknown>).expiresAt);
+    const expiry = (changes as Record<string, unknown>).expiresAt;
+    const ext = formatExtendedByDays(expiry);
     if (ext) return `Expires ${ext}`;
+    const toDate = formatExpiresToDate(expiry);
+    if (toDate) return `Expires ${toDate}`;
   }
   return null;
 }

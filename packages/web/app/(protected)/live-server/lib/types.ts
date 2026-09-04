@@ -62,11 +62,41 @@ export interface BalanceMove {
   toTeam: number;
 }
 
+export interface BalanceRosterPlayer {
+  eosID: string;
+  name: string;
+  clan: string | null;
+  squadID: string | null;
+  rating: number;
+  fromTeam: 1 | 2;
+  toTeam: 1 | 2;
+  moving: boolean;
+}
+
+export interface TeamSkill {
+  count: number;
+  skill: number;
+}
+
+export interface BalanceRatingStats {
+  count: number;
+  min: number;
+  max: number;
+  mean: number;
+}
+
 export interface BalancePlan {
-  team1: { count: number; skill: number };
-  team2: { count: number; skill: number };
+  team1: TeamSkill;
+  team2: TeamSkill;
+  current?: { team1: TeamSkill; team2: TeamSkill };
+  skillGapBefore?: number;
+  skillGapAfter?: number;
+  ratingStats?: BalanceRatingStats;
   moves: BalanceMove[];
+  roster?: BalanceRosterPlayer[];
   totalPlayers: number;
+  matchStartedAt?: string | null;
+  matchDurationSeconds?: number | null;
 }
 
 export interface Snapshot {

@@ -15,6 +15,7 @@ import {
 import { getPlayerStats } from "@/lib/api-client";
 import { usePermissions } from "@/lib/permission-context";
 import { Skeleton, SkeletonCard } from "@/components/skeleton";
+import { formatDateCompact, formatNumber } from "@/lib/format";
 import type { PlayerStats, PlayerStatsWindow, StatWindowKey } from "shared";
 
 /* ── helpers ─────────────────────────────────────────────────────────── */
@@ -30,7 +31,7 @@ const WINDOWS: { key: StatWindowKey; label: string; days: number }[] = [
 ];
 
 const fmtHours = (h: number) => (h >= 10 ? `${Math.round(h)}h` : `${h}h`);
-const fmtNum = (n: number) => n.toLocaleString("en-US");
+const fmtNum = (n: number) => formatNumber(n);
 
 function prettyWeapon(raw: string): string {
   return raw
@@ -529,11 +530,7 @@ export default function PlayerStatsSection() {
                       </div>
                       <div className="text-[10px] text-text-muted">
                         {records.bestRound.map ?? "Unknown"} ·{" "}
-                        {new Date(records.bestRound.date).toLocaleDateString("en-GB", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "2-digit",
-                        })}
+                        {formatDateCompact(records.bestRound.date)}
                       </div>
                     </>
                   ) : (

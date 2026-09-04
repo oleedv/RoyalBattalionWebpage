@@ -64,6 +64,15 @@ describe("formatWhitelistActionSummary", () => {
     })).toBe("Updated entry on Lind (76561198819769429)");
   });
 
+  test("seed-tracker expiry to-date still describes the change", () => {
+    expect(formatWhitelistActionSummary("whitelist.update", {
+      source: "seed-tracker",
+      name: "Stone",
+      steamId: "76561198057967969",
+      changes: { expiresAt: { to: "2026-08-01T00:00:00.000Z" } },
+    })).toBe("Updated entry on Stone (76561198057967969) · Expires 2026-08-01");
+  });
+
   test("from-to change parts follow the player", () => {
     expect(formatWhitelistActionSummary("whitelist.update", {
       name: "Lind",

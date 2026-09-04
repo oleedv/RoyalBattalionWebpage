@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { getSeedingLiveStatus } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { formatTime } from "@/lib/format";
 import type { SeedingLiveStatus as LiveStatusData } from "shared";
 
 interface Props {
@@ -105,7 +106,7 @@ export function SeedingLiveStatus({ apiToken }: Props) {
 
       {status.updatedAt && (
         <div className="mt-3 text-xs text-text-muted">
-          Updated {new Date(status.updatedAt).toLocaleTimeString()}
+          Updated {formatTime(status.updatedAt)}
         </div>
       )}
     </div>

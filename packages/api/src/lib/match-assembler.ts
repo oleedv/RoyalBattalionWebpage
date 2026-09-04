@@ -128,23 +128,43 @@ export interface MatchPlayerJson {
 const FACTION_SHORT: Record<string, string> = {
   "United States Army": "USA",
   "United States Marine Corps": "USMC",
+  "US Marine Corps": "USMC",
   "British Army": "BAF",
   "British Armed Forces": "BAF",
   "Canadian Armed Forces": "CAF",
   "Russian Ground Forces": "RUS",
   "Russian Airborne Forces": "VDV",
+  "Russian Airborne": "VDV",
   "Middle Eastern Alliance": "MEA",
   "Middle Eastern Insurgents": "INS",
   "Insurgent Forces": "INS",
+  "Insurgents": "INS",
   "Irregular Militia Forces": "MIL",
+  "Irregular Militia": "MIL",
   "People's Liberation Army": "PLA",
   "People's Liberation Army Navy Marine Corps": "PLANMC",
+  "PLA Navy Marine Corps": "PLANMC",
+  "PLA Naval Marine Corps": "PLANMC",
+  "PLA Amphibious Ground Force": "PLAAGF",
+  "People's Liberation Army Amphibious Ground Force": "PLAAGF",
   "Australian Defence Force": "ADF",
   "Turkish Land Forces": "TLF",
+  "Armed Forces of Ukraine": "AFU",
+  "Ground Forces of Iran": "GFI",
+  "Western Private Military Contractors": "WPMC",
+  "Canadian Resistance Forces": "CRF",
 };
 
+/** Lowercased lookup so Squad log casing variants still shorten. */
+const FACTION_SHORT_LOWER: Record<string, string> = Object.fromEntries(
+  Object.entries(FACTION_SHORT).map(([k, v]) => [k.toLowerCase(), v])
+);
+
 function factionShort(full: string): string {
-  return FACTION_SHORT[full] || full;
+  if (!full) return full;
+  // Already a short code (or unknown short token) — leave as-is
+  if (full.length <= 6 && !full.includes(" ")) return full;
+  return FACTION_SHORT[full] || FACTION_SHORT_LOWER[full.toLowerCase()] || full;
 }
 
 // --- Role name parser ---

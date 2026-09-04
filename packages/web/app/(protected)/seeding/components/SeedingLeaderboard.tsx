@@ -12,6 +12,7 @@ import type {
   SeedTrackerPlayerDetail,
   SeedTrackerStats,
 } from "shared";
+import { formatDate as formatDateGb } from "@/lib/format";
 import { HourlyChart } from "./HourlyChart";
 import { WeekdayChart } from "./WeekdayChart";
 
@@ -32,7 +33,7 @@ function formatDate(value: string | null | undefined): string {
   if (!value) return "--";
   const d = new Date(value);
   if (isNaN(d.getTime())) return String(value);
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return formatDateGb(d);
 }
 
 interface Props {
@@ -132,7 +133,7 @@ export function SeedingLeaderboard({ apiToken }: Props) {
                 <span className="rounded-sm border border-success/30 bg-success/15 px-2 py-1 text-xs font-medium text-success">
                   Whitelisted ({playerDetail.whitelistStatus.role})
                   {playerDetail.whitelistStatus.expiresAt &&
-                    ` - expires ${new Date(playerDetail.whitelistStatus.expiresAt).toLocaleDateString()}`}
+                    ` - expires ${formatDate(playerDetail.whitelistStatus.expiresAt)}`}
                 </span>
               ) : (
                 <span className="rounded-sm border border-text-muted/30 bg-text-muted/15 px-2 py-1 text-xs font-medium text-text-secondary">

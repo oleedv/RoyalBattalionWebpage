@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePermissions } from "@/lib/permission-context";
 import { formatRelativeAge } from "@/lib/format-relative-age";
+import { formatTime } from "@/lib/format";
 import { Modal } from "@/components/modal";
 import { SkeletonStatGrid } from "@/components/skeleton";
 
@@ -14,6 +15,7 @@ import { MapImg, getMapThumbnailUrls } from "./components/map-img";
 import { TeamColumn } from "./components/team-column";
 import { PlayerCard } from "./components/player-card";
 import { LiveServerTabs } from "./components/live-server-tabs";
+import { BalancePreviewModal } from "./components/balance-preview-modal";
 import { getFactionFlagUrl } from "@/lib/squad-assets";
 
 const WS_BASE =
@@ -43,6 +45,9 @@ const FACTION_META: Record<string, { name: string; flag: string }> = {
   VDV:    { name: "Russian Airborne",         flag: getFactionFlagUrl("VDV")! },
   TLF:    { name: "Turkish Land Forces",      flag: getFactionFlagUrl("TLF")! },
   WPMC:   { name: "Western Private Military Contractors", flag: getFactionFlagUrl("WPMC")! },
+  AFU:    { name: "Armed Forces of Ukraine",  flag: getFactionFlagUrl("AFU")! },
+  GFI:    { name: "Ground Forces of Iran",    flag: getFactionFlagUrl("GFI")! },
+  CRF:    { name: "Canadian Resistance Forces", flag: getFactionFlagUrl("CRF")! },
 };
 
 function getFaction(players: Player[], serverFaction?: string): { name: string; flag: string } | null {
@@ -419,10 +424,11 @@ export default function LiveServerPage() {
   }, [demoteDropdownOpen]);
 
   useEffect(() => {
-    if (!balanceStatus?.pending) return;
-    const id = setInterval(() => setNowMs(Date.now()), 30000);
+    if (!balanceStatus?.pending && !balanceModalOpen) return;
+    const ms = balanceModalOpen ? 1000 : 30000;
+    const id = setInterval(() => setNowMs(Date.now()), ms);
     return () => clearInterval(id);
-  }, [balanceStatus?.pending]);
+  }, [balanceStatus?.pending, balanceModalOpen]);
 
   function switchServer(key: string) {
     setActiveServer(key);
@@ -758,10 +764,7 @@ export default function LiveServerPage() {
               return (
                 <div key={i} className="mb-1.5 text-xs">
                   <span className="text-text-muted">
-                    {new Date(msg.time).toLocaleTimeString("en-GB", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatTime(msg.time)}
                   </span>{" "}
                   <span
                     className={`font-medium ${
@@ -882,11 +885,7 @@ export default function LiveServerPage() {
               .map((entry, i) => (
               <div key={i} className="mb-1 text-xs">
                 <span className="text-text-muted">
-                  {new Date(entry.time).toLocaleTimeString("en-GB", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                  })}
+                  {formatTime(entry.time, { seconds: true })}
                 </span>{" "}
                 <span className={consoleTypeColor(entry.type)}>
                   [{entry.type.toUpperCase()}]
@@ -1367,62 +1366,15 @@ export default function LiveServerPage() {
         </div>
       </Modal>
 
-      {/* Balance preview modal */}
-      <Modal open={balanceModalOpen} onClose={() => setBalanceModalOpen(false)} className="max-w-lg bg-bg-secondary p-6">
-        <h3 className="font-display mb-4 text-base font-semibold tracking-wide">Balance Teams</h3>
-        {!balancePlan ? (
-          <p className="text-sm text-text-muted">Computing balance plan...</p>
-        ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-sm border border-border bg-bg-tertiary p-3">
-                <div className="text-xs text-text-muted">Team 1</div>
-                <div className="text-sm text-text-primary">{balancePlan.team1.count} players</div>
-                <div className="text-xs text-text-muted">skill {balancePlan.team1.skill}</div>
-              </div>
-              <div className="rounded-sm border border-border bg-bg-tertiary p-3">
-                <div className="text-xs text-text-muted">Team 2</div>
-                <div className="text-sm text-text-primary">{balancePlan.team2.count} players</div>
-                <div className="text-xs text-text-muted">skill {balancePlan.team2.skill}</div>
-              </div>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-text-muted">
-                {balancePlan.moves.length} of {balancePlan.totalPlayers} players would move
-              </div>
-              {balancePlan.moves.length > 0 && (
-                <div className="max-h-48 overflow-y-auto rounded-sm border border-border bg-bg-tertiary p-2 text-xs">
-                  {balancePlan.moves.map((m) => (
-                    <div key={m.eosID} className="flex justify-between py-0.5">
-                      <span className="truncate text-text-secondary">{m.name}</span>
-                      <span className="ml-2 shrink-0 text-text-muted">T{m.fromTeam} &rarr; T{m.toTeam}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <p className="text-xs text-text-muted">
-              Recomputed fresh at round end (during voting); actual moves may differ if players join or leave before then.
-            </p>
-          </div>
-        )}
-        <div className="mt-4 flex justify-end gap-3">
-          <button
-            onClick={() => setBalanceModalOpen(false)}
-            className="rounded-sm border border-border px-4 py-2 text-sm text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleQueueBalance}
-            disabled={!balancePlan}
-            className="rounded-sm bg-sky-500 px-5 py-2 text-sm font-semibold tracking-wide text-bg-primary transition-colors hover:bg-sky-500/80 disabled:opacity-50"
-            title="Queue this balance to run at the end of the current round"
-          >
-            Queue for round end
-          </button>
-        </div>
-      </Modal>
+      <BalancePreviewModal
+        open={balanceModalOpen}
+        onClose={() => setBalanceModalOpen(false)}
+        plan={balancePlan}
+        nowMs={nowMs}
+        team1Name={getFaction(team1All, serverInfo?.team1Faction)?.name}
+        team2Name={getFaction(team2All, serverInfo?.team2Faction)?.name}
+        onQueue={handleQueueBalance}
+      />
 
       {/* Randomize modal */}
       <Modal open={randomizeModalOpen} onClose={() => setRandomizeModalOpen(false)} className="max-w-md bg-bg-secondary p-6">

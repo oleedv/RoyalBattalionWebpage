@@ -11,6 +11,7 @@ import {
   getSeedingServers,
 } from "@/lib/api-client";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { formatDateTime, formatTime } from "@/lib/format";
 import type {
   SeedingConfig,
   SeedingSession,
@@ -628,10 +629,10 @@ export function SeedingAdmin({ apiToken }: Props) {
                           <td className="px-4 py-3 text-text-secondary">{formatMinutes(s.seedDurationMinutes)}</td>
                           <td className="px-4 py-3 text-text-secondary">{formatMinutes(s.sessionDurationMinutes)}</td>
                           <td className="px-4 py-3 text-text-muted">
-                            {s.joinTime ? new Date(s.joinTime).toLocaleTimeString() : "--"}
+                            {s.joinTime ? formatTime(s.joinTime) : "--"}
                           </td>
                           <td className="px-4 py-3 text-text-muted">
-                            {s.leaveTime ? new Date(s.leaveTime).toLocaleTimeString() : "--"}
+                            {s.leaveTime ? formatTime(s.leaveTime) : "--"}
                           </td>
                         </tr>
                       ))}
@@ -685,7 +686,7 @@ export function SeedingAdmin({ apiToken }: Props) {
                       <td className="px-4 py-3"><SessionBadge status={s.status} /></td>
                       <td className="px-4 py-3 text-text-primary">{s.mapName || "--"}</td>
                       <td className="px-4 py-3 text-text-secondary">{s.layerName || "--"}</td>
-                      <td className="px-4 py-3 text-text-muted">{new Date(s.startedAt).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-text-muted">{formatDateTime(s.startedAt)}</td>
                       <td className="px-4 py-3 text-text-secondary">{s.durationMinutes != null ? `${s.durationMinutes}m` : "--"}</td>
                       <td className="px-4 py-3 text-text-secondary">{s.startPlayers ?? "--"}</td>
                       <td className="px-4 py-3 font-medium text-text-primary">{s.peakPlayers ?? "--"}</td>

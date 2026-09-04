@@ -16,7 +16,7 @@ const SINGLETON_ID = "singleton";
 // so reject anything that is not a real IANA zone at save time.
 function isValidTimeZone(tz: string): boolean {
   try {
-    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    new Intl.DateTimeFormat("en-GB", { timeZone: tz });
     return true;
   } catch {
     return false;

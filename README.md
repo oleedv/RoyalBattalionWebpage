@@ -318,7 +318,7 @@ openapi.yaml           REST contract
 
 ## Deployment
 
-Each package is its own container. Railway builds from `packages/{web,api,lobby-service}/railway.json` (`restartPolicyType: ON_FAILURE`, 10 retries). GitHub's default branch is `main`. Production currently deploys from the `production` branch.
+Each package is its own container. Railway builds from `packages/{web,api,lobby-service}/railway.json` (`restartPolicyType: ON_FAILURE`, 10 retries). A push to `main` deploys.
 
 | Service | Image | Health |
 | --- | --- | --- |

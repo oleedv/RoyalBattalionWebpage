@@ -1,273 +1,368 @@
 # Royal Battalion Webpage
 
-Admin dashboard and public-facing site for the Royal Battalion Squad community. A Bun workspace pairing a Next.js frontend with a Hono API, Prisma against MariaDB, and a live WebSocket relay into our SquadJS game-server stack.
+**Live ops, whitelist, and community tools for a Squad battalion — in one dashboard.**
 
-![Bun](https://img.shields.io/badge/Bun-runtime-f9f1e1?logo=bun&logoColor=000)
-![Next.js](https://img.shields.io/badge/Next.js_15-black?logo=next.js)
-![React](https://img.shields.io/badge/React_19-61DAFB?logo=react&logoColor=000)
-![Hono](https://img.shields.io/badge/Hono-E36002?logo=hono&logoColor=fff)
-![Prisma](https://img.shields.io/badge/Prisma-2D3748?logo=prisma)
-![MariaDB](https://img.shields.io/badge/MariaDB-003545?logo=mariadb)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS_v4-06B6D4?logo=tailwindcss&logoColor=fff)
-![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=fff)
+Public site and staff dashboard for [Royal Battalion](https://royalbattalion.xyz): Discord login, live server relay, whitelist deploy, tickets, prospects, and match history.
 
-## What this repo contains
+[![Version](https://img.shields.io/badge/version-2.29.0-c8a84e?style=flat-square)](https://github.com/oleedv/RoyalBattalionWebpage)
+[![Bun](https://img.shields.io/badge/Bun-runtime-f9f1e1?style=flat-square&logo=bun&logoColor=000)](https://bun.sh)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=000)](https://react.dev)
+[![Hono](https://img.shields.io/badge/Hono-API-E36002?style=flat-square&logo=hono&logoColor=fff)](https://hono.dev)
+[![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?style=flat-square&logo=prisma)](https://www.prisma.io)
+[![MariaDB](https://img.shields.io/badge/MariaDB-003545?style=flat-square&logo=mariadb&logoColor=fff)](https://mariadb.org)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=fff)](https://tailwindcss.com)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?style=flat-square&logo=typescript&logoColor=fff)](https://www.typescriptlang.org)
+[![Docker](https://img.shields.io/badge/Docker-Railway-2496ED?style=flat-square&logo=docker&logoColor=fff)](https://www.docker.com)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
-Four Bun workspace packages plus a shared Prisma schema:
+---
 
-- **`packages/web`** -- Next.js 15 App Router frontend. Public pages, admin dashboard, NextAuth Discord login. Port `3000`.
-- **`packages/api`** -- Hono REST + WebSocket API. JWT-authenticated, talks to MariaDB via Prisma and bridges live SquadJS events to the browser. Port `3001`.
-- **`packages/lobby-service`** -- Small Hono service wrapping `steam-user` to track Squad Steam lobbies. Port `3002`.
-- **`packages/shared`** -- TypeScript types, the canonical permission list, and country data consumed by both ends.
-- **`prisma/schema.prisma`** -- Single source of truth for the primary database schema.
+## Overview
+
+This is a Bun workspace with four packages:
+
+| Package | Role | Port |
+| --- | --- | --- |
+| `packages/web` | Next.js 15 App Router — public pages, Discord OAuth, staff dashboard | `3000` |
+| `packages/api` | Hono REST (`/v1`) + WebSocket relay — Prisma, SquadJS, SFTP | `3001` |
+| `packages/lobby-service` | Steam lobby discovery via `steam-user` | `3002` |
+| `packages/shared` | Shared TypeScript types, permission literals, country data | — |
+
+The web app signs staff in with Discord (NextAuth). After login it exchanges that identity for an API JWT. From there the dashboard talks to Hono over REST and two WebSocket endpoints: live game events and admin presence.
+
+Persistent data owned by this app lives in MariaDB (`prisma/schema.prisma`). The API also **reads** two other databases it does not own: the Discord secretary bot DB (tickets, prospects, messages) and the SquadJS DB (matches, playtime, connections).
+
+Production: [royalbattalion.xyz](https://royalbattalion.xyz) · staging: [stg.royalbattalion.xyz](https://stg.royalbattalion.xyz)
+
+---
 
 ## Architecture
 
-```
-Browser
-  |
-  +---> Next.js (web)  --JWT-->  Hono API  --Prisma-->  MariaDB (primary)
-  |                                 |
-  |                                 +------raw SQL----->  Secretary DB (read-only)
-  |                                 +------raw SQL----->  SquadJS DB (read-only)
-  |                                 |
-  |                                 +---Socket.IO--->  SquadJS servers (live data)
-  |                                 +---SFTP-------->  Game servers (admins.cfg deploy)
-  |                                 |
-  +--WebSocket-- /live-server/ws    +---HTTP-------->  Lobby Service ---> Steam
-       (real-time game events)
+```mermaid
+flowchart TB
+  subgraph Clients
+    Browser["Browser"]
+  end
+
+  subgraph Workspace["Bun workspace"]
+    Web["Next.js web<br/>:3000"]
+    API["Hono API<br/>:3001"]
+    Lobby["Lobby service<br/>:3002"]
+    Shared["shared types"]
+  end
+
+  subgraph Data
+    Primary[("MariaDB<br/>Prisma — primary")]
+    Secretary[("Secretary DB<br/>read-only")]
+    SquadJSDB[("SquadJS DB<br/>read-only")]
+  end
+
+  subgraph External
+    Discord["Discord OAuth"]
+    SquadJS["SquadJS Socket.IO"]
+    Game["Game servers<br/>SFTP admins.cfg"]
+    Steam["Steam"]
+    GitHub["GitHub<br/>SquadJS config"]
+  end
+
+  Browser -->|"pages + NextAuth"| Web
+  Browser -->|"REST /v1 + JWT"| API
+  Browser -->|"WS /live-server/ws<br/>WS /presence/ws"| API
+  Web --> Shared
+  API --> Shared
+  Web -->|"Discord identity"| Discord
+  API -->|"Prisma"| Primary
+  API -->|"raw SQL"| Secretary
+  API -->|"raw SQL"| SquadJSDB
+  API -->|"Socket.IO"| SquadJS
+  API -->|"SFTP"| Game
+  API -->|"HTTP + internal key"| Lobby
+  API -->|"config repo"| GitHub
+  Lobby --> Steam
 ```
 
 ### Request flow
 
-1. Browser loads Next.js (`packages/web`). NextAuth runs the Discord OAuth dance and caches tokens in a JWT session (`packages/web/lib/auth.ts`).
-2. On first load after sign-in, the web app calls `/auth` on the API to exchange Discord identity for a signed API JWT (`packages/api/src/routes/auth.ts`, signed with `JWT_SECRET`).
-3. Every subsequent API call goes through `packages/web/lib/api-client.ts`, which attaches the JWT as a Bearer token.
-4. Hono runs each request through a fixed middleware chain (`packages/api/src/index.ts`): `secureHeaders` -> `requestLog` -> `globalRateLimit(200 rps)` -> `cors` -> `authMiddleware` (`packages/api/src/middleware/auth.ts`) -> per-route `requirePermission` (`packages/api/src/middleware/permissions.ts`).
-5. Handlers read and write via Prisma against the primary MariaDB, and issue raw SQL against read-only pools for the Secretary and SquadJS databases (`packages/api/src/lib/secretary-db.ts`, `squadjs-db.ts`).
-6. Live data: the browser opens `GET /live-server/ws?server=X&token=JWT`. The API verifies the token, checks `view:live-server`, subscribes to the matching SquadJS Socket.IO server (`packages/api/src/lib/squadjs-socket.ts`) and relays events to all connected UIs.
+```mermaid
+sequenceDiagram
+  actor User
+  participant Web as Next.js
+  participant Discord
+  participant API as Hono /v1
+  participant DB as MariaDB
 
-## Data model
-
-All persistent state owned by this app lives in one MariaDB, modeled in `prisma/schema.prisma`. Logical groupings:
-
-- **Identity & RBAC** -- `User`, `UserRole`, `DiscordRole`, `RolePermission`, `MemberComment`.
-- **Whitelist** -- `WhitelistEntry`, `Clan`, `AdminGroup`, `WhitelistComment`.
-- **Server config** -- `ServerConfig` (per-game-server SFTP creds, encrypted at rest via `packages/api/src/lib/crypto.ts`).
-- **Gameplay** -- `Match` (SquadJS match ID, map, layer, VOD link, detail JSON).
-- **Audit** -- `AuditLog` (actor, action, resource, detail JSON, timestamp).
-
-Two more databases are reachable read-only:
-
-- **Secretary DB** -- owned by the Discord bot (`RoyalSecretaryDiscordBot`). We read ticket/prospect/message data for admin UI views.
-- **SquadJS DB** -- owned by our SquadJS deployment. We read match history, player playtime, and connection events for stats pages.
-
-Both are read-only on purpose: they have authoritative writers elsewhere and we never want this service to corrupt them.
-
-## Permissions (RBAC)
-
-The permissions model is deliberately flat:
-
-- Permissions are string literals, enumerated once in `packages/shared/types/roles.ts`.
-- `DiscordRole` rows own sets of permissions via `RolePermission`. Roles are synced from Discord; permission assignment is editable in the Roles admin page.
-- A `User` inherits the union of permissions from their `UserRole` links. `authMiddleware` loads them on every request; `requirePermission("manage:whitelist")` gates each route.
-
-The 28 permissions currently in use:
-
-```
-view:whitelist            manage:whitelist
-view:members              manage:members
-view:tickets              manage:tickets
-manage:roles              manage:matches
-view:squadjs              manage:squadjs
-view:live-server          manage:live-server
-manage:whitelist-sync     view:discord-bot          manage:discord-bot
-view:tickets:normal       view:tickets:community_officer
-view:tickets:admin_officer view:tickets:comp_team    view:tickets:whitelist
-view:audit-logs           view:seeding-tracker       view:api-docs
-manage:clan-move          manage:randomize
-manage:balance-teams      manage:rcon-console
-developer
+  User->>Web: Open /login
+  Web->>Discord: OAuth (identify + guilds)
+  Discord-->>Web: NextAuth JWT session
+  Web->>API: POST /v1/auth/sync
+  API->>DB: Upsert user, load role permissions
+  API-->>Web: Signed API JWT
+  Web->>API: GET /v1/...  Authorization: Bearer
+  Note over API: secureHeaders → log → 200 rps<br/>CORS → auth → requirePermission
+  API->>DB: Prisma read/write
+  API-->>Web: { success, data } envelope
 ```
 
-The `view:tickets:*` family provides per-department gating on top of `view:tickets`, applied in `packages/api/src/middleware/permissions.ts`.
+REST lives under `/v1`. These stay unversioned on purpose: `GET /health`, `GET /live-server/health`, `GET /admins.cfg` (IP-allowlisted, `text/plain`), and the WebSocket upgrades.
 
-## Real-time: WebSocket relay and presence
+Interactive API docs: `/api-docs` in the running web app (permission `view:api-docs`). Spec: [`openapi.yaml`](openapi.yaml).
 
-The API hosts two WebSocket endpoints. Both authenticate by JWT passed as a `token` query parameter (browsers cannot set headers on WebSocket upgrades) and enforce permissions on connect.
+---
 
-- **`GET /live-server/ws?server=<name>&token=<jwt>`** -- requires `view:live-server`. The API maintains a single Socket.IO client per configured SquadJS server (`packages/api/src/lib/squadjs-socket.ts`) and fans its events out to every connected browser. Relayed event types include `PLAYER_CONNECTED`, `PLAYER_DISCONNECTED`, `CHAT_MESSAGE`, `NEW_GAME`, `ROUND_ENDED`, `PLAYER_DIED`, and `TEAMKILL`. The UI lives at `packages/web/app/(protected)/live-server/`.
-- **`GET /presence/ws?page=<path>&token=<jwt>`** -- tracks which admins are viewing which page, so edits don't stomp on each other.
+## Prerequisites
 
-SquadJS servers are configured via the `SQUADJS_SERVERS` env var (see below). `GET /live-server/health` reports the connection status of each upstream.
+- [Bun](https://bun.sh/) (latest)
+- MariaDB 10.11+ (schema is pushed on first run)
+- A [Discord application](https://discord.com/developers/applications) with OAuth2 redirect `http://localhost:3000/api/auth/callback/discord`
 
-## API surface
+Optional — leave the matching env vars empty to skip:
 
-Routes are grouped under `packages/api/src/routes/`. All require a valid JWT unless noted.
+- SquadJS Socket.IO servers (live server page has no upstream)
+- SFTP target (whitelist deploy fails fast)
+- GitHub token (SquadJS config editor is read-only)
+- Lobby service / Steam refresh token (lobby monitor is empty)
+- Secretary + SquadJS database URLs (those admin views stay empty)
 
-| Prefix | File | Purpose |
-|--------|------|---------|
-| `/auth` | `auth.ts` | Discord identity -> JWT exchange, token refresh |
-| `/users` | `users.ts` | User CRUD, role assignment, suspension, profile comments |
-| `/roles` | `roles.ts` | Discord role <-> permission mapping |
-| `/whitelist` | `whitelist.ts` | Whitelist entries, clan + admin-group assignment, deploy trigger |
-| `/admin-groups` | `admin-groups.ts` | Admin group (permission bundle) CRUD |
-| `/clans` | `clans.ts` | Clan CRUD |
-| `/tickets` | `tickets.ts` | Department-tiered support tickets |
-| `/matches` | `matches.ts` | Match history CRUD, SquadJS sync, VOD links |
-| `/servers` | `servers.ts` | Server list + live status summary |
-| `/stats` | `stats.ts` | Aggregated player stats and playtime |
-| `/squadjs-config` | `squadjs-config.ts` | SquadJS config editor (GitHub-backed) |
-| `/server-config` | `server-config.ts` | Per-server SFTP settings (encrypted) |
-| `/discord-bot` | `discord-bot/` | Bot overview, messages, prospects, seeding, timeouts, ticket actions, logs, temp voice |
-| `/audit-logs` | `audit-logs.ts` | Audit trail with user/resource/date filters |
-| `/playtime` | `playtime.ts` | Per-player playtime from the SquadJS DB |
-| `/seeding-tracker` | `seeding-tracker.ts` | Seeding event tracking + whitelist rewards |
-| `/lobby` | `lobby.ts` | Proxy to the Lobby Service |
+---
 
-Public endpoints (no JWT):
+## Installation
 
-- `GET /health` -- primary + secondary DB health.
-- `GET /live-server/health` -- SquadJS upstream connection status.
-- `GET /admins.cfg?server=<name>` -- IP-restricted. Served to Squad game servers to populate `/admins.cfg`. Generated by `packages/api/src/lib/cfg-generator.ts`.
+```bash
+git clone https://github.com/oleedv/RoyalBattalionWebpage.git
+cd RoyalBattalionWebpage
 
-A Swagger UI for the full API is mounted at `/api-docs` in the running web app (`packages/web/app/(protected)/api-docs/`).
+bun install
+cp .env.example .env
+# fill DATABASE_URL, JWT_SECRET, Discord OAuth, NEXTAUTH_*
+
+bun run db:push    # create/update the primary schema
+bun run dev        # web + api + lobby-service in parallel
+```
+
+| Service | URL |
+| --- | --- |
+| Web | http://localhost:3000 |
+| API | http://localhost:3001 |
+| Lobby | http://localhost:3002 |
+
+### Environment
+
+All packages read `.env` at the repo root.
+
+| Group | Variable | Purpose |
+| --- | --- | --- |
+| Database | `DATABASE_URL` | Primary MariaDB (Prisma, required) |
+| | `SECRETARY_DATABASE_URL` | Read-only secretary bot DB |
+| | `SQUADJS_DATABASE_URL` | Read-only SquadJS DB |
+| Discord | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | OAuth2 |
+| | `DISCORD_GUILD_ID` | Guild membership gates login |
+| | `DISCORD_BOT_TOKEN` | Background role sync |
+| | `DISCORD_MEMBER_ROLE_IDS` | Comma-separated member role IDs |
+| NextAuth | `NEXTAUTH_URL` | Public web URL |
+| | `NEXTAUTH_SECRET` | Session signing secret |
+| API | `JWT_SECRET` | API JWT signing (required) |
+| | `NEXT_PUBLIC_API_URL` | Browser-facing API origin (defaults to `http://localhost:3001`) |
+| SFTP | `SFTP_HOST` `SFTP_PORT` `SFTP_USER` `SFTP_PASS` `SFTP_PATH` | Default `admins.cfg` deploy (per-server overrides in `ServerConfig`) |
+| | `CFG_ALLOWED_IPS` | Allowlist for `GET /admins.cfg` |
+| GitHub | `GITHUB_CONFIG_TOKEN` | SquadJS config repo |
+| SquadJS | `SQUADJS_SERVERS` | `name\|url\|token,name\|url\|token` |
+| Lobby | `LOBBY_SERVICE_URL` `LOBBY_INTERNAL_KEY` `STEAM_REFRESH_TOKEN` | Internal lobby proxy |
+
+---
+
+## Usage
+
+### Scripts
+
+| Command | What it does |
+| --- | --- |
+| `bun run dev` | Start every workspace package |
+| `bun run dev:web` | Next.js only (Turbopack) |
+| `bun run dev:api` | Hono API only (`bun --watch`) |
+| `bun run build` | Build every package |
+| `bun run db:generate` | Prisma client → `packages/api/src/generated/prisma/` |
+| `bun run db:push` | Sync schema to MariaDB (local + Docker entrypoint) |
+| `bun run db:migrate` | Named migration for a real schema change |
+| `bun run db:studio` | Prisma Studio |
+| `bun test` | Colocated `*.test.ts` files |
+
+### Health check
+
+```bash
+curl http://localhost:3001/health
+curl http://localhost:3001/live-server/health
+```
+
+### Exchange Discord identity for an API JWT
+
+After signing in at `/login`, the dashboard posts the Discord OAuth access token. The API fetches the Discord user, upserts them, loads role permissions, and returns a JWT (4h):
+
+```bash
+curl -X POST http://localhost:3001/v1/auth/sync \
+  -H "Content-Type: application/json" \
+  -d '{"accessToken": "<discord-oauth-access-token>"}'
+```
+
+Successful responses use the shared envelope:
+
+```json
+{
+  "success": true,
+  "data": {
+    "token": "<api-jwt>",
+    "permissions": ["view:whitelist"],
+    "user": { "id": "...", "discordId": "...", "discordName": "officer" }
+  }
+}
+```
+
+Errors include `ACCOUNT_DISABLED` and `NOT_IN_GUILD` (HTTP 403).
+
+### Call a protected route
+
+```bash
+curl http://localhost:3001/v1/whitelist \
+  -H "Authorization: Bearer <api-jwt>"
+```
+
+Create a whitelist entry (requires `manage:whitelist`):
+
+```bash
+curl -X POST http://localhost:3001/v1/whitelist \
+  -H "Authorization: Bearer <api-jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "steamId": "76561198000000000",
+    "name": "PlayerName",
+    "groupId": "<admin-group-id>",
+    "server": "main"
+  }'
+```
+
+### Live server WebSocket
+
+Browsers cannot set headers on an upgrade, so the JWT is a query param:
+
+```javascript
+const ws = new WebSocket(
+  "ws://localhost:3001/live-server/ws?server=production&token=" + apiJwt
+);
+
+ws.onmessage = (event) => {
+  const msg = JSON.parse(event.data);
+  // PLAYER_CONNECTED, PLAYER_DISCONNECTED, CHAT_MESSAGE,
+  // NEW_GAME, ROUND_ENDED, PLAYER_DIED, TEAMKILL, ...
+  console.log(msg.type, msg);
+};
+```
+
+Presence (who is on which admin page) is `GET /presence/ws?page=/whitelist&token=<jwt>`.
+
+### Public `admins.cfg`
+
+Game servers pull this URL. It is IP-restricted via `CFG_ALLOWED_IPS` and is not JWT-authenticated.
+
+```bash
+curl "http://localhost:3001/admins.cfg?server=production"
+```
+
+---
 
 ## Tech stack
 
-| Layer | Package | Version |
-|-------|---------|---------|
-| Runtime | Bun | latest |
-| Frontend | next | 15.2.1 |
-| Frontend | react | 19.0.0 |
-| Styling | tailwindcss | 4.0.6 |
-| Auth (web) | next-auth | 4.24.11 |
-| Backend | hono | 4.7.4 |
-| ORM | prisma / @prisma/adapter-mariadb | 7.4.1 |
-| DB driver | mariadb / mysql2 | 3.5.1 / 3.17.4 |
-| Validation | zod / @hono/zod-validator | 3.24.2 / 0.4.3 |
-| JWT | jose | 6.0.8 |
-| Real-time (upstream) | socket.io-client | 4.8.3 |
-| SFTP deploy | ssh2-sftp-client | 12.0.1 |
-| Steam (lobby) | steam-user | 5.2.0 |
-| Logging | pino / pino-pretty | 10.3.1 / 13.1.3 |
-| API docs (UI) | swagger-ui-react | 5.31.2 |
-| Language | typescript | 5.7.3 |
+| Layer | Choice | Why it is here |
+| --- | --- | --- |
+| Runtime | Bun | Workspace installs, watch, tests, API process |
+| Frontend | Next.js 15, React 19, App Router | Public site + authenticated dashboard |
+| Styling | Tailwind CSS v4 | Utility styling, no separate CSS pipeline |
+| Web auth | NextAuth 4 + Discord provider | Guild-gated staff login |
+| API | Hono 4 | Small, fast REST + Bun WebSockets |
+| Validation | Zod + `@hono/zod-validator` | Env and request bodies |
+| JWT | jose | Sign/verify across Next and Hono |
+| ORM | Prisma 7 + MariaDB adapter | Primary schema |
+| Logging | Pino | Structured JSON (easy to ship to Loki) |
+| Live data | `socket.io-client` | Upstream SquadJS events |
+| Deploy | `ssh2-sftp-client` | Push generated `admins.cfg` |
+| Steam | `steam-user` | Lobby discovery |
+| API docs | `swagger-ui-react` + OpenAPI | In-app `/api-docs` |
+| Deploy target | Docker on Railway | One container per package |
 
-Non-obvious choices worth knowing about: **Pino** for structured JSON logs (easy to ship to Loki), **jose** for JWT sign/verify across the Next/Hono boundary, **ssh2-sftp-client** to push `admins.cfg` files to game servers after whitelist changes, and **steam-user** in the lobby service to impersonate a Steam account and discover active lobbies.
+Permissions are a flat list of string literals in `packages/shared/types/roles.ts`. Discord roles own sets of them; a user inherits the union. `developer` bypasses checks. Route handlers gate with `requirePermission("manage:whitelist")` and similar.
+
+---
 
 ## Project structure
 
 ```
 packages/
-  web/
-    app/
-      (auth)/          Login, signout
-      (public)/        Home, server info, matches, prospect + ticket forms, policy pages
-      (protected)/     Admin dashboard, whitelist, members, tickets, matches,
-                       audit logs, roles, admin-groups, squadjs-config, live-server,
-                       discord-bot (7 tabs), lobby-monitor, seeding-tracker, api-docs
-      api/auth/        NextAuth route handler
-    components/        Shared UI (data-table, modal, confirm-dialog, ...)
-    lib/               NextAuth config, api-client, logger, formatting
-    middleware.ts      Session + permission gate
+  web/                 Next.js frontend
+    app/(auth)/        Login, signout
+    app/(public)/      Home, server, matches, prospect/ticket forms
+    app/(protected)/   Dashboard, whitelist, live-server, tickets,
+                       prospects, giveaway, discord-bot, temp-voice, ...
+    lib/api-client.ts  Typed /v1 client
   api/
-    src/
-      index.ts         Entry, middleware chain, WS endpoints
-      routes/          One file per route group (see table above)
-      middleware/      auth, permissions, rate-limit, request-log
-      lib/             Prisma client, Discord, SFTP, encryption, SquadJS socket,
-                       match sync, role sync, logger, cfg generator
-      generated/       Prisma client output (not committed)
-    entrypoint.sh      prisma db push; exec bun run src/index.ts
-    Dockerfile
-  lobby-service/
-    src/               Steam lobby discovery + Hono HTTP surface
-    Dockerfile
-  shared/
-    types/             user, roles (PERMISSIONS), api, match, tickets, discord-bot
-    countries.ts
-    index.ts
-prisma/
-  schema.prisma        Primary database schema
-.env.example
-package.json           Bun workspaces, root scripts
+    src/index.ts       Middleware chain, /v1 mounts, WS upgrades
+    src/routes/        One module per resource
+    src/middleware/    auth, permissions, rate-limit, request-log
+    src/lib/           Prisma, Discord, SFTP, SquadJS socket, cfg generator
+    src/ws/            live-server + presence relays
+  lobby-service/       Steam lobby HTTP surface
+  shared/              types, PERMISSIONS, countries
+prisma/schema.prisma   Primary database
+openapi.yaml           REST contract
 ```
 
-## Getting started
-
-### Prerequisites
-
-- [Bun](https://bun.sh/) (latest)
-- A MariaDB instance (the Prisma schema is pushed to it on first run)
-- A Discord application with OAuth2 configured and a redirect URI pointing at `http://localhost:3000/api/auth/callback/discord`
-
-Optional integrations -- leave the env vars unset to skip:
-
-- SquadJS Socket.IO servers (without these, `/live-server/ws` simply has no upstream)
-- SFTP target (whitelist deploy will fail fast)
-- GitHub token (SquadJS config editor will be read-only)
-- Lobby Service / Steam refresh token (lobby monitor will show nothing)
-
-### Setup
-
-```bash
-bun install
-cp .env.example .env            # fill in values - see the table below
-bun run db:push                 # create/update the schema in MariaDB
-bun run dev                     # web + api + lobby-service in parallel
-```
-
-Dev URLs:
-
-- Web: <http://localhost:3000> (Turbopack, hot reload)
-- API: <http://localhost:3001> (Bun `--watch`)
-- Lobby Service: <http://localhost:3002>
-
-## Environment variables
-
-All variables live in `.env` at the repo root (read by every package). Grouped by concern:
-
-| Group | Variable | Purpose |
-|-------|----------|---------|
-| Databases | `DATABASE_URL` | Primary MariaDB connection string (Prisma) |
-| | `SECRETARY_DATABASE_URL` | Read-only connection to the Discord bot's DB |
-| | `SQUADJS_DATABASE_URL` | Read-only connection to the SquadJS DB |
-| Discord OAuth | `DISCORD_CLIENT_ID` | OAuth2 application ID |
-| | `DISCORD_CLIENT_SECRET` | OAuth2 application secret |
-| | `DISCORD_GUILD_ID` | Guild whose membership gates login |
-| | `DISCORD_BOT_TOKEN` | Bot token used for background role sync |
-| Discord Bot | `DISCORD_MEMBER_ROLE_IDS` | Comma-separated role IDs auto-flagged as member roles |
-| NextAuth | `NEXTAUTH_URL` | Public URL of the web app |
-| | `NEXTAUTH_SECRET` | Session JWT signing secret |
-| API / JWT | `API_URL` | Public URL of the API (used by the web client) |
-| | `JWT_SECRET` | Signing secret for API JWTs |
-| SFTP | `SFTP_HOST` / `SFTP_PORT` / `SFTP_USER` / `SFTP_PASS` / `SFTP_PATH` | Default SFTP target for `admins.cfg` deploy (per-server overrides live in `ServerConfig`) |
-| GitHub | `GITHUB_CONFIG_TOKEN` | Token for reading/writing the SquadJS config repo |
-| SquadJS | `SQUADJS_SERVERS` | `name\|url\|token,name\|url\|token` list of upstream SquadJS Socket.IO servers |
-| Lobby Service | `LOBBY_SERVICE_URL` | Internal URL the API uses to reach the lobby service |
-| | `LOBBY_INTERNAL_KEY` | Shared secret for internal calls |
-| | `STEAM_REFRESH_TOKEN` | Steam refresh token used by `steam-user` |
-
-## Scripts
-
-| Command | Description |
-|---------|-------------|
-| `bun run dev` | Start all packages in parallel |
-| `bun run dev:web` | Next.js only (Turbopack) |
-| `bun run dev:api` | Hono API only (`bun --watch`) |
-| `bun run build` | Build every package |
-| `bun run db:generate` | Generate Prisma client into `packages/api/src/generated/prisma/` |
-| `bun run db:push` | Sync the schema to MariaDB without creating migrations (the fast path for local dev and for the Docker entrypoint) |
-| `bun run db:migrate` | Create and run a named migration (use this when making a real schema change) |
-| `bun run db:studio` | Open Prisma Studio |
+---
 
 ## Deployment
 
-Each service ships as its own container and runs on Railway.
+Each package is its own container. Railway builds from `packages/{web,api,lobby-service}/railway.json` (`restartPolicyType: ON_FAILURE`, 10 retries). GitHub's default branch is `main`. Production currently deploys from the `production` branch.
 
-- **Web** -- `packages/web/Dockerfile` builds a Next.js standalone bundle on Node 22 Alpine. Health check: `/`.
-- **API** -- `packages/api/Dockerfile` runs Bun directly. `packages/api/entrypoint.sh` runs `prisma db push` (30s timeout, non-fatal on failure) before exec'ing the server. Health check: `/health`.
-- **Lobby Service** -- `packages/lobby-service/Dockerfile`, Bun runtime, no DB.
+| Service | Image | Health |
+| --- | --- | --- |
+| Web | `packages/web/Dockerfile` — Next.js standalone on Node 22 Alpine | `/` |
+| API | `packages/api/Dockerfile` — Bun. `entrypoint.sh` runs `prisma db push` then the server | `/health` |
+| Lobby | `packages/lobby-service/Dockerfile` — Bun, no database | — |
 
-Railway picks each service up via its `railway.json` (`packages/{web,api,lobby-service}/railway.json`) with `restartPolicyType: "ON_FAILURE"` and up to 10 retries. There is no separate CI -- pushes to the deploy branch trigger a Railway build.
+---
+
+## How to contribute
+
+1. Branch from `main`. Use a focused name (`feat/…`, `fix/…`).
+2. Keep the change to one concern. Shared types go in `packages/shared` first, then API, then web.
+3. Add or update colocated `*.test.ts` files for logic that can run without Discord/MariaDB.
+4. Run what you touched:
+
+```bash
+bun test
+bun run build
+```
+
+5. Commit with [Conventional Commits](https://www.conventionalcommits.org/) as a one-liner, no AI attribution:
+
+```
+feat(whitelist): persist request dismissals for 30 days
+fix(presence): scope online-user tooltip to avatar hover
+```
+
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`.
+
+6. Open a pull request against `main`. Describe the user-visible change and any env or permission additions.
+
+New API routes belong under `/v1`, go through `success()` / `fail()`, and need a matching OpenAPI path. New staff pages need a nav entry in `packages/web/components/shell/nav-config.ts` and a permission in `PERMISSIONS`.
+
+---
+
+## Security
+
+Please do not file public issues for vulnerabilities. See [SECURITY.md](SECURITY.md).
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE). Copyright (c) 2026 OleEd.
+
+You may use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of this software, provided the copyright notice and permission notice are included in all copies or substantial portions. The software is provided "as is", without warranty.

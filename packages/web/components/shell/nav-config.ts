@@ -14,6 +14,7 @@ import {
   KeyRound,
   ScrollText,
   FileCode2,
+  UserX,
   type LucideIcon,
 } from "lucide-react";
 
@@ -143,6 +144,12 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/audit-logs",
         icon: ScrollText,
         requiredPermissions: ["view:audit-logs"],
+      },
+      {
+        label: "Data Requests",
+        href: "/data-requests",
+        icon: UserX,
+        requiredPermissions: ["developer"],
       },
       {
         label: "API Docs",

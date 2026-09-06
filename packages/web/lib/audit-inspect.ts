@@ -168,6 +168,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   giveaway: "Giveaway",
   seeding: "Seeding",
   ticket_timeout: "Ticket timeout",
+  data_request: "Data request",
 };
 
 function asString(value: unknown): string {
@@ -438,6 +439,10 @@ export function formatAuditSummary(
       return "Added a giveaway entry";
     case "giveaway.adjust_tickets":
       return d.delta != null ? `Adjusted tickets by ${d.delta}` : "Adjusted giveaway tickets";
+    case "data_request.create":
+      return d.discordName ? `Requested deletion for ${d.discordName}` : "Requested account deletion";
+    case "data_request.handle":
+      return d.discordName ? `Handled deletion request for ${d.discordName}` : "Handled a deletion request";
     default:
       return formatActionLabel(action);
   }

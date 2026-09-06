@@ -3,6 +3,13 @@
 import { useState, useEffect } from "react";
 import { usePermissions } from "@/lib/permission-context";
 import { getHidePresence, setHidePresence as persistHidePresence } from "@/lib/hide-presence";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import {
+  createDeletionRequest,
+  getMyDeletionRequest,
+  notifyDataRequestsChanged,
+} from "@/lib/api-client";
+import type { DataDeletionRequest } from "shared";
 
 type Theme = "dark" | "light" | "system";
 
@@ -30,18 +37,29 @@ function applyTheme(theme: Theme) {
 }
 
 export default function SettingsPage() {
-  const { permissions } = usePermissions();
+  const { permissions, apiToken } = usePermissions();
   const isDeveloper = permissions.includes("developer");
   const [theme, setTheme] = useState<Theme>("dark");
   const [defaultServer, setDefaultServer] = useState("");
   const [hideOnline, setHideOnline] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [pendingRequest, setPendingRequest] = useState<DataDeletionRequest | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   useEffect(() => {
     setTheme(getStoredTheme());
     setDefaultServer(getStoredDefaultServer());
     setHideOnline(getHidePresence());
   }, []);
+
+  useEffect(() => {
+    if (!apiToken) return;
+    getMyDeletionRequest(apiToken).then((res) => {
+      if (res.success && res.data?.request) setPendingRequest(res.data.request);
+    }).catch(() => {});
+  }, [apiToken]);
 
   // Listen for OS theme changes when in system mode
   useEffect(() => {
@@ -69,6 +87,26 @@ export default function SettingsPage() {
     if (!isDeveloper) return;
     setHideOnline(hidden);
     persistHidePresence(hidden);
+  }
+
+  async function handleRequestDeletion() {
+    if (!apiToken) return;
+    setSubmitting(true);
+    setRequestError(null);
+    try {
+      const res = await createDeletionRequest(apiToken);
+      if (res.success && res.data) {
+        setPendingRequest(res.data);
+        setConfirmOpen(false);
+        notifyDataRequestsChanged();
+      } else {
+        setRequestError(res.error || "Could not send the request.");
+      }
+    } catch {
+      setRequestError("Could not send the request.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -177,6 +215,33 @@ export default function SettingsPage() {
           </div>
         )}
 
+        <div className="facet-border rounded-sm bg-bg-card p-6">
+          <h2 className="font-display mb-1 text-base font-semibold tracking-wide">
+            Your data
+          </h2>
+          <p className="mb-4 text-sm text-text-secondary">
+            Request deletion of your personal data. A developer will handle it
+            by hand. Your account is not removed immediately.
+          </p>
+          {pendingRequest ? (
+            <p className="text-sm text-text-primary">
+              Request received. A developer will take care of it.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmOpen(true)}
+              disabled={!apiToken}
+              className="rounded-sm border border-danger/40 bg-danger/10 px-4 py-2.5 text-sm font-medium text-danger transition-colors hover:border-danger/60 hover:bg-danger/15 disabled:opacity-50"
+            >
+              Request deletion
+            </button>
+          )}
+          {requestError && (
+            <p className="mt-3 text-sm text-danger">{requestError}</p>
+          )}
+        </div>
+
         {/* About */}
         <div className="facet-border rounded-sm bg-bg-card p-6">
           <h2 className="font-display mb-1 text-base font-semibold tracking-wide">
@@ -212,6 +277,16 @@ export default function SettingsPage() {
           </ul>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={handleRequestDeletion}
+        title="Request deletion"
+        message="This sends a request to the site developers. Your account is not deleted immediately. They will handle it by hand."
+        confirmLabel="Send request"
+        loading={submitting}
+      />
     </div>
   );
 }

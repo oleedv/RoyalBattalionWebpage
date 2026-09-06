@@ -6,6 +6,7 @@ export * from "./types/prospects";
 export * from "./types/match";
 export * from "./types/discord-bot";
 export * from "./types/giveaway";
+export * from "./types/data-requests";
 export * from "./giveaway-math";
 export * from "./whitelist-candidates";
 export { COUNTRIES, validateCountry } from "./countries";

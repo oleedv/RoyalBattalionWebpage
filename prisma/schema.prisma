@@ -28,6 +28,7 @@ model User {
   comments            MemberComment[]
   whitelistEntries    WhitelistEntry[]
   whitelistDismissals WhitelistRequestDismissal[]
+  deletionRequests    DataDeletionRequest[]
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 }
@@ -195,6 +196,25 @@ model AuditLog {
   @@index([createdAt])
   @@index([userId])
   @@index([resource])
+}
+
+/// Queue of account-deletion requests from signed-in members.
+/// Developers handle these by hand; the row is a notice, not an auto-delete.
+model DataDeletionRequest {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  discordId   String
+  discordName String
+  displayName String?
+  steamId     String?
+  status      String    @default("pending")
+  handledAt   DateTime?
+  handledBy   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([status])
+  @@index([userId])
 }
 
 /// Singleton (single row, id = "singleton") controlling the Discord birthday

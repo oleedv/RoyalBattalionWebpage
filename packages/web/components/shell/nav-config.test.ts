@@ -52,6 +52,27 @@ describe("Prospects nav", () => {
   });
 });
 
+describe("Data Requests nav", () => {
+  test("lists Data Requests as developer-only", () => {
+    const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href === "/data-requests");
+    expect(item).toBeTruthy();
+    expect(item?.label).toBe("Data Requests");
+    expect(item?.requiredPermissions).toEqual(["developer"]);
+  });
+
+  test("developer sees Data Requests", () => {
+    const groups = filterNavGroups(["developer"]);
+    const hrefs = groups.flatMap((g) => g.items.map((i) => i.href));
+    expect(hrefs).toContain("/data-requests");
+  });
+
+  test("unrelated permissions do not reveal Data Requests", () => {
+    const groups = filterNavGroups(["view:audit-logs", "manage:members"]);
+    const hrefs = groups.flatMap((g) => g.items.map((i) => i.href));
+    expect(hrefs).not.toContain("/data-requests");
+  });
+});
+
 describe("Giveaway nav", () => {
   test("manage:giveaway-tickets reveals Giveaway", () => {
     const groups = filterNavGroups(["manage:giveaway-tickets"]);

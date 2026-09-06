@@ -48,6 +48,8 @@ import type {
   GiveawayStartRequest,
   GiveawayAddEntryRequest,
   GiveawayAdjustTicketsRequest,
+  DataDeletionRequest,
+  DataDeletionRequestSummary,
 } from "shared";
 
 const API_ORIGIN =
@@ -209,6 +211,13 @@ export function bulkAddWhitelist(
 }
 
 export const WHITELIST_CANDIDATES_CHANGED = "rb:whitelist-candidates-changed";
+export const DATA_REQUESTS_CHANGED = "rb:data-requests-changed";
+
+export function notifyDataRequestsChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(DATA_REQUESTS_CHANGED));
+  }
+}
 
 export function notifyWhitelistCandidatesChanged() {
   if (typeof window !== "undefined") {
@@ -1411,5 +1420,49 @@ export function getSeedTrackerStats(
 export function getPlayerStats(token: string): Promise<ApiResponse<PlayerStats>> {
   return request<PlayerStats>("/player-stats", {
     headers: authHeaders(token),
+  });
+}
+
+export function getMyDeletionRequest(
+  token: string,
+): Promise<ApiResponse<{ request: DataDeletionRequest | null }>> {
+  return request<{ request: DataDeletionRequest | null }>("/data-requests/me", {
+    headers: authHeaders(token),
+  });
+}
+
+export function createDeletionRequest(
+  token: string,
+): Promise<ApiResponse<DataDeletionRequest>> {
+  return request<DataDeletionRequest>("/data-requests", {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export function getDeletionRequestSummary(
+  token: string,
+): Promise<ApiResponse<DataDeletionRequestSummary>> {
+  return request<DataDeletionRequestSummary>("/data-requests/summary", {
+    headers: authHeaders(token),
+  });
+}
+
+export function getDeletionRequests(
+  token: string,
+): Promise<ApiResponse<DataDeletionRequest[]>> {
+  return request<DataDeletionRequest[]>("/data-requests", {
+    headers: authHeaders(token),
+  });
+}
+
+export function markDeletionRequestHandled(
+  token: string,
+  id: string,
+): Promise<ApiResponse<DataDeletionRequest>> {
+  return request<DataDeletionRequest>(`/data-requests/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify({ status: "handled" }),
   });
 }

@@ -10,7 +10,9 @@ import type { Permission, UserWithRoles } from "shared";
 import {
   syncAuth,
   getWhitelistCandidateSummary,
+  getDeletionRequestSummary,
   WHITELIST_CANDIDATES_CHANGED,
+  DATA_REQUESTS_CHANGED,
 } from "@/lib/api-client";
 import { PermissionProvider } from "@/lib/permission-context";
 import { usePresence } from "@/hooks/use-presence";
@@ -33,6 +35,7 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [candidateCount, setCandidateCount] = useState(0);
+  const [dataRequestCount, setDataRequestCount] = useState(0);
   const onlineUsers = usePresence(apiToken, pathname);
 
   // Read the shadcn sidebar cookie once so collapse survives reloads.
@@ -68,6 +71,11 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
               if (r.success && r.data) setCandidateCount(r.data.totalPending);
             }).catch(() => {});
           }
+          if (perms.includes("developer")) {
+            getDeletionRequestSummary(res.data.token).then((r) => {
+              if (r.success && r.data) setDataRequestCount(r.data.pending);
+            }).catch(() => {});
+          }
         } else if (!res.success) {
           if (res.error === "ACCOUNT_DISABLED" || res.error === "NOT_IN_GUILD") {
             setSyncError(res.error);
@@ -97,6 +105,21 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
     const interval = setInterval(refreshBadge, 60_000);
     return () => {
       window.removeEventListener(WHITELIST_CANDIDATES_CHANGED, refreshBadge);
+      clearInterval(interval);
+    };
+  }, [apiToken, permissions]);
+
+  useEffect(() => {
+    if (!apiToken || !permissions.includes("developer")) return;
+    function refreshBadge() {
+      getDeletionRequestSummary(apiToken).then((r) => {
+        if (r.success && r.data) setDataRequestCount(r.data.pending);
+      }).catch(() => {});
+    }
+    window.addEventListener(DATA_REQUESTS_CHANGED, refreshBadge);
+    const interval = setInterval(refreshBadge, 60_000);
+    return () => {
+      window.removeEventListener(DATA_REQUESTS_CHANGED, refreshBadge);
       clearInterval(interval);
     };
   }, [apiToken, permissions]);
@@ -229,7 +252,7 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
       <SidebarProvider defaultOpen={sidebarDefaultOpen}>
         <AppSidebar
           permissions={permissions}
-          badges={{ "/whitelist": candidateCount }}
+          badges={{ "/whitelist": candidateCount, "/data-requests": dataRequestCount }}
           onlineUsers={onlineUsers}
           userName={session.user?.name || "User"}
         />

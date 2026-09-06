@@ -363,6 +363,6 @@ Please do not file public issues for vulnerabilities. See [SECURITY.md](SECURITY
 
 ## License
 
-Released under the [MIT License](LICENSE). Copyright (c) 2026 OleEd.
+Released under the [MIT License](LICENSE). Copyright (c) 2026 Ole Nørholm.
 
 You may use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of this software, provided the copyright notice and permission notice are included in all copies or substantial portions. The software is provided "as is", without warranty.

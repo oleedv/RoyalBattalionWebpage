@@ -8,4 +8,6 @@ dist/
 *.tsbuildinfo
 prisma/*.db
 packages/api/src/generated/
-.claude/worktrees/
+.claude/
+.superpowers/
+.idea/

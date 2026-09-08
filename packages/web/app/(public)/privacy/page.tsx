@@ -48,12 +48,15 @@ export default function PrivacyPage() {
           Privacy Policy
         </h1>
         <p className="mb-6 text-sm text-text-muted">
-          Last updated: February 25, 2026
+          Last updated: 6 September 2026
         </p>
         <p className="mb-10 text-sm leading-relaxed text-text-secondary">
-          Royal Battalion is the data controller for your personal data. We are
-          a volunteer-run gaming community based in the United Kingdom, operating
-          under the UK Data Protection Act 2018 and UK GDPR.
+          Royal Battalion is the data controller for personal data described in
+          this policy. We are a volunteer-run Squad gaming community based in
+          the United Kingdom. We process personal data under the UK Data
+          Protection Act 2018 and UK GDPR. This policy covers the website at
+          royalbattalion.xyz, the Royal Secretary Discord bot, and our Squad
+          game servers.
         </p>
 
         <div className="space-y-10">
@@ -62,38 +65,57 @@ export default function PrivacyPage() {
               1. Information We Collect
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
-              <p>
-                When you use the Royal Battalion website and services, we may
-                collect the following information:
-              </p>
+              <p>Depending on how you use the community, we may collect:</p>
               <ul className="list-disc space-y-2 pl-6">
                 <li>
-                  <strong className="text-text-primary">Discord Account Data</strong>{" "}
-                  &mdash; When you sign in via Discord OAuth, we receive your
-                  Discord username, avatar, and Discord user ID. We do not
-                  receive your Discord password.
+                  <strong className="text-text-primary">Discord account data</strong>{" "}
+                  &mdash; user ID, username, display name, avatar, and roles.
+                  When you sign in via Discord we receive the same identifiers.
+                  We never receive your Discord password.
                 </li>
                 <li>
-                  <strong className="text-text-primary">Steam ID</strong>{" "}
-                  &mdash; Your Steam ID is collected through our SquadJS game
-                  server integration for player identification and whitelist
-                  management.
+                  <strong className="text-text-primary">Steam and EOS IDs</strong>{" "}
+                  &mdash; collected when you link Steam, apply to join, play on
+                  our servers, or enter a giveaway.
                 </li>
                 <li>
-                  <strong className="text-text-primary">EOS ID</strong>{" "}
-                  &mdash; Your Epic Online Services ID may be collected through
-                  game server connections.
+                  <strong className="text-text-primary">Membership profile</strong>{" "}
+                  &mdash; country, membership date, and preferences you set on
+                  the dashboard.
                 </li>
                 <li>
-                  <strong className="text-text-primary">Match Statistics</strong>{" "}
-                  &mdash; Gameplay data including kills, deaths, revives,
-                  teamkills, roles, and squads is recorded automatically during
-                  matches on our servers.
+                  <strong className="text-text-primary">Applications</strong>{" "}
+                  &mdash; the answers you submit when you apply, plus later
+                  staff notes, votes, and transcripts of that process.
                 </li>
                 <li>
-                  <strong className="text-text-primary">IP Addresses</strong>{" "}
-                  &mdash; Collected through standard web server logs and game
-                  server connections.
+                  <strong className="text-text-primary">Tickets and DMs to the bot</strong>{" "}
+                  &mdash; the conversation (including attachments) and staff
+                  actions on that ticket. Direct messages you send to Royal
+                  Secretary are treated as staff records.
+                </li>
+                <li>
+                  <strong className="text-text-primary">Discord messages</strong>{" "}
+                  &mdash; a copy of human messages in guild channels the bot
+                  can see, used for moderation.
+                </li>
+                <li>
+                  <strong className="text-text-primary">Voice activity</strong>{" "}
+                  &mdash; when you join or leave a voice channel. We do not
+                  record voice audio.
+                </li>
+                <li>
+                  <strong className="text-text-primary">Game-server data</strong>{" "}
+                  &mdash; playtime, combat stats, in-game chat, player names,
+                  Steam ID, and EOS ID from our Squad servers.
+                </li>
+                <li>
+                  <strong className="text-text-primary">Whitelist, giveaways, and seeding</strong>{" "}
+                  &mdash; entries and related grant records.
+                </li>
+                <li>
+                  <strong className="text-text-primary">IP addresses</strong>{" "}
+                  &mdash; from website logs and game-server connections.
                 </li>
               </ul>
             </div>
@@ -104,47 +126,60 @@ export default function PrivacyPage() {
               2. How We Use Your Information
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
-              <p>We use the information we collect to:</p>
+              <p>We use this information to:</p>
               <ul className="list-disc space-y-2 pl-6">
-                <li>Authenticate your access to the management dashboard</li>
+                <li>Run the Discord, website, and Squad servers</li>
+                <li>Handle support tickets and recruitment applications</li>
+                <li>Moderate Discord and in-game chat</li>
+                <li>Manage whitelist, seeding rewards, and giveaways</li>
+                <li>Show match statistics and member profiles to authorised staff</li>
                 <li>
-                  Manage server whitelist and priority queue access
+                  Ask Anthropic&apos;s Claude API to draft staff suggestions on
+                  tickets, applications, and in-game chat (see section 5)
                 </li>
-                <li>Track and display match statistics</li>
-                <li>
-                  Administer the community, including audit logs of
-                  administrative actions
-                </li>
-                <li>Improve the server and community experience</li>
               </ul>
             </div>
           </section>
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              3. Legal Basis for Processing
+              3. Legal Basis
+            </h2>
+            <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
+              <ul className="list-disc space-y-2 pl-6">
+                <li>
+                  <strong className="text-text-primary">Legitimate interests</strong>{" "}
+                  &mdash; running a gaming community, including moderation,
+                  whitelist management, match tracking, and safety.
+                </li>
+                <li>
+                  <strong className="text-text-primary">Contract</strong>{" "}
+                  &mdash; providing membership, whitelist, and dashboard
+                  features after you apply or sign in.
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
+              4. Cookies
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
-                Under the UK GDPR, we process your personal data on the
-                following legal bases:
+                We only use cookies and local storage that are needed to run
+                the site. We do not use tracking, analytics, or advertising
+                cookies.
               </p>
               <ul className="list-disc space-y-2 pl-6">
                 <li>
-                  <strong className="text-text-primary">Legitimate Interest</strong>{" "}
-                  &mdash; Server administration, whitelist management, match
-                  tracking, and community safety. These are core to running the
-                  community and servers.
+                  <strong className="text-text-primary">Session cookie</strong>{" "}
+                  &mdash; required to keep you signed in. This is an essential
+                  cookie.
                 </li>
                 <li>
-                  <strong className="text-text-primary">Contract Performance</strong>{" "}
-                  &mdash; Providing the services you signed up for, including
-                  whitelist access and dashboard functionality.
-                </li>
-                <li>
-                  <strong className="text-text-primary">Consent</strong>{" "}
-                  &mdash; When you sign in via Discord OAuth, you actively
-                  choose to share your Discord account data with us.
+                  <strong className="text-text-primary">Preferences</strong>{" "}
+                  &mdash; theme and similar settings stay in your browser.
                 </li>
               </ul>
             </div>
@@ -152,121 +187,54 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              4. Cookies and Local Storage
-            </h2>
-            <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
-              <p>We use the following cookies and local storage items:</p>
-              <ul className="list-disc space-y-2 pl-6">
-                <li>
-                  <strong className="text-text-primary">Session Cookie</strong>{" "}
-                  &mdash; A session cookie set by NextAuth is required for
-                  authentication. This is an essential cookie and cannot be
-                  disabled.
-                </li>
-                <li>
-                  <strong className="text-text-primary">Theme Preference</strong>{" "}
-                  &mdash; Your selected theme (dark/light) is stored in your
-                  browser&apos;s local storage. This data is not transmitted to our
-                  servers.
-                </li>
-                <li>
-                  <strong className="text-text-primary">Cookie Consent</strong>{" "}
-                  &mdash; Your cookie consent status is stored in local storage.
-                </li>
-              </ul>
-            </div>
-          </section>
-
-          <section>
-            <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              5. Third-Party Services
-            </h2>
-            <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
-              <p>We integrate with the following third-party services:</p>
-              <ul className="list-disc space-y-2 pl-6">
-                <li>
-                  <strong className="text-text-primary">Discord</strong>{" "}
-                  &mdash; Used as our authentication provider. When you sign in,
-                  data is shared with Discord in accordance with their privacy
-                  policy.
-                </li>
-                <li>
-                  <strong className="text-text-primary">SquadJS</strong>{" "}
-                  &mdash; Our game server integration collects Steam IDs and
-                  match data from the Squad game server. This is not the Steam
-                  Web API.
-                </li>
-              </ul>
-            </div>
-          </section>
-
-          <section>
-            <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              6. Data Retention
-            </h2>
-            <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
-              <ul className="list-disc space-y-2 pl-6">
-                <li>
-                  Account data is retained while your Discord account is linked
-                  and you are a member of the community.
-                </li>
-                <li>
-                  Match statistics are retained indefinitely for historical
-                  record purposes.
-                </li>
-                <li>
-                  Session cookies expire according to their configured lifetime.
-                </li>
-                <li>
-                  You may request deletion of your personal data at any time by
-                  contacting us via Discord.
-                </li>
-              </ul>
-            </div>
-          </section>
-
-          <section>
-            <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              7. Children&apos;s Privacy
+              5. Anthropic (Claude)
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
-                Our services are intended for users aged 18 and over. We do not
-                knowingly collect personal data from anyone under the age of 18.
-                If we become aware that we have collected data from a minor, we
-                will take steps to delete that information promptly.
+                We use the Anthropic API (Claude) as a processor to help staff
+                review tickets, membership applications, and in-game chat.
+                Royal Battalion remains the controller.
               </p>
-            </div>
-          </section>
-
-          <section>
-            <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              8. Your Rights
-            </h2>
-            <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
-              <p>Under the UK GDPR, you have the right to:</p>
+              <p>When staff use these tools, Anthropic may receive:</p>
               <ul className="list-disc space-y-2 pl-6">
-                <li>Request access to your personal data</li>
-                <li>Request correction of inaccurate data</li>
-                <li>Request deletion of your personal data</li>
-                <li>Request portability of your data</li>
-                <li>Object to processing of your personal data</li>
-                <li>Withdraw consent for non-essential data processing</li>
+                <li>Ticket conversation text and attached images</li>
+                <li>Application answers (alias, country, Steam ID, free text)</li>
+                <li>In-game chat lines with player name, Steam ID, and EOS ID</li>
+                <li>
+                  Related lookups we already hold (Steam profile, BattleMetrics,
+                  Community Ban List, playtime)
+                </li>
               </ul>
               <p>
-                To exercise any of these rights, please contact us through the
-                Royal Battalion Discord server.
+                We use Anthropic under its Commercial Terms, which include a
+                Data Processing Addendum. Anthropic does not use API inputs or
+                outputs to train its models unless we explicitly submit
+                feedback, which we do not.
               </p>
               <p>
-                You also have the right to lodge a complaint with the UK
-                Information Commissioner&apos;s Office (ICO) at{" "}
+                Anthropic is based in the United States. Transfers from the UK
+                are made under Anthropic&apos;s DPA, including the EU Standard
+                Contractual Clauses and the UK International Data Transfer
+                Addendum.
+              </p>
+              <p>
+                Anthropic&apos;s own notices:{" "}
                 <a
-                  href="https://ico.org.uk"
+                  href="https://www.anthropic.com/legal/privacy"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-accent underline-offset-2 hover:underline"
                 >
-                  ico.org.uk
+                  Privacy Policy
+                </a>
+                {" "}and{" "}
+                <a
+                  href="https://www.anthropic.com/legal/commercial-terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent underline-offset-2 hover:underline"
+                >
+                  Commercial Terms
                 </a>
                 .
               </p>
@@ -275,55 +243,99 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              9. Data Security
+              6. Other Third Parties
+            </h2>
+            <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
+              <ul className="list-disc space-y-2 pl-6">
+                <li>
+                  <strong className="text-text-primary">Discord</strong>{" "}
+                  &mdash; the platform for the community and for website
+                  sign-in. Discord is a separate controller for data on its
+                  service.
+                </li>
+                <li>
+                  <strong className="text-text-primary">Steam</strong>{" "}
+                  &mdash; we look up public profile and ban information using
+                  your Steam ID.
+                </li>
+                <li>
+                  <strong className="text-text-primary">BattleMetrics</strong>{" "}
+                  &mdash; we look up bans and flags associated with a Steam ID
+                  when reviewing tickets or applications.
+                </li>
+                <li>
+                  <strong className="text-text-primary">Community Ban List</strong>{" "}
+                  &mdash; we query communitybanlist.com with a Steam ID for
+                  risk rating and ban history.
+                </li>
+                <li>
+                  <strong className="text-text-primary">Hosting</strong>{" "}
+                  &mdash; the website and database are hosted by our
+                  infrastructure provider.
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
+              7. Age Requirement
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
-                We take reasonable measures to protect your personal data from
-                unauthorized access, alteration, disclosure, or destruction.
-                However, no method of electronic storage or transmission over
-                the internet is 100% secure.
+                We refuse anyone under the age of 18. These services are not
+                for under-18s.
               </p>
             </div>
           </section>
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              10. International Data Transfers
+              8. Security
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
-                As an international community, your data may be processed on
-                servers located outside the United Kingdom. Where this occurs, we
-                take reasonable steps to ensure your data is treated securely and
-                in accordance with this privacy policy and applicable data
-                protection laws.
+                Staff access is limited to people with the relevant Discord or
+                website roles. We take reasonable measures to protect personal
+                data. No method of storage or transmission is perfectly secure.
               </p>
             </div>
           </section>
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              11. Changes to This Policy
+              9. International Transfers
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
-                We may update this privacy policy from time to time. Changes
-                will be posted on this page with an updated revision date. Your
-                continued use of the website after any changes constitutes
-                acceptance of the updated policy.
+                Some of the services above are in the United States or other
+                countries outside the UK, including Anthropic, Discord, and
+                Steam. For Anthropic we use the contractual clauses described
+                in section 5. For the others, the transfer is whatever is
+                required to use that service.
               </p>
             </div>
           </section>
 
           <section>
             <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
-              12. Contact
+              10. Changes
             </h2>
             <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
               <p>
-                If you have questions about this privacy policy or your personal
-                data, please reach out to us via the{" "}
+                We may update this page from time to time. The date at the top
+                shows when it last changed.
+              </p>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="font-display mb-4 text-xl font-semibold tracking-wide text-text-primary">
+              11. Contact
+            </h2>
+            <div className="space-y-4 text-sm leading-relaxed text-text-secondary">
+              <p>
+                Questions: the{" "}
                 <a
                   href="https://discord.gg/royalbattalion"
                   target="_blank"

@@ -10,7 +10,7 @@ import {
   UserProfileLoading,
   UserProfileError,
 } from "@/components/user-profile/UserProfileContent";
-import { ExtraPermissionsPanel } from "./extra-permissions";
+import { ExtraPermissionsPanel } from "@/components/user-profile/extra-permissions";
 
 export default function UserProfilePage({
   params,

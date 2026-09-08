@@ -16,7 +16,9 @@ import {
   enableUser,
   bulkDisableMembers,
   bulkEnableMembers,
+  getUserExtraPermissions,
 } from "@/lib/api-client";
+import { ExtraPermissionsPanel } from "@/components/user-profile/extra-permissions";
 import { usePermissions } from "@/lib/permission-context";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { Modal } from "@/components/modal";
@@ -145,6 +147,7 @@ export default function MembersPage() {
 
   // Detail modal
   const [selectedUser, setSelectedUser] = useState<UserWithRolesAndComments | null>(null);
+  const [extraPermissions, setExtraPermissions] = useState<string[]>([]);
 
   // Edit state (within modal)
   const [editing, setEditing] = useState(false);
@@ -180,6 +183,24 @@ export default function MembersPage() {
   const [bulkProcessing, setBulkProcessing] = useState(false);
 
   const canManage = hasPermission("manage:members");
+
+  useEffect(() => {
+    if (!apiToken || !selectedUser) {
+      setExtraPermissions([]);
+      return;
+    }
+    let cancelled = false;
+    getUserExtraPermissions(apiToken, selectedUser.id).then((res) => {
+      if (cancelled) return;
+      if (res.success && res.data) setExtraPermissions(res.data.permissions);
+      else setExtraPermissions([]);
+    }).catch(() => {
+      if (!cancelled) setExtraPermissions([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiToken, selectedUser?.id]);
 
   useEffect(() => {
     async function init() {
@@ -1322,6 +1343,13 @@ export default function MembersPage() {
                 )}
               </div>
             </div>
+
+            <ExtraPermissionsPanel
+              userId={selectedUser.id}
+              value={extraPermissions}
+              embedded
+              onSaved={setExtraPermissions}
+            />
 
             {/* Comments */}
             <div className="border-b border-border px-6 py-4">

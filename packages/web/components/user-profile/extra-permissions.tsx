@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EXTRA_GRANTABLE_PERMISSIONS } from "shared";
 import type { Permission } from "shared";
 import { updateUserExtraPermissions } from "@/lib/api-client";
@@ -17,17 +17,23 @@ export function ExtraPermissionsPanel({
   userId,
   value,
   onSaved,
+  embedded,
 }: {
   userId: string;
   value: string[];
-  onSaved: (permissions: string[]) => void;
+  onSaved?: (permissions: string[]) => void;
+  embedded?: boolean;
 }) {
   const { apiToken, hasPermission } = usePermissions();
-  const canEdit = hasPermission("manage:roles");
+  const canEdit = hasPermission("manage:members") || hasPermission("manage:roles");
   const [pending, setPending] = useState<string[]>(value);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setPending(value);
+  }, [userId, value]);
 
   if (!canEdit && value.length === 0) return null;
 
@@ -41,13 +47,13 @@ export function ExtraPermissionsPanel({
       setError(res.error || "Failed to save");
       return;
     }
-    onSaved(res.data?.permissions ?? pending);
+    onSaved?.(res.data?.permissions ?? pending);
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   }
 
   return (
-    <div className="mt-4 rounded-sm border border-border bg-bg-card px-6 py-4">
+    <div className={embedded ? "border-b border-border px-6 py-4" : "mt-4 rounded-sm border border-border bg-bg-card px-6 py-4"}>
       <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
         Extra permissions
       </h3>

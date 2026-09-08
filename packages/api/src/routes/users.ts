@@ -888,10 +888,26 @@ const extraPermsSchema = z.object({
   permissions: z.array(z.string()),
 });
 
+users.get(
+  "/:id/extra-permissions",
+  authMiddleware,
+  requirePermission("view:members", "manage:members", "manage:roles"),
+  async (c) => {
+    const id = c.req.param("id");
+    const exists = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) return fail(c, "User not found", 404);
+    const rows = await prisma.userPermission.findMany({
+      where: { userId: id },
+      select: { permission: true },
+    });
+    return success(c, { permissions: rows.map((r) => r.permission) });
+  },
+);
+
 users.put(
   "/:id/extra-permissions",
   authMiddleware,
-  requirePermission("manage:roles"),
+  requirePermission("manage:roles", "manage:members"),
   validate("json", extraPermsSchema),
   async (c) => {
     const id = c.req.param("id");

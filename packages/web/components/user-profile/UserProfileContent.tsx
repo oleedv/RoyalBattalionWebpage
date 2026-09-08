@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { UserProfile, LinkedWhitelistEntry, LiveStatus } from "shared";
+import { ExtraPermissionsPanel } from "./extra-permissions";
 import { formatDate } from "@/lib/format";
 import { usePermissions } from "@/lib/permission-context";
 import { Skeleton, SkeletonRegion } from "@/components/skeleton";
@@ -303,6 +304,14 @@ export function UserProfileContent({
             <div className="text-xs text-text-muted">No roles assigned.</div>
           )}
         </Section>
+      )}
+
+      {u && (
+        <ExtraPermissionsPanel
+          userId={u.id}
+          value={profile.extraPermissions ?? []}
+          embedded
+        />
       )}
 
       {/* Activity */}

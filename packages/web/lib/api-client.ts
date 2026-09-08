@@ -1547,6 +1547,15 @@ export function searchApiTokenUsers(
   });
 }
 
+export function getUserExtraPermissions(
+  token: string,
+  userId: string,
+): Promise<ApiResponse<{ permissions: string[] }>> {
+  return request<{ permissions: string[] }>(`/users/${userId}/extra-permissions`, {
+    headers: authHeaders(token),
+  });
+}
+
 export function updateUserExtraPermissions(
   token: string,
   userId: string,

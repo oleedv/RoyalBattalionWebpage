@@ -31,7 +31,7 @@ info:
     name: Royal Battalion
 
 servers:
-  - url: https://api.royalbattalion.com
+  - url: https://royal-battalion-api-production.up.railway.app
     description: Production
   - url: http://localhost:3001
     description: Development

@@ -45,7 +45,7 @@ info:
     name: Royal Battalion
 
 servers:
-  - url: https://api.royalbattalion.com/v1
+  - url: https://royal-battalion-api-production.up.railway.app/v1
     description: Production (all REST endpoints are versioned under /v1)
   - url: http://localhost:3001/v1
     description: Development (all REST endpoints are versioned under /v1)
@@ -3669,7 +3669,7 @@ paths:
   # override the /v1 base with their own root-level `servers`.
   /health:
     servers:
-      - url: https://api.royalbattalion.com
+      - url: https://royal-battalion-api-production.up.railway.app
         description: Production (root, unversioned)
       - url: http://localhost:3001
         description: Development (root, unversioned)
@@ -3691,7 +3691,7 @@ paths:
 
   /admins.cfg:
     servers:
-      - url: https://api.royalbattalion.com
+      - url: https://royal-battalion-api-production.up.railway.app
         description: Production (root, unversioned)
       - url: http://localhost:3001
         description: Development (root, unversioned)

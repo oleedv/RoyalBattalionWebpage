@@ -52,6 +52,22 @@ describe("Prospects nav", () => {
   });
 });
 
+describe("API tokens nav", () => {
+  test("manage:api-tokens reveals API Tokens but not via view:api-docs", () => {
+    const item = NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href === "/api-tokens");
+    expect(item?.requiredPermissions).toEqual(["manage:api-tokens"]);
+    expect(filterNavGroups(["view:api-docs"]).flatMap((g) => g.items.map((i) => i.href))).not.toContain(
+      "/api-tokens",
+    );
+    expect(filterNavGroups(["view:api-docs"]).flatMap((g) => g.items.map((i) => i.href))).toContain(
+      "/api-docs",
+    );
+    expect(filterNavGroups(["manage:api-tokens"]).flatMap((g) => g.items.map((i) => i.href))).toContain(
+      "/api-tokens",
+    );
+  });
+});
+
 describe("Giveaway nav", () => {
   test("manage:giveaway-tickets reveals Giveaway", () => {
     const groups = filterNavGroups(["manage:giveaway-tickets"]);

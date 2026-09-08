@@ -322,6 +322,11 @@ const PERMISSION_GROUPS: PermGroup[] = [
         label: "View API Docs",
         description: "Access the Swagger UI at /api-docs",
       },
+      {
+        perm: "manage:api-tokens",
+        label: "Manage API Tokens",
+        description: "Create and revoke consumer API tokens and view usage",
+      },
     ],
   },
 ];

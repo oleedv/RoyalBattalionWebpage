@@ -18,6 +18,7 @@ import { authMiddleware } from "../middleware/auth";
 import { requirePermission } from "../middleware/permissions";
 import { syncAllUserRoles } from "../lib/role-sync";
 import { clearSyncCache } from "./auth";
+import { sanitizeExtraPermissions } from "../lib/extra-permissions";
 import { audit } from "../lib/audit";
 import { triggerSftpDeploy } from "../lib/sftp-deploy";
 import { rateLimit } from "../middleware/rate-limit";
@@ -804,6 +805,7 @@ users.get("/:id/profile", authMiddleware, requirePermission("view:members", "man
     include: {
       roles: { include: { role: true } },
       comments: { orderBy: { createdAt: "desc" } },
+      extraPermissions: true,
     },
   });
   if (!dbUser) return fail(c, "User not found", 404);
@@ -825,6 +827,7 @@ users.get("/:id/profile", authMiddleware, requirePermission("view:members", "man
     displayName: dbUser.displayName ?? dbUser.discordName,
     whitelistEntries,
     liveStatus,
+    extraPermissions: dbUser.extraPermissions.map((p) => p.permission),
   };
   return success(c, result);
 });
@@ -839,6 +842,7 @@ users.get("/profile", authMiddleware, requirePermission("view:members", "manage:
     include: {
       roles: { include: { role: true } },
       comments: { orderBy: { createdAt: "desc" } },
+      extraPermissions: true,
     },
   });
 
@@ -855,6 +859,7 @@ users.get("/profile", authMiddleware, requirePermission("view:members", "manage:
       displayName: dbUser.displayName ?? dbUser.discordName,
       whitelistEntries,
       liveStatus,
+      extraPermissions: dbUser.extraPermissions.map((p) => p.permission),
     };
     return success(c, result);
   }
@@ -874,9 +879,46 @@ users.get("/profile", authMiddleware, requirePermission("view:members", "manage:
     displayName,
     whitelistEntries,
     liveStatus,
+    extraPermissions: [],
   };
   return success(c, result);
 });
+
+const extraPermsSchema = z.object({
+  permissions: z.array(z.string()),
+});
+
+users.put(
+  "/:id/extra-permissions",
+  authMiddleware,
+  requirePermission("manage:roles"),
+  validate("json", extraPermsSchema),
+  async (c) => {
+    const id = c.req.param("id");
+    const target = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, discordId: true, discordName: true },
+    });
+    if (!target) return fail(c, "User not found", 404);
+
+    const permissions = sanitizeExtraPermissions(c.req.valid("json").permissions);
+    await prisma.$transaction(async (tx) => {
+      await tx.userPermission.deleteMany({ where: { userId: id } });
+      if (permissions.length > 0) {
+        await tx.userPermission.createMany({
+          data: permissions.map((permission) => ({ userId: id, permission })),
+        });
+      }
+    });
+
+    clearSyncCache(target.discordId);
+    await audit(c, "member.update_extra_permissions", "user", id, {
+      discordName: target.discordName,
+      permissions,
+    });
+    return success(c, { permissions });
+  },
+);
 
 // --- Member Comments ---
 

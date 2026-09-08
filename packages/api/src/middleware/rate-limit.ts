@@ -28,7 +28,11 @@ function getClientIp(c: { req: { header: (name: string) => string | undefined } 
     || "unknown";
 }
 
-function checkRateLimit(key: string, maxRequests: number, windowMs: number): RateLimitResult {
+export function resetRateLimitBuckets() {
+  buckets.clear();
+}
+
+export function checkRateLimit(key: string, maxRequests: number, windowMs: number): RateLimitResult {
   const now = Date.now();
   const entry = buckets.get(key);
 

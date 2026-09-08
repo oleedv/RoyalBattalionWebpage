@@ -5,6 +5,7 @@ export type LogContext = {
   requestId?: string;
   userId?: string;
   userName?: string;
+  apiTokenId?: string;
   ip?: string;
   userAgent?: string;
 };

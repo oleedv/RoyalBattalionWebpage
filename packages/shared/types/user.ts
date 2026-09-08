@@ -80,4 +80,5 @@ export interface UserProfile {
   displayName: string | null;
   whitelistEntries: LinkedWhitelistEntry[];
   liveStatus: LiveStatus | null;
+  extraPermissions: string[];
 }

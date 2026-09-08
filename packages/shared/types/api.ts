@@ -22,6 +22,40 @@ export interface AuthMeResponse {
   permissions: Permission[];
 }
 
+export interface ApiTokenUserRef {
+  id: string;
+  discordName: string;
+  displayName: string | null;
+}
+
+export interface ApiTokenUsageDay {
+  date: string;
+  okCount: number;
+  errorCount: number;
+  rateLimitedCount: number;
+}
+
+export interface ApiToken {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  scope: string;
+  userId: string | null;
+  user: ApiTokenUserRef | null;
+  createdById: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  requestCount: number;
+  createdAt: string;
+  status: "live" | "expired" | "revoked";
+  usage: ApiTokenUsageDay[];
+}
+
+export interface CreatedApiToken extends ApiToken {
+  secret: string;
+}
+
 export interface AdminGroup {
   id: string;
   name: string;

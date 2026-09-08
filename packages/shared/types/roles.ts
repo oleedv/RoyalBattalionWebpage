@@ -30,6 +30,7 @@ export const PERMISSIONS = [
   "manage:giveaway",
   "manage:giveaway-tickets",
   "view:api-docs",
+  "manage:api-tokens",
   "manage:clan-move",
   "manage:randomize",
   "manage:balance-teams",
@@ -38,6 +39,9 @@ export const PERMISSIONS = [
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
+
+/** Permissions that can be granted per-user without a Discord role. */
+export const EXTRA_GRANTABLE_PERMISSIONS: Permission[] = ["view:api-docs"];
 
 export interface DiscordRole {
   id: string;

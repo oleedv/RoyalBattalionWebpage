@@ -10,6 +10,7 @@ import { authMiddleware } from "../middleware/auth";
 import { rateLimit } from "../middleware/rate-limit";
 import { success, fail } from "../lib/crud-helpers";
 import { logger } from "../lib/logger";
+import { mergePermissions } from "../lib/extra-permissions";
 
 const auth = new Hono();
 
@@ -102,14 +103,18 @@ auth.post("/sync", rateLimit(10), validate("json", syncSchema), async (c) => {
       });
     }
 
-    // Collect permissions from all matched roles
-    const permissions: Permission[] = [
-      ...new Set(
-        knownRoles.flatMap((role) =>
-          role.permissions.map((p) => p.permission as Permission)
-        )
+    // Collect permissions from all matched roles, then per-user extras
+    // (UserPermission must survive Discord role resync above).
+    const extraRows = await prisma.userPermission.findMany({
+      where: { userId: user.id },
+      select: { permission: true },
+    });
+    const permissions: Permission[] = mergePermissions(
+      knownRoles.flatMap((role) =>
+        role.permissions.map((p) => p.permission as Permission)
       ),
-    ];
+      extraRows.map((r) => r.permission as Permission),
+    );
 
     logger.info("auth", `Final permissions for ${discordUser.username}`, permissions);
 

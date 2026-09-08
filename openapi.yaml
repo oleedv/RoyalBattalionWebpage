@@ -1145,6 +1145,23 @@ paths:
                     items:
                       $ref: "#/components/schemas/ServerStatus"
 
+  /live/status:
+    get:
+      tags: [Servers]
+      summary: Live server status for API tokens
+      description: Requires an rb_live_ API token. JWTs are rejected. Roster only with players=1.
+      security:
+        - apiToken: []
+      responses:
+        "200":
+          description: Status payload
+        "401":
+          description: Missing or invalid API token
+        "429":
+          description: Per-token rate limit
+        "503":
+          description: Status unavailable
+
   # ── Stats ─────────────────────────────────────────────
   /stats/summary:
     get:
@@ -2167,6 +2184,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: JWT obtained from POST /auth/sync
+    apiToken:
+      type: http
+      scheme: bearer
+      description: Opaque rb_live_ API token. Live status only.
 
   parameters:
     ResourceId:

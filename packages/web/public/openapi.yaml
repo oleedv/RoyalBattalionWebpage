@@ -25,6 +25,10 @@ info:
     3. API returns a JWT (valid 4 hours) containing userId and permissions
     4. Include the JWT in all subsequent requests as `Authorization: Bearer <token>`
 
+    Consumer devices (ESP32, scripts) use opaque API tokens minted at `/api-tokens`.
+    Those secrets start with `rb_live_` and may only call `GET /live/status`.
+    JWTs are rejected on that route.
+
     ## Permissions
     Access is controlled by a granular RBAC system with 19 permissions.
     Users with the `admin` permission bypass all permission checks.
@@ -67,6 +71,10 @@ tags:
     description: Match history and SquadJS sync
   - name: Servers
     description: BattleMetrics server status
+  - name: Live Status
+    description: Token-authenticated live server status for consumer devices
+  - name: API Tokens
+    description: Mint, revoke, and inspect consumer API tokens
   - name: Stats
     description: Dashboard statistics
   - name: Admins
@@ -2152,6 +2160,90 @@ paths:
                     items:
                       $ref: "#/components/schemas/ServerStatus"
 
+  /live/status:
+    get:
+      tags: [Live Status]
+      summary: Live server status for API tokens
+      description: |
+        BattleMetrics fields plus Discord-embed extras (TPS, team sizes, RB/prospect/admin counts).
+        Requires an `rb_live_` API token. Session JWTs are rejected.
+        IP, geo, and licenseId are never included.
+        Roster is omitted unless `players=1`.
+        Rate limit: 30 requests/minute per token. Cached ~20s. Send If-None-Match for 304.
+      security:
+        - apiToken: []
+      parameters:
+        - name: server
+          in: query
+          schema:
+            type: string
+          description: BattleMetrics id, `main`, `battle`, or SquadJS key. Omit for all servers.
+        - name: players
+          in: query
+          schema:
+            type: string
+            enum: ["1"]
+          description: Include the live roster when set to 1.
+        - name: If-None-Match
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Status payload (array when server is omitted, object when filtered)
+        "304":
+          description: Not modified
+        "401":
+          description: Missing, JWT, unknown, revoked, or expired token
+        "403":
+          description: Token scope is not server-status
+        "404":
+          description: Unknown server filter
+        "429":
+          description: Per-token rate limit
+        "503":
+          description: BattleMetrics and SquadJS both unavailable
+
+  /api-tokens:
+    get:
+      tags: [API Tokens]
+      summary: List API tokens
+      x-required-permissions: [manage:api-tokens]
+      responses:
+        "200":
+          description: Tokens (secret never included)
+    post:
+      tags: [API Tokens]
+      summary: Create an API token
+      description: Returns the secret once in `data.secret`.
+      x-required-permissions: [manage:api-tokens]
+      responses:
+        "201":
+          description: Created token including secret
+
+  /api-tokens/{id}/revoke:
+    post:
+      tags: [API Tokens]
+      summary: Revoke an API token
+      x-required-permissions: [manage:api-tokens]
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Revoked token
+
+  /users/{id}/extra-permissions:
+    put:
+      tags: [Users]
+      summary: Replace per-user extra permissions
+      description: Allowlisted grants that are not Discord roles. v1 only `view:api-docs`.
+      x-required-permissions: [manage:roles]
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      responses:
+        "200":
+          description: Saved extra permissions
+
   # ── Admins ────────────────────────────────────────────
   /admins/team-count:
     get:
@@ -3654,6 +3746,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: JWT obtained from POST /auth/sync
+    apiToken:
+      type: http
+      scheme: bearer
+      description: Opaque `rb_live_` API token minted at POST /api-tokens. Live status only.
 
   parameters:
     ResourceId:

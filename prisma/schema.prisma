@@ -28,6 +28,8 @@ model User {
   comments            MemberComment[]
   whitelistEntries    WhitelistEntry[]
   whitelistDismissals WhitelistRequestDismissal[]
+  extraPermissions    UserPermission[]
+  apiTokens           ApiToken[]
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 }
@@ -72,6 +74,50 @@ model RolePermission {
   role       DiscordRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, permission])
+}
+
+/// Extra permissions granted to a user without a Discord role.
+model UserPermission {
+  id         String @id @default(cuid())
+  userId     String
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission String
+
+  @@unique([userId, permission])
+  @@index([userId])
+}
+
+model ApiToken {
+  id           String               @id @default(cuid())
+  name         String
+  tokenPrefix  String
+  tokenHash    String               @unique
+  scope        String               @default("server-status")
+  userId       String?
+  user         User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdById  String
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  revokedById  String?
+  lastUsedAt   DateTime?
+  requestCount Int                  @default(0)
+  createdAt    DateTime             @default(now())
+  usage        ApiTokenUsageDaily[]
+
+  @@index([userId])
+  @@index([createdById])
+}
+
+model ApiTokenUsageDaily {
+  id               String   @id @default(cuid())
+  tokenId          String
+  token            ApiToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  date             DateTime @db.Date
+  okCount          Int      @default(0)
+  errorCount       Int      @default(0)
+  rateLimitedCount Int      @default(0)
+
+  @@unique([tokenId, date])
 }
 
 model AdminGroup {

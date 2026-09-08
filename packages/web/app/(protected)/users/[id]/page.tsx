@@ -10,6 +10,7 @@ import {
   UserProfileLoading,
   UserProfileError,
 } from "@/components/user-profile/UserProfileContent";
+import { ExtraPermissionsPanel } from "./extra-permissions";
 
 export default function UserProfilePage({
   params,
@@ -54,6 +55,15 @@ export default function UserProfilePage({
         {error && <UserProfileError message={error} />}
         {profile && <UserProfileContent profile={profile} />}
       </div>
+      {profile?.user && (
+        <ExtraPermissionsPanel
+          userId={profile.user.id}
+          value={profile.extraPermissions ?? []}
+          onSaved={(permissions) =>
+            setProfile((prev) => (prev ? { ...prev, extraPermissions: permissions } : prev))
+          }
+        />
+      )}
     </div>
   );
 }

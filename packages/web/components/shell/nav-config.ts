@@ -15,6 +15,7 @@ import {
   KeyRound,
   ScrollText,
   FileCode2,
+  Key,
   type LucideIcon,
 } from "lucide-react";
 
@@ -155,6 +156,12 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/audit-logs",
         icon: ScrollText,
         requiredPermissions: ["view:audit-logs"],
+      },
+      {
+        label: "API Tokens",
+        href: "/api-tokens",
+        icon: Key,
+        requiredPermissions: ["manage:api-tokens"],
       },
       {
         label: "API Docs",

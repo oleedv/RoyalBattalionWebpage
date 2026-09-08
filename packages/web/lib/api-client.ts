@@ -54,6 +54,8 @@ import type {
   GiveawayStartRequest,
   GiveawayAddEntryRequest,
   GiveawayAdjustTicketsRequest,
+  ApiToken,
+  CreatedApiToken,
 } from "shared";
 
 const API_ORIGIN =
@@ -1511,5 +1513,48 @@ export function getSeedTrackerStats(
 export function getPlayerStats(token: string): Promise<ApiResponse<PlayerStats>> {
   return request<PlayerStats>("/player-stats", {
     headers: authHeaders(token),
+  });
+}
+
+export function getApiTokens(token: string): Promise<ApiResponse<ApiToken[]>> {
+  return request<ApiToken[]>("/api-tokens", { headers: authHeaders(token) });
+}
+
+export function createApiToken(
+  token: string,
+  data: { name: string; userId?: string | null; expiresAt?: string | null },
+): Promise<ApiResponse<CreatedApiToken>> {
+  return request<CreatedApiToken>("/api-tokens", {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+}
+
+export function revokeApiToken(token: string, id: string): Promise<ApiResponse<ApiToken>> {
+  return request<ApiToken>(`/api-tokens/${id}/revoke`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+}
+
+export function searchApiTokenUsers(
+  token: string,
+  q: string,
+): Promise<ApiResponse<Array<{ id: string; discordName: string; displayName: string | null; discordId: string }>>> {
+  return request(`/api-tokens/users?q=${encodeURIComponent(q)}`, {
+    headers: authHeaders(token),
+  });
+}
+
+export function updateUserExtraPermissions(
+  token: string,
+  userId: string,
+  permissions: Permission[],
+): Promise<ApiResponse<{ permissions: Permission[] }>> {
+  return request<{ permissions: Permission[] }>(`/users/${userId}/extra-permissions`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify({ permissions }),
   });
 }

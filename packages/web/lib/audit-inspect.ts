@@ -84,6 +84,7 @@ const FIELD_LABELS: Record<string, string> = {
   source: "Source",
   triggeredBy: "Triggered by",
   permissions: "Permissions",
+  tokenPrefix: "Token prefix",
   isMemberRole: "Member role",
   grantsWhitelist: "Grants whitelist",
   environment: "Environment",
@@ -168,6 +169,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   giveaway: "Giveaway",
   seeding: "Seeding",
   ticket_timeout: "Ticket timeout",
+  ApiToken: "API token",
 };
 
 function asString(value: unknown): string {
@@ -368,6 +370,12 @@ export function formatAuditSummary(
       return withTarget("Deleted a member comment", d);
     case "member.sync_roles":
       return "Synced Discord roles";
+    case "member.update_extra_permissions":
+      return withTarget("Updated extra permissions", d);
+    case "api_token.create":
+      return d.name ? `Created API token ${d.name}` : "Created an API token";
+    case "api_token.revoke":
+      return d.name ? `Revoked API token ${d.name}` : "Revoked an API token";
     case "admin_group.create":
       return d.name ? `Created admin group ${d.name}` : "Created an admin group";
     case "admin_group.update":

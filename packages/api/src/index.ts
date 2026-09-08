@@ -25,6 +25,8 @@ import seedingTracker from "./routes/seeding-tracker";
 import playerStats from "./routes/player-stats";
 import lobby from "./routes/lobby";
 import giveaway from "./routes/giveaway";
+import liveStatus from "./routes/live-status";
+import apiTokens from "./routes/api-tokens";
 import { generateAdminsCfg } from "./lib/cfg-generator";
 import { squadjsSocket } from "./lib/squadjs-socket";
 import { AppError } from "./lib/errors";
@@ -98,6 +100,8 @@ app.route("/v1/seeding-tracker", seedingTracker);
 app.route("/v1/player-stats", playerStats);
 app.route("/v1/lobby", lobby);
 app.route("/v1/giveaway", giveaway);
+app.route("/v1/live", liveStatus);
+app.route("/v1/api-tokens", apiTokens);
 
 // Public cfg endpoint (IP-restricted) -- separate from /whitelist to avoid auth middleware
 app.get("/admins.cfg", async (c) => {

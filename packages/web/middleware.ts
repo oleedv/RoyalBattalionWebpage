@@ -18,6 +18,7 @@ const PROTECTED_PATHS = [
   "/audit-logs",
   "/lobby-monitor",
   "/giveaway",
+  "/api-tokens",
 ];
 
 export function middleware(request: NextRequest) {
@@ -64,5 +65,7 @@ export const config = {
     "/lobby-monitor/:path*",
     "/giveaway",
     "/giveaway/:path*",
+    "/api-tokens",
+    "/api-tokens/:path*",
   ],
 };

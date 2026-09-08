@@ -37,6 +37,18 @@ Production: [royalbattalion.xyz](https://royalbattalion.xyz) · staging: [stg.ro
 
 ---
 
+## Screenshots
+
+**Live server** — player roster, chat, console, and match controls.
+
+![Live server dashboard](public/screenshots/live-server.png)
+
+**API tokens** — consumer keys for `GET /v1/live/status`.
+
+![API tokens](public/screenshots/api-tokens.png)
+
+---
+
 ## Architecture
 
 ```mermaid
